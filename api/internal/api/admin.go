@@ -100,7 +100,7 @@ func (s *Server) assign(w http.ResponseWriter, r *http.Request) {
 		if alias != "" {
 			if _, err := s.q.CreateAlias(r.Context(), store.CreateAliasParams{
 				ID:            newID(),
-				Alias:         gpx.Normalizar(alias),
+				Alias:         gpx.Normalize(alias),
 				OriginalAlias: alias,
 				SellerID:      p.SellerID,
 				BranchID:      &trab.BranchID,

@@ -16,8 +16,8 @@ func gpxCon(points string) []byte {
 func entorno() Env {
 	zona, _ := time.LoadLocation("America/Havana")
 	return Env{
-		SourceType: gpx.FuenteSucursal,
-		Alias:      map[string]string{gpx.Normalizar("Alexander"): "t-alex"},
+		SourceType: gpx.SourceBranch,
+		Alias:      map[string]string{gpx.Normalize("Alexander"): "t-alex"},
 		Zone:       zona,
 	}
 }
@@ -113,7 +113,7 @@ func TestExaminarFicheroRotoNoSePierde(t *testing.T) {
 
 func TestExaminarCarpetaDeVendedorManda(t *testing.T) {
 	ent := entorno()
-	ent.SourceType = gpx.FuenteVendedor
+	ent.SourceType = gpx.SourceSeller
 	ent.SourceSellerID = "t-yas"
 
 	f := drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}

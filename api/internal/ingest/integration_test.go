@@ -76,7 +76,7 @@ func semilla(t *testing.T, q *store.Queries) {
 		t.Fatalf("source: %v", err)
 	}
 	if _, err := q.CreateAlias(ctx, store.CreateAliasParams{
-		ID: "a1", Alias: gpx.Normalizar("Alexander"), OriginalAlias: "Alexander",
+		ID: "a1", Alias: gpx.Normalize("Alexander"), OriginalAlias: "Alexander",
 		SellerID: "t-alex", BranchID: ptr("s1"),
 	}); err != nil {
 		t.Fatalf("alias: %v", err)
@@ -119,7 +119,7 @@ func rutaAnonima(pasoMin int) []byte {
 	return gpxConNombre("TAB-CMG-04", completo[ini:fin])
 }
 
-func servicio(t *testing.T, pool *pgxpool.Pool, d drive.Cliente) *ingest.Service {
+func servicio(t *testing.T, pool *pgxpool.Pool, d drive.Client) *ingest.Service {
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	return ingest.NewService(pool, ingest.SingleAccount(d), log, 100)
@@ -130,7 +130,7 @@ func TestIngestaCompleta(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(5, true))
 
 	svc := servicio(t, pool, falso)
@@ -181,7 +181,7 @@ func TestNoVuelveADescargarLoQueYaTiene(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
 
 	svc := servicio(t, pool, falso)
@@ -209,7 +209,7 @@ func TestUnFicheroMaloNoTumbaElResto(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{ID: "d0", Name: "roto.gpx"}, []byte("no es xml"))
 	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
 
@@ -242,7 +242,7 @@ func TestDiaSinMovimientoLlegaAlCalendario(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(5, false))
 
 	svc := servicio(t, pool, falso)
@@ -271,7 +271,7 @@ func TestAusenciaApareceComoFila(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	svc := servicio(t, pool, drive.NuevoFalso())
+	svc := servicio(t, pool, drive.NewFake())
 	n, err := svc.MarkAbsences(ctx, dia("2026-08-10"))
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestAusenciasNoPisanUnDiaConDatos(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
 	svc := servicio(t, pool, falso)
 	if _, err := svc.Scan(ctx, ingest.TypeIncremental); err != nil {
@@ -334,7 +334,7 @@ func TestEstructuraRealCarpetaPorPerfilDeGps(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{
 		ID:         "d1",
 		Name:       "20260810.gpx",
@@ -368,7 +368,7 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NuevoFalso()
+	falso := drive.NewFake()
 	falso.Agregar(carpeta, drive.File{
 		ID: "d1", Name: "20260810.gpx", FolderPath: []string{"TAB-CMG-04"},
 	}, rutaAnonima(10))
@@ -391,7 +391,7 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 
 	// Casado el alias, el siguiente file de esa tableta se resuelve solo.
 	if _, err := q.CreateAlias(ctx, store.CreateAliasParams{
-		ID: "a2", Alias: gpx.Normalizar("TAB-CMG-04"), OriginalAlias: "TAB-CMG-04",
+		ID: "a2", Alias: gpx.Normalize("TAB-CMG-04"), OriginalAlias: "TAB-CMG-04",
 		SellerID: "t-alex", BranchID: ptr("s1"),
 	}); err != nil {
 		t.Fatal(err)

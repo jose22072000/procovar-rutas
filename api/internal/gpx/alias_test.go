@@ -3,27 +3,27 @@ package gpx
 import "testing"
 
 func TestNormalizarCasaVariantesDelMismoNombre(t *testing.T) {
-	esperado := Normalizar("José Pérez")
+	esperado := Normalize("José Pérez")
 	for _, v := range []string{"jose_perez", "JOSE-PEREZ", "  Jose  Perez  "} {
-		if got := Normalizar(v); got != esperado {
-			t.Errorf("Normalizar(%q) = %q, se esperaba %q", v, got, esperado)
+		if got := Normalize(v); got != esperado {
+			t.Errorf("Normalize(%q) = %q, se esperaba %q", v, got, esperado)
 		}
 	}
-	if Normalizar("Camagüey") != "camaguey" {
-		t.Errorf("la diéresis debería caer: %q", Normalizar("Camagüey"))
+	if Normalize("Camagüey") != "camaguey" {
+		t.Errorf("la diéresis debería caer: %q", Normalize("Camagüey"))
 	}
 }
 
 func aliasDePrueba() map[string]string {
 	return map[string]string{
-		Normalizar("Alexander"): "t-alex",
-		Normalizar("Yasmani"):   "t-yas",
+		Normalize("Alexander"): "t-alex",
+		Normalize("Yasmani"):   "t-yas",
 	}
 }
 
 func TestResolverLaCarpetaDeVendedorMandaSobreTodo(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType:     FuenteVendedor,
+	r := ResolveSeller(Context{
+		SourceType:     SourceSeller,
 		SourceSellerID: "t-yas",
 		FileName:       "alexander_2026-08-10.gpx",
 		Alias:          aliasDePrueba(),
@@ -34,8 +34,8 @@ func TestResolverLaCarpetaDeVendedorMandaSobreTodo(t *testing.T) {
 }
 
 func TestResolverUsaLaSubcarpetaMasInterna(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteSucursal,
+	r := ResolveSeller(Context{
+		SourceType: SourceBranch,
 		FolderPath: []string{"Camaguey", "Alexander"},
 		FileName:   "ruta.gpx",
 		Alias:      aliasDePrueba(),
@@ -46,8 +46,8 @@ func TestResolverUsaLaSubcarpetaMasInterna(t *testing.T) {
 }
 
 func TestResolverPorNombreIgnorandoLaFecha(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteSucursal,
+	r := ResolveSeller(Context{
+		SourceType: SourceBranch,
 		FileName:   "Alexander_2026-08-10.gpx",
 		Alias:      aliasDePrueba(),
 	})
@@ -57,8 +57,8 @@ func TestResolverPorNombreIgnorandoLaFecha(t *testing.T) {
 }
 
 func TestResolverCaeAlContenidoDelGpx(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteSucursal,
+	r := ResolveSeller(Context{
+		SourceType: SourceBranch,
 		FileName:   "track_001.gpx",
 		GpxHints:   []string{"YASMANI"},
 		Alias:      aliasDePrueba(),
@@ -71,8 +71,8 @@ func TestResolverCaeAlContenidoDelGpx(t *testing.T) {
 // Cuando ninguna regla acierta, el fichero va a la bandeja CON la pista que el
 // admin tiene que casar. Ningún fichero se pierde en silencio.
 func TestResolverMandaALaBandejaConPistaUtil(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteSucursal,
+	r := ResolveSeller(Context{
+		SourceType: SourceBranch,
 		FileName:   "track_001.gpx",
 		GpxHints:   []string{"Redmi Note 12"},
 		Alias:      aliasDePrueba(),
@@ -80,8 +80,8 @@ func TestResolverMandaALaBandejaConPistaUtil(t *testing.T) {
 	if r.SellerID != "" {
 		t.Errorf("no debería resolver: %+v", r)
 	}
-	if r.Pista != "Redmi Note 12" {
-		t.Errorf("pista = %q; es lo que verá el admin en la bandeja", r.Pista)
+	if r.Hint != "Redmi Note 12" {
+		t.Errorf("pista = %q; es lo que verá el admin en la bandeja", r.Hint)
 	}
 }
 
@@ -95,8 +95,8 @@ func TestFechaDelNombre(t *testing.T) {
 		"ruta.gpx":                 "",
 	}
 	for nombre, esperado := range casos {
-		if got := FechaDelNombre(nombre); got != esperado {
-			t.Errorf("FechaDelNombre(%q) = %q, se esperaba %q", nombre, got, esperado)
+		if got := DateFromName(nombre); got != esperado {
+			t.Errorf("DateFromName(%q) = %q, se esperaba %q", nombre, got, esperado)
 		}
 	}
 }
@@ -106,9 +106,9 @@ func TestFechaDelNombre(t *testing.T) {
 // la fecha. Sin mirar el nombre de la propia carpeta, no habría de dónde sacar
 // el vendedor y TODO acabaría en la bandeja.
 func TestResolverPorElNombreDeLaCarpetaDadaDeAlta(t *testing.T) {
-	alias := map[string]string{Normalizar("GPS Diana Acosta"): "t-diana"}
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteMixta,
+	alias := map[string]string{Normalize("GPS Diana Acosta"): "t-diana"}
+	r := ResolveSeller(Context{
+		SourceType: SourceMixed,
 		SourceName: "GPS Diana Acosta",
 		FileName:   "20260812.gpx",
 		Alias:      alias,
@@ -119,13 +119,13 @@ func TestResolverPorElNombreDeLaCarpetaDadaDeAlta(t *testing.T) {
 }
 
 func TestCarpetaSinCasarLlevaSuNombreALaBandeja(t *testing.T) {
-	r := ResolverTrabajador(Context{
-		SourceType: FuenteMixta,
+	r := ResolveSeller(Context{
+		SourceType: SourceMixed,
 		SourceName: "TABLET3",
 		FileName:   "20260812.gpx",
 		Alias:      map[string]string{},
 	})
-	if r.SellerID != "" || r.Pista != "TABLET3" {
+	if r.SellerID != "" || r.Hint != "TABLET3" {
 		t.Errorf("= %+v", r)
 	}
 }

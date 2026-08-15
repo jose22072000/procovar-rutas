@@ -6,8 +6,8 @@
 // fichero, puntos sueltos como <wpt>, precisión en <hdop> o en extensiones
 // propias, y —el caso que hay que cazar— ficheros sin ninguna hora.
 //
-// El parser no decide nada de negocio: extrae, normaliza y cuenta. Quién es el
-// vendedor lo resuelve alias.go, y si el día fue bueno o malo, el paquete
+// The parser makes no business decisions: it extracts, normalizes and counts. Who
+// the seller is gets resolved in alias.go, and whether the day was good or bad, the
 // metrics.
 package gpx
 
@@ -20,26 +20,26 @@ import (
 	"time"
 )
 
-// Point es un fix del GPS ya normalizado.
+// Point is a GPS fix, already normalized.
 type Point struct {
 	Lat float64
 	Lon float64
 	Ele *float64
-	// Ts es nil cuando el punto no traía <time>.
+	// Ts is nil when the point carried no <time>.
 	Ts *time.Time
-	// Accuracy es la precisión horizontal en metros, si el logger la exporta.
+	// Accuracy is the horizontal precision in metres, if the logger exports it.
 	Accuracy *float64
 	Seq      int
 }
 
-// Parsed es el resultado de leer un fichero.
+// Parsed is the result of reading a file.
 type Parsed struct {
 	Points []Point
-	// NoTime cuenta los puntos que no traían <time>. Si iguala a len(Points),
-	// no hay jornada que medir.
+	// NoTime counts the points that carried no <time>. If it equals len(Points),
+	// there is no workday to measure.
 	NoTime int
-	// Hints son los textos de los que se puede deducir el dueño del fichero:
-	// nombre de la pista, autor, programa que lo generó.
+	// Hints are the texts the file's owner can be inferred from: track name,
+	// author, the program that produced it.
 	Hints    []string
 	FirstFix *time.Time
 	LastFix  *time.Time
@@ -80,11 +80,11 @@ type xmlGpx struct {
 	Wpt []xmlPunto `xml:"wpt"`
 }
 
-// precision devuelve la precisión declarada en metros.
+// precision returns the declared precision in metres.
 //
-// Cada logger la pone donde quiere: <hdop> (adimensional; se aproxima ×5 m, que
-// es el error típico de un fix con HDOP=1) o una extensión accuracy ya en
-// metros. Si no viene, el punto no se penaliza: ausencia de dato no es dato malo.
+// Every logger puts it wherever it likes: <hdop> (dimensionless; approximated as
+// ×5 m, the typical error of a fix with HDOP=1) or an accuracy extension already in
+// metres. When absent the point is not penalised: missing data is not bad data.
 func (p xmlPunto) precision() *float64 {
 	if p.Accuracy != nil {
 		return p.Accuracy
@@ -99,9 +99,9 @@ func (p xmlPunto) precision() *float64 {
 	return nil
 }
 
-// formatosHora son los que aparecen en los .gpx reales. El primero es el del
-// estándar; los demás salen de loggers que escriben la hora a su manera.
-var formatosHora = []string{
+// timeFormats are the ones that show up in real .gpx files. The first is the
+// standard's; the rest come from loggers that write the time their own way.
+var timeFormats = []string{
 	time.RFC3339,
 	"2006-01-02T15:04:05Z",
 	"2006-01-02T15:04:05.000Z",
@@ -113,7 +113,7 @@ func parseHora(s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	for _, f := range formatosHora {
+	for _, f := range timeFormats {
 		if t, err := time.Parse(f, s); err == nil {
 			utc := t.UTC()
 			return &utc
@@ -124,9 +124,9 @@ func parseHora(s string) *time.Time {
 
 // Parse lee un fichero .gpx.
 //
-// Devuelve error solo cuando el fichero entero es inservible (XML roto, sin
-// raíz <gpx>, sin ningún punto). Un punto malo suelto no invalida el fichero:
-// se descarta y el resto de la ruta se aprovecha.
+// It only returns an error when the whole file is unusable (broken XML, no <gpx>
+// root, not a single point). One bad point does not invalidate the file: it is
+// dropped and the rest of the route is kept.
 func Parse(datos []byte) (*Parsed, error) {
 	var doc xmlGpx
 	if err := xml.Unmarshal(datos, &doc); err != nil {
@@ -149,12 +149,12 @@ func Parse(datos []byte) (*Parsed, error) {
 	puntos := []Point{}
 	agregar := func(p xmlPunto) {
 		// Coordenadas imposibles: exportador roto o fichero corrupto. Se descarta
-		// el punto, no el fichero.
+		// the point, not the file.
 		if math.IsNaN(p.Lat) || math.IsNaN(p.Lon) ||
 			p.Lat < -90 || p.Lat > 90 || p.Lon < -180 || p.Lon > 180 {
 			return
 		}
-		// La "isla nula": un fix sin señal que el logger escribe como 0,0.
+		// The "null island": a fix with no signal that the logger writes as 0,0.
 		if p.Lat == 0 && p.Lon == 0 {
 			return
 		}
@@ -190,8 +190,8 @@ func Parse(datos []byte) (*Parsed, error) {
 		return nil, fmt.Errorf("el fichero no contiene puntos")
 	}
 
-	// Ordenar por hora los que la tengan. Hay loggers que concatenan sesiones
-	// fuera de orden, y una polilínea desordenada dibuja un ovillo, no una ruta.
+	// Sort by time those that have one. Some loggers concatenate sessions out of
+	// order, and an unsorted polyline draws a ball of yarn, not a route.
 	sort.SliceStable(puntos, func(i, j int) bool {
 		a, b := puntos[i], puntos[j]
 		switch {

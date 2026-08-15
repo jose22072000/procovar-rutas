@@ -7,27 +7,27 @@ import (
 	"strings"
 )
 
-// De fichero a vendedor, y de fichero a fecha.
+// From file to seller, and from file to date.
 //
-// Las dos preguntas que hay que responder antes de poder guardar nada, y las
-// dos dependen de cómo estén montadas las carpetas de Drive — que hoy todavía
-// no sabemos del todo. Por eso la resolución es una CADENA de reglas ordenada,
-// con una tabla de alias al final: cuando ninguna acierta, el fichero va a la
-// bandeja y un admin lo casa a mano UNA vez; el alias queda memorizado y no
-// vuelve a preguntar. Ningún fichero se pierde en silencio.
+// The two questions that have to be answered before anything can be stored, and
+// both depend on how the Drive folders are laid out — which we still do not fully
+// know. That is why resolution is an ordered CHAIN of rules with an alias table at
+// the end: when none of them hits, the file goes to the inbox and an admin matches
+// it by hand ONCE; the alias is remembered and never asked again. No file is lost
+// in silence.
 
-// SourceType dice qué representa una carpeta de Drive. No se deduce del árbol:
-// se declara al dar la carpeta de alta, porque el árbol real varía de una cuenta
-// padre a otra.
+// SourceType says what a Drive folder represents. It is not inferred from the
+// tree: it is declared when the folder is registered, because the real tree varies
+// from one parent account to another.
 type SourceType string
 
 const (
-	FuenteSucursal SourceType = "SUCURSAL"
-	FuenteVendedor SourceType = "VENDEDOR"
-	FuenteMixta    SourceType = "MIXTA"
+	SourceBranch SourceType = "SUCURSAL"
+	SourceSeller SourceType = "VENDEDOR"
+	SourceMixed    SourceType = "MIXTA"
 )
 
-// Via indica qué regla acertó, para poder explicarlo en la bandeja y depurar.
+// Via records which rule hit, so it can be explained in the inbox and debugged.
 type Via string
 
 const (
@@ -38,30 +38,30 @@ const (
 	ViaNinguna Via = ""
 )
 
-// Context es todo lo que se sabe de un fichero al intentar resolverlo.
+// Context is everything known about a file when trying to resolve it.
 type Context struct {
 	SourceType SourceType
-	// SourceSellerID es el dueño de la carpeta entera, si SourceType = VENDEDOR.
+	// SourceSellerID owns the entire folder, when SourceType = VENDEDOR.
 	SourceSellerID string
-	// SourceName es el nombre de la carpeta dada de alta. En el montaje real
-	// de Procovar cada carpeta compartida ES el perfil de GPS de un vendedor
-	// ("GPS Diana Acosta", "STGGari"), así que muchas veces es la única pista.
+	// SourceName is the name of the registered folder. In Procovar's real setup
+	// each shared folder IS a seller's GPS profile ("GPS Diana Acosta", "STGGari"),
+	// so quite often it is the only hint there is.
 	SourceName string
-	// FolderPath son las subcarpetas dentro de la fuente, de fuera a dentro.
+	// FolderPath is the sub-folders inside the source, outermost first.
 	FolderPath []string
 	FileName   string
-	// GpxHints son los textos sacados del propio fichero.
+	// GpxHints are the texts pulled from the file itself.
 	GpxHints []string
 	// Alias mapea alias normalizado -> ID de trabajador.
 	Alias map[string]string
 }
 
-// Resolution es el veredicto.
+// Resolution is the verdict.
 type Resolution struct {
 	SellerID string
 	Via      Via
-	// Pista es el texto por el que se preguntará al admin si no se resolvió.
-	Pista string
+	// Hint is the text the admin will be asked about if it could not be resolved.
+	Hint string
 }
 
 var (
@@ -73,24 +73,24 @@ var (
 	fechaDMY       = regexp.MustCompile(`(\d{1,2})[.\-_/](\d{1,2})[.\-_/](20\d{2})`)
 )
 
-// tildes cubre lo que aparece en nombres de personas y de sucursales aquí. Se
-// resuelve a mano en vez de con golang.org/x/text a propósito: la biblioteca
-// estándar basta para el español y el binario se queda sin dependencias.
-var tildes = strings.NewReplacer(
+// accents covers what shows up in people's and branches' names here. Done by hand
+// rather than with golang.org/x/text on purpose: the standard library is enough
+// for Spanish and the binary keeps zero dependencies.
+var accents = strings.NewReplacer(
 	"á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u", "ñ", "n",
 	"à", "a", "è", "e", "ì", "i", "ò", "o", "ù", "u", "â", "a", "ê", "e",
 	"î", "i", "ô", "o", "û", "u", "ä", "a", "ë", "e", "ï", "i", "ö", "o",
 )
 
-// Normalizar deja minúsculas, sin tildes y sin separadores, para que
+// Normalize lowercases, strips accents and drops separators, so that
 // "José Pérez", "jose_perez" y "JOSE-PEREZ" casen entre sí.
-func Normalizar(s string) string {
-	return noAlfanumerico.ReplaceAllString(tildes.Replace(strings.ToLower(s)), "")
+func Normalize(s string) string {
+	return noAlfanumerico.ReplaceAllString(accents.Replace(strings.ToLower(s)), "")
 }
 
-// candidatosDeNombre quita la extensión y los trozos de fecha, que estorban al
-// casar el nombre contra un alias.
-func candidatosDeNombre(nombre string) []string {
+// nameCandidates strips the extension and the date fragments, which get in the
+// way of matching a name against an alias.
+func nameCandidates(nombre string) []string {
 	sinExt := sufijoGpx.ReplaceAllString(nombre, "")
 	trozos := separadores.Split(sinExt, -1)
 
@@ -105,48 +105,48 @@ func candidatosDeNombre(nombre string) []string {
 	return append(out, sinFechas...)
 }
 
-// ResolverTrabajador aplica la cadena de reglas; la primera que acierta gana.
-func ResolverTrabajador(ctx Context) Resolution {
-	// 1. La carpeta entera es de un vendedor: no hay nada que deducir.
-	if ctx.SourceType == FuenteVendedor && ctx.SourceSellerID != "" {
+// ResolveSeller applies the chain of rules; the first one that hits wins.
+func ResolveSeller(ctx Context) Resolution {
+	// 1. The whole folder belongs to one seller: there is nothing to infer.
+	if ctx.SourceType == SourceSeller && ctx.SourceSellerID != "" {
 		return Resolution{SellerID: ctx.SourceSellerID, Via: ViaFuente}
 	}
 
-	// 2. Subcarpetas, de la más interna hacia fuera: "Camagüey/Alexander/…" es
-	//    de Alexander, no de Camagüey.
+	// 2. Sub-folders, innermost outwards: "Camagüey/Alexander/…" is
+	//    Alexander's, not Camagüey's.
 	for i := len(ctx.FolderPath) - 1; i >= 0; i-- {
 		carpeta := ctx.FolderPath[i]
-		if id, ok := ctx.Alias[Normalizar(carpeta)]; ok {
-			return Resolution{SellerID: id, Via: ViaCarpeta, Pista: carpeta}
+		if id, ok := ctx.Alias[Normalize(carpeta)]; ok {
+			return Resolution{SellerID: id, Via: ViaCarpeta, Hint: carpeta}
 		}
 	}
 
-	// 3. Nombre de la propia carpeta dada de alta.
+	// 3. The name of the registered folder itself.
 	if ctx.SourceName != "" {
-		if id, ok := ctx.Alias[Normalizar(ctx.SourceName)]; ok {
-			return Resolution{SellerID: id, Via: ViaCarpeta, Pista: ctx.SourceName}
+		if id, ok := ctx.Alias[Normalize(ctx.SourceName)]; ok {
+			return Resolution{SellerID: id, Via: ViaCarpeta, Hint: ctx.SourceName}
 		}
 	}
 
-	// 4. Nombre del fichero.
-	for _, cand := range candidatosDeNombre(ctx.FileName) {
+	// 4. The file name.
+	for _, cand := range nameCandidates(ctx.FileName) {
 		if cand == "" {
 			continue
 		}
-		if id, ok := ctx.Alias[Normalizar(cand)]; ok {
-			return Resolution{SellerID: id, Via: ViaFichero, Pista: cand}
+		if id, ok := ctx.Alias[Normalize(cand)]; ok {
+			return Resolution{SellerID: id, Via: ViaFichero, Hint: cand}
 		}
 	}
 
-	// 5. Content del GPX: muchos loggers meten ahí el nombre del dispositivo.
+	// 5. GPX content: many loggers put the device name in there.
 	for _, pista := range ctx.GpxHints {
-		if id, ok := ctx.Alias[Normalizar(pista)]; ok {
-			return Resolution{SellerID: id, Via: ViaGpx, Pista: pista}
+		if id, ok := ctx.Alias[Normalize(pista)]; ok {
+			return Resolution{SellerID: id, Via: ViaGpx, Hint: pista}
 		}
 	}
 
-	// Sin suerte: a la bandeja, con el texto más informativo que tengamos para
-	// que el admin vea QUÉ hay que casar.
+	// No luck: to the inbox, with the most informative text we have so
+	// the admin can see WHAT needs matching.
 	pista := ctx.FileName
 	if len(ctx.GpxHints) > 0 {
 		pista = ctx.GpxHints[0]
@@ -157,13 +157,13 @@ func ResolverTrabajador(ctx Context) Resolution {
 	if len(ctx.FolderPath) > 0 {
 		pista = ctx.FolderPath[len(ctx.FolderPath)-1]
 	}
-	return Resolution{Via: ViaNinguna, Pista: pista}
+	return Resolution{Via: ViaNinguna, Hint: pista}
 }
 
-// FechaDelNombre saca la fecha de nombres como "RUTA_2026-08-15.gpx",
-// "20260815_alexander.gpx" o "15-08-2026.gpx". Devuelve "" si no hay ninguna:
-// más vale un fichero en la bandeja que una fecha inventada.
-func FechaDelNombre(nombre string) string {
+// DateFromName pulls the date out of names like "RUTA_2026-08-15.gpx",
+// "20260815_alexander.gpx" or "15-08-2026.gpx". Returns "" when there is none:
+// better a file in the inbox than an invented date.
+func DateFromName(nombre string) string {
 	t := sufijoGpx.ReplaceAllString(nombre, "")
 
 	if m := fechaISO.FindStringSubmatch(t); m != nil {
@@ -174,7 +174,7 @@ func FechaDelNombre(nombre string) string {
 		}
 	}
 
-	// Día primero, que es como se escribe aquí.
+	// Day first, which is how it is written here.
 	if m := fechaDMY.FindStringSubmatch(t); m != nil {
 		dia, _ := strconv.Atoi(m[1])
 		mes, _ := strconv.Atoi(m[2])

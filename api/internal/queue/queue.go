@@ -1,13 +1,14 @@
-// Package cola es la cola de ficheros pending de procesar, en Redis.
+// Package queue is the queue of files waiting to be processed, in Redis.
 //
-// n8n manda el .gpx, la API lo encola y contesta enseguida; el procesado —parsear,
-// resolver el vendedor, volcar los puntos, recalcular el día— ocurre después en
-// el proceso de ingest. Así una subida masiva no deja a n8n esperando ni bloquea
-// el panel.
+// n8n sends the .gpx, the API enqueues it and answers straight away; the
+// processing — parsing, resolving the seller, bulk-loading the points, recomputing
+// the day — happens afterwards in
+// the ingest process. That way a bulk upload neither keeps n8n waiting nor blocks
+// the panel.
 //
-// TODAS las claves llevan el prefix `procovar-rutas:`, para no mezclarse con las
-// de PEDIDO (`procovar-pedido:*`) ni con las de los demás sistemas que comparten
-// el mismo Redis.
+// EVERY key carries the `procovar-rutas:` prefix, so they never mix with PEDIDO's
+// (`procovar-pedido:*`) or with those of the other systems sharing the same
+// Redis.
 package queue
 
 import (
@@ -32,7 +33,7 @@ type Job struct {
 	Created       time.Time `json:"createdAt"`
 	ContentBase64 string    `json:"contentBase64"`
 	Queued        time.Time `json:"queued"`
-	// Attempts cuenta las veces que se ha reintentado, para no reintentar sin fin.
+	// Attempts counts the retries, so it does not retry for ever.
 	Attempts int `json:"attempts"`
 }
 
@@ -45,8 +46,8 @@ func New(url, prefix string) (*Queue, error) {
 	if prefix == "" {
 		prefix = DefaultPrefix
 	}
-	// Que el prefix termine en ":" no es cosmético: sin él, `procovar-rutas` y
-	// `procovar-rutas-viejo` compartirían espacio de claves.
+	// The prefix ending in ":" is not cosmetic: without it, `procovar-rutas` and
+	// `procovar-rutas-viejo` would share a key space.
 	if !strings.HasSuffix(prefix, ":") {
 		prefix += ":"
 	}
@@ -67,7 +68,7 @@ func (c *Queue) failed() string     { return c.key("ingesta:failed") }
 func (c *Queue) Ping(ctx context.Context) error { return c.rdb.Ping(ctx).Err() }
 func (c *Queue) Close() error                   { return c.rdb.Close() }
 
-// Enqueue mete un fichero al final de la queue.
+// Enqueue puts a file at the end of the queue.
 func (c *Queue) Enqueue(ctx context.Context, t Job) error {
 	if t.Queued.IsZero() {
 		t.Queued = time.Now().UTC()
@@ -79,12 +80,12 @@ func (c *Queue) Enqueue(ctx context.Context, t Job) error {
 	return c.rdb.LPush(ctx, c.pending(), datos).Err()
 }
 
-// Take saca el siguiente trabajo, esperando hasta `espera` si no hay ninguno.
+// Take pulls the next job, waiting up to `wait` when there is none.
 //
-// Usa BRPOPLPUSH: el trabajo pasa a una lista "processing" en la misma
-// operación, así que si el proceso se cae a mitad, el fichero sigue ahí y se
-// puede recuperar. Con un RPOP normal, un reinicio en el momento justo perdería
-// el recorrido de ese día para siempre.
+// It uses BRPOPLPUSH: the job moves to a "processing" list in the same operation,
+// so if the process dies halfway the file is still there and can be recovered.
+// With a plain RPOP, a restart at just the wrong moment would lose that day's
+// route for ever.
 func (c *Queue) Take(ctx context.Context, espera time.Duration) (*Job, string, error) {
 	crudo, err := c.rdb.BRPopLPush(ctx, c.pending(), c.processing(), espera).Result()
 	if err == redis.Nil {
@@ -96,7 +97,7 @@ func (c *Queue) Take(ctx context.Context, espera time.Duration) (*Job, string, e
 
 	var t Job
 	if err := json.Unmarshal([]byte(crudo), &t); err != nil {
-		// Un elemento ilegible no puede quedarse dando vueltas: se aparta.
+		// An unreadable item cannot keep going round: it is set aside.
 		c.rdb.LRem(ctx, c.processing(), 1, crudo)
 		c.rdb.LPush(ctx, c.failed(), crudo)
 		return nil, "", fmt.Errorf("trabajo ilegible, apartado: %w", err)
@@ -109,12 +110,12 @@ func (c *Queue) Finish(ctx context.Context, crudo string) error {
 	return c.rdb.LRem(ctx, c.processing(), 1, crudo).Err()
 }
 
-// MaxIntentos: a partir de aquí el fichero se aparta en vez de reintentarse.
-// Si tres veces no ha entrado, no va a entrar por insistir: lo que hace falta es
-// que alguien lo mire.
-const MaxIntentos = 3
+// MaxAttempts: past this point the file is set aside instead of retried. If it
+// has not gone in after three tries, insisting will not help: what it needs is
+// someone to look at it.
+const MaxAttempts = 3
 
-// Fail devuelve el trabajo a la cola para reintentarlo, o lo aparta si ya se
+// Fail returns the job to the queue for another try, or sets it aside if it has
 // intentó demasiadas veces.
 func (c *Queue) Fail(ctx context.Context, crudo string, t Job) error {
 	if err := c.rdb.LRem(ctx, c.processing(), 1, crudo).Err(); err != nil {
@@ -122,7 +123,7 @@ func (c *Queue) Fail(ctx context.Context, crudo string, t Job) error {
 	}
 
 	t.Attempts++
-	if t.Attempts >= MaxIntentos {
+	if t.Attempts >= MaxAttempts {
 		return c.rdb.LPush(ctx, c.failed(), crudo).Err()
 	}
 
@@ -133,8 +134,8 @@ func (c *Queue) Fail(ctx context.Context, crudo string, t Job) error {
 	return c.rdb.LPush(ctx, c.pending(), datos).Err()
 }
 
-// Recover devuelve a la cola lo que quedó a medias en un reinicio.
-// Se llama al arrancar la ingest.
+// Recover returns to the queue whatever a restart left half-done. Called when
+// ingest starts.
 func (c *Queue) Recover(ctx context.Context) (int, error) {
 	n := 0
 	for {
@@ -150,7 +151,7 @@ func (c *Queue) Recover(ctx context.Context) (int, error) {
 	}
 }
 
-// Stats es lo que enseña la pantalla de administración.
+// Stats is what the administration screen shows.
 type Stats struct {
 	Pending    int64 `json:"pending"`
 	Processing int64 `json:"processing"`

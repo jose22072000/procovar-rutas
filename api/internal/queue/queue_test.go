@@ -107,7 +107,7 @@ func TestReintentaYAcabaApartando(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for intento := 1; intento <= MaxIntentos; intento++ {
+	for intento := 1; intento <= MaxAttempts; intento++ {
 		got, crudo, err := c.Take(ctx, time.Second)
 		if err != nil {
 			t.Fatal(err)
@@ -122,7 +122,7 @@ func TestReintentaYAcabaApartando(t *testing.T) {
 
 	e, _ := c.Stats(ctx)
 	if e.Failed != 1 {
-		t.Errorf("failed = %d; tras %d intentos debería apartarse", e.Failed, MaxIntentos)
+		t.Errorf("failed = %d; tras %d intentos debería apartarse", e.Failed, MaxAttempts)
 	}
 	if e.Pending != 0 {
 		t.Errorf("pending = %d; no puede seguir reintentándose para siempre", e.Pending)

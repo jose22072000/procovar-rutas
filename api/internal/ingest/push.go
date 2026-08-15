@@ -16,21 +16,21 @@ import (
 // admite también el camino contrario: que n8n mande el file y aquí solo se
 // procese.
 //
-// Los dos caminos acaban en el mismo sitio y son idempotentes por `driveFileId`
-// y por `sha256`, de modo que pueden convivir sin duplicar nada: si n8n ya metió
-// el file de hoy, el barrido de esta noche lo verá y lo saltará.
+// Both routes end in the same place and are idempotent on `driveFileId` and on
+// `sha256`, so they can coexist without duplicating anything: if n8n already put
+// today's file in, tonight's scan will see it and skip it.
 
-// Pushed es lo que manda n8n.
+// Pushed is what n8n sends.
 type Pushed struct {
-	// SourceID o FolderID identifican la carpeta ya dada de alta.
+	// SourceID or FolderID identify the folder already registered.
 	SourceID string
 	FolderID string
-	// DriveFileID es la clave de deduplicación: el mismo file mandado dos
-	// veces no entra dos veces.
+	// DriveFileID is the deduplication key: the same file sent twice does not go
+	// in twice.
 	DriveFileID string
 	Name        string
-	// FolderPath son las subcarpetas dentro de la source. Es de donde sale el
-	// vendedor cuando el nombre del file solo trae la date.
+	// FolderPath is the sub-folders inside the source. It is where the seller comes
+	// from when the file name only carries the date.
 	FolderPath []string
 	Created    time.Time
 	Content    []byte
@@ -77,11 +77,11 @@ func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 	return nuevo, points, nil
 }
 
-// findSource localiza la carpeta a la que pertenece el file.
+// findSource locates the folder the file belongs to.
 //
-// No se crea sola si no existe: una carpeta desconocida es casi siempre un error
-// de configuración en n8n, y crearla en silencio haría que los ficheros
-// aparecieran bajo una source fantasma sin sucursal ni zona horaria.
+// It is not created on the fly when missing: an unknown folder is almost always a
+// misconfiguration in n8n, and creating it silently would make files show up under
+// a phantom source with no branch and no time zone.
 func (s *Service) findSource(ctx context.Context, e Pushed) (store.DriveSource, error) {
 	if e.SourceID != "" {
 		f, err := s.q.SourceByID(ctx, e.SourceID)

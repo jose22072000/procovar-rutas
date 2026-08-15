@@ -19,48 +19,48 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// Type de barrido.
+// Scan type.
 const (
-	// Incremental: solo lo modificado desde el último cursor. Barato, cada 30 min.
+	// Incremental: only what changed since the last cursor. Cheap, every 30 min.
 	TypeIncremental = "incremental"
-	// Nocturno: la carpeta entera, ignorando el cursor. Es el que garantiza que
-	// no falte nada aunque un file llegue renombrado, movido o con la date
-	// cambiada. Por eso el ritmo del incremental da igual.
+	// Nightly: the whole folder, ignoring the cursor. This is what guarantees
+	// nothing is missing even if a file arrives renamed, moved or with a changed
+	// date. That is why the incremental cadence does not matter.
 	TypeNightly = "nocturno"
-	// Backfill: todo el histórico, en el primer arranque.
+	// Backfill: the entire history, on first start.
 	TipoBackfill = "backfill"
-	// Manual: desde la pantalla de administración.
+	// Manual: from the administration screen.
 	TipoManual = "manual"
 )
 
-// Accounts es de dónde sale el cliente de Drive de cada carpeta. Hay una cuenta
-// de Google por sucursal, así que no vale con un único cliente.
+// Accounts is where each folder's Drive client comes from. There is one Google
+// account per branch, so a single client is not enough.
 type Accounts interface {
-	Para(ctx context.Context, clave string) (drive.Cliente, error)
+	For(ctx context.Context, clave string) (drive.Client, error)
 }
 
-// unaSola adapta un cliente suelto a la interfaz, para las pruebas y para el
-// caso en que todas las carpetas viven en la misma cuenta.
-type unaSola struct{ cli drive.Cliente }
+// singleAccount adapts a lone client to the interface, for tests and for the
+// case where every folder lives in the same account.
+type singleAccount struct{ cli drive.Client }
 
-func (u unaSola) Para(context.Context, string) (drive.Cliente, error) { return u.cli, nil }
+func (u singleAccount) For(context.Context, string) (drive.Client, error) { return u.cli, nil }
 
 // SingleAccount envuelve un cliente único.
-func SingleAccount(cli drive.Cliente) Accounts { return unaSola{cli: cli} }
+func SingleAccount(cli drive.Client) Accounts { return singleAccount{cli: cli} }
 
 type Service struct {
 	pool    *pgxpool.Pool
 	q       *store.Queries
-	cuentas Accounts
+	accounts Accounts
 	log     *slog.Logger
 	max     int
 }
 
-func NewService(pool *pgxpool.Pool, cuentas Accounts, log *slog.Logger, maxFicheros int) *Service {
+func NewService(pool *pgxpool.Pool, accounts Accounts, log *slog.Logger, maxFicheros int) *Service {
 	if maxFicheros <= 0 {
 		maxFicheros = 500
 	}
-	return &Service{pool: pool, q: store.New(pool), cuentas: cuentas, log: log, max: maxFicheros}
+	return &Service{pool: pool, q: store.New(pool), accounts: accounts, log: log, max: maxFicheros}
 }
 
 // Summary de un barrido.
@@ -72,10 +72,10 @@ type Summary struct {
 	Ausencias int64
 }
 
-// Scan recorre todas las fuentes activas.
+// Scan walks every active source.
 //
-// Un fallo en una carpeta no detiene las demás: se anota en la source y se
-// sigue. Que el Drive de una sucursal esté caído no puede dejar sin datos a las
+// A failure in one folder does not stop the rest: it is recorded on the source
+// and the scan carries on. One branch's Drive being down cannot leave the
 // otras siete.
 func (s *Service) Scan(ctx context.Context, tipo string) (Summary, error) {
 	fuentes, err := s.q.ActiveSources(ctx)
@@ -101,7 +101,7 @@ func (s *Service) Scan(ctx context.Context, tipo string) (Summary, error) {
 	return total, nil
 }
 
-// ScanSource procesa una carpeta.
+// ScanSource processes one folder.
 func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo string) (Summary, error) {
 	res := Summary{}
 
@@ -112,25 +112,25 @@ func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo
 		return res, fmt.Errorf("abriendo registro de importación: %w", err)
 	}
 
-	// Solo el incremental usa el cursor. El nocturno y el backfill recorren todo
-	// a propósito.
+	// Only the incremental scan uses the cursor. The nightly and backfill scans
+	// deliberately walk everything.
 	var desde time.Time
 	if tipo == TypeIncremental && source.ModifiedCursor != nil {
 		desde = *source.ModifiedCursor
 	}
 
-	cli, err := s.cuentas.Para(ctx, source.Credential)
+	cli, err := s.accounts.For(ctx, source.Credential)
 	if err != nil {
 		return res, fmt.Errorf("credencial %q: %w", source.Credential, err)
 	}
-	// Sin cliente de Drive no se puede barrer, pero eso NO es motivo para caerse:
-	// mientras la entrada sea el empuje de n8n, el sistema funciona igual. Antes
-	// esto reventaba con un puntero nulo en mitad del barrido.
+	// Without a Drive client there is nothing to scan, but that is NOT a reason to
+	// fall over: as long as files arrive through n8n's push, the system works just
+	// the same. This used to blow up with a nil pointer mid-scan.
 	if cli == nil {
 		return res, fmt.Errorf("no hay acceso a Drive para la carpeta %q; solo entrará lo que empuje n8n", source.Name)
 	}
 
-	ficheros, errListar := cli.Listar(ctx, source.FolderID, desde, s.max)
+	ficheros, errListar := cli.List(ctx, source.FolderID, desde, s.max)
 	res.Seen = len(ficheros)
 
 	alias, err := s.aliasMap(ctx)
@@ -182,9 +182,9 @@ func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo
 		return res, errListar
 	}
 
-	// El cursor solo avanza si el listado terminó bien. Avanzarlo tras un fallo
-	// parcial dejaría un agujero permanente en el histórico que solo el repaso
-	// nocturno taparía.
+	// The cursor only advances if the listing finished cleanly. Advancing it after
+	// a partial failure would leave a permanent hole in the history that only the
+	// nightly sweep would ever cover.
 	if err := s.q.UpdateSourceCursor(ctx, store.UpdateSourceCursorParams{
 		ID: source.ID, ModifiedCursor: &masReciente,
 	}); err != nil {
@@ -202,30 +202,30 @@ type claveDia struct {
 // processFile baja un .gpx, lo juzga y lo guarda. Devuelve si era nuevo.
 func (s *Service) processFile(
 	ctx context.Context,
-	cli drive.Cliente,
+	cli drive.Client,
 	source store.DriveSource,
 	f drive.File,
 	alias map[string]string,
 	zona *time.Location,
 	diasTocados map[claveDia]bool,
 ) (bool, int64, error) {
-	// ¿Ya lo tenemos? Se comprueba ANTES de descargar: en el repaso nocturno,
-	// que relista carpetas enteras, esto ahorra bajar miles de ficheros que ya
-	// están en la base.
+	// Do we have it already? Checked BEFORE downloading: in the nightly sweep,
+	// which relists whole folders, this saves downloading thousands of files that
+	// are already in the database.
 	previo, err := s.q.FileByDriveID(ctx, f.ID)
 	yaEstaba := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, 0, fmt.Errorf("consultando file: %w", err)
 	}
-	// Si el tamaño y la date de modificación no han cambiado, es el mismo
-	// file: no hay nada que hacer.
+	// If the size and the modified date have not changed it is the same file:
+	// there is nothing to do.
 	if yaEstaba && previo.Status == store.FileProcessed &&
 		previo.SizeBytes != nil && int64(*previo.SizeBytes) == f.Size &&
 		!f.Modified.After(previo.ImportedAt) {
 		return false, 0, nil
 	}
 
-	datos, err := cli.Descargar(ctx, f.ID)
+	datos, err := cli.Download(ctx, f.ID)
 	if err != nil {
 		return false, 0, fmt.Errorf("descargando %s: %w", f.Name, err)
 	}
@@ -233,12 +233,12 @@ func (s *Service) processFile(
 	return s.Save(ctx, source, f, datos, alias, zona, diasTocados)
 }
 
-// Save mete en la base un .gpx ya descargado.
+// Save stores an already-downloaded .gpx in the database.
 //
-// Está separado de la descarga porque los ficheros llegan por dos caminos: los
-// baja el barrido, o los empuja n8n cuando el vendedor los sube (ver
-// POST /api/ingesta/file). La decisión y el guardado son los mismos en ambos
-// casos; lo único que cambia es quién trae los bytes.
+// It is kept apart from the download because files arrive by two routes: the scan
+// fetches them, or n8n pushes them when the seller uploads (see
+// POST /api/ingest/file). The decision and the storing are the same on both
+// paths; the only difference is who brings the bytes.
 func (s *Service) Save(
 	ctx context.Context,
 	source store.DriveSource,
@@ -257,8 +257,8 @@ func (s *Service) Save(
 	suma := sha256.Sum256(datos)
 	hash := hex.EncodeToString(suma[:])
 
-	// El mismo contenido en otra carpeta (o copiado por el propio vendedor) no
-	// se ingiere dos veces.
+	// The same content in another folder (or copied by the seller themselves) is
+	// not ingested twice.
 	if otro, err := s.q.FileBySha(ctx, hash); err == nil && otro.DriveFileID != f.ID {
 		s.log.Debug("contenido duplicado", "file", f.Name, "ya_estaba_como", otro.Name)
 		return false, 0, nil
@@ -320,8 +320,8 @@ func (s *Service) Save(
 
 	var insertados int64
 	if v.Parsed != nil && len(v.Parsed.Points) > 0 {
-		// Reemplazo, no acumulación: si el file se re-subió corregido, sus
-		// points viejos se van. Así reprocesar es siempre seguro.
+		// Replace, do not accumulate: if the file was re-uploaded after a fix, its
+		// old points go. That makes reprocessing always safe.
 		if err := qtx.DeleteFilePoints(ctx, fila.ID); err != nil {
 			return false, 0, err
 		}
@@ -342,12 +342,12 @@ func (s *Service) Save(
 	return true, insertados, nil
 }
 
-// RecomputeDay rehace el veredicto de un día desde la base.
+// RecomputeDay rebuilds a day's verdict from the database.
 //
-// Se recalcula desde los PUNTOS GUARDADOS y no desde el file recién llegado
-// porque un mismo día puede tener varios ficheros —una sesión de mañana y otra
-// de tarde—, y juzgarlos por separado daría dos veredictos contradictorios para
-// el mismo día.
+// It recomputes from the STORED POINTS rather than from the file that just
+// arrived, because one day can have several files — a morning session and an
+// afternoon one — and judging them separately would produce two contradictory
+// verdicts for the same day.
 func (s *Service) RecomputeDay(ctx context.Context, trabajadorID string, date time.Time) error {
 	trab, err := s.q.SellerByID(ctx, trabajadorID)
 	if err != nil {
@@ -422,8 +422,8 @@ func (s *Service) RecomputeDay(ctx context.Context, trabajadorID string, date ti
 	return nil
 }
 
-// MarkAbsences crea la fila SIN_FICHERO de cada vendedor que no subió nada
-// ese día laborable. Es lo que convierte una ausencia en un dato consultable.
+// MarkAbsences creates the SIN_FICHERO row for every seller who uploaded nothing
+// on that working day. It is what turns an absence into queryable data.
 func (s *Service) MarkAbsences(ctx context.Context, date time.Time) (int64, error) {
 	return s.q.MarkAbsences(ctx, store.MarkAbsencesParams{
 		Date:     date,
@@ -459,7 +459,7 @@ func (s *Service) sourceZone(ctx context.Context, f store.DriveSource) *time.Loc
 	return zonaPorDefecto()
 }
 
-// branchSettings trae los umbrales; si la sucursal no tiene fila propia, los
+// branchSettings fetches the thresholds; if the branch has no row of its own,
 // de fábrica.
 func (s *Service) branchSettings(ctx context.Context, sucursalID string) (metrics.Config, *time.Location) {
 	cfg := metrics.DefaultConfig()
@@ -625,12 +625,12 @@ func idDia(trabajadorID string, date time.Time) string {
 func nuevoID() string {
 	b := make([]byte, 16)
 	if _, err := randRead(b); err != nil {
-		// Sin aleatoriedad no se puede generar un identificador único; mejor un
-		// pánico aquí que dos filas compartiendo id.
+		// Without randomness a unique identifier cannot be generated; better a panic
+		// here than two rows sharing an id.
 		panic(fmt.Sprintf("sin source de aleatoriedad: %v", err))
 	}
 	return hex.EncodeToString(b)
 }
 
-// randRead se aísla en una variable para poder falsearlo en las pruebas.
+// randRead is kept in a variable so tests can stub it.
 var randRead = cryptorand.Read

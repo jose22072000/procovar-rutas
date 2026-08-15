@@ -1,13 +1,13 @@
-// Package drive lee las carpetas de Google Drive donde los vendedores suben sus
-// .gpx.
+// Package drive reads the Google Drive folders where sellers upload their .gpx
+// files.
 //
-// La ingesta habla con la INTERFAZ Cliente, no con Google. Dos motivos, y el
-// segundo es el importante:
+// Ingest talks to the Client INTERFACE, not to Google. Two reasons, and the second
+// is the one that matters:
 //
-//  1. La ingesta se prueba entera sin credenciales ni red (ver falso.go).
-//  2. El día que la APK de fuerza de ventas mande las posiciones por API, la
-//     fuente cambia y el resto del sistema —parser, métricas, panel, reporte—
-//     se queda igual.
+//  1. Ingest is tested end to end with no credentials and no network (see fake.go).
+//  2. The day the sales-force app sends positions over an API, the source changes
+//     and the rest of the system — parser, metrics, panel, report — stays exactly
+//     as it is.
 package drive
 
 import (
@@ -21,37 +21,37 @@ import (
 	"google.golang.org/api/option"
 )
 
-// File es un .gpx visto en una carpeta.
+// File is a .gpx seen in a folder.
 type File struct {
 	ID string
-	// Name incluye la extensión.
+	// Name includes the extension.
 	Name string
-	// FolderPath son las subcarpetas desde la raíz de la fuente, de fuera a
-	// dentro. Es lo que permite deducir el vendedor cuando el árbol lo dice.
+	// FolderPath is the sub-folders from the source root, outermost first. It is
+	// what allows inferring the seller when the tree says so.
 	FolderPath []string
 	Size       int64
 	Created    time.Time
 	Modified   time.Time
 }
 
-// Cliente es lo que la ingesta necesita de Drive. Nada más.
-type Cliente interface {
-	// Listar devuelve los .gpx de la carpeta y de sus subcarpetas. Si `desde` no
-	// es cero, solo los modificados después (barrido incremental).
-	Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error)
-	// Descargar trae el contenido de un fichero.
-	Descargar(ctx context.Context, fileID string) ([]byte, error)
+// Client is what ingest needs from Drive. Nothing more.
+type Client interface {
+	// List returns the .gpx files in the folder and its sub-folders. When `since`
+	// is non-zero, only those modified after it (incremental scan).
+	List(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error)
+	// Download fetches a file's contents.
+	Download(ctx context.Context, fileID string) ([]byte, error)
 }
 
 type clienteGoogle struct {
 	svc *drive.Service
 }
 
-// Nuevo crea un cliente contra Google Drive con una service account.
+// New builds a Google Drive client from a service account.
 //
 // El ámbito es de SOLO LECTURA a propósito: este sistema nunca mueve ni borra
-// ficheros del Drive de los trabajadores, y conviene que ni siquiera pueda.
-func Nuevo(ctx context.Context, credencialJSON []byte) (Cliente, error) {
+// files in the sellers' Drive, and it is better that it cannot even try.
+func New(ctx context.Context, credencialJSON []byte) (Client, error) {
 	svc, err := drive.NewService(ctx,
 		option.WithCredentialsJSON(credencialJSON),
 		option.WithScopes(drive.DriveReadonlyScope))
@@ -69,7 +69,7 @@ type pendiente struct {
 
 const mimeCarpeta = "application/vnd.google-apps.folder"
 
-func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error) {
+func (c *clienteGoogle) List(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error) {
 	ficheros := []File{}
 	cola := []pendiente{{id: folderID, ruta: nil}}
 	visitadas := map[string]bool{}
@@ -78,17 +78,17 @@ func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.
 		actual := cola[0]
 		cola = cola[1:]
 		if visitadas[actual.id] {
-			// Un atajo de Drive puede crear un ciclo. Sin esto, el barrido daría
-			// vueltas para siempre.
+			// A Drive shortcut can create a cycle. Without this the scan would go
+			// round for ever.
 			continue
 		}
 		visitadas[actual.id] = true
 
 		consulta := fmt.Sprintf("'%s' in parents and trashed = false", actual.id)
 		if !desde.IsZero() {
-			// Solo se filtra por fecha en el incremental. El repaso nocturno pasa
-			// `desde` en cero y recorre todo, que es lo que garantiza que no falte
-			// nada aunque un fichero llegue con la fecha cambiada o renombrado.
+			// Only the incremental scan filters by date. The nightly sweep passes a
+			// zero `since` and walks everything, which is what guarantees nothing is
+			// missing even if a file arrives renamed or with a changed date.
 			consulta += fmt.Sprintf(" and modifiedTime > '%s'", desde.UTC().Format(time.RFC3339))
 		}
 
@@ -107,14 +107,14 @@ func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.
 			}
 			for _, f := range res.Files {
 				if f.MimeType == mimeCarpeta {
-					// Las subcarpetas se recorren SIEMPRE, incluso en el
-					// incremental: una carpeta nueva no cambia de fecha cuando
-					// alguien mete un fichero dentro, así que filtrar carpetas por
+					// Sub-folders are ALWAYS walked, even in the incremental scan: a
+					// folder's date does not change when someone drops a file into
+					// it, so filtering folders by
 					// modifiedTime escondería ficheros nuevos.
 					cola = append(cola, pendiente{id: f.Id, ruta: append(append([]string{}, actual.ruta...), f.Name)})
 					continue
 				}
-				if !esGpx(f.Name) {
+				if !isGpx(f.Name) {
 					continue
 				}
 				ficheros = append(ficheros, File{
@@ -136,7 +136,7 @@ func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.
 	return ficheros, nil
 }
 
-func (c *clienteGoogle) Descargar(ctx context.Context, fileID string) ([]byte, error) {
+func (c *clienteGoogle) Download(ctx context.Context, fileID string) ([]byte, error) {
 	res, err := c.svc.Files.Get(fileID).SupportsAllDrives(true).Context(ctx).Download()
 	if err != nil {
 		return nil, fmt.Errorf("descargando %s: %w", fileID, err)
@@ -145,10 +145,10 @@ func (c *clienteGoogle) Descargar(ctx context.Context, fileID string) ([]byte, e
 	return io.ReadAll(res.Body)
 }
 
-// esGpx filtra por NOMBRE y no por mimeType a propósito: Drive sirve los .gpx
+// isGpx filters by NAME and not by mimeType on purpose: Drive serves .gpx files
 // como application/octet-stream, como text/xml o como application/gpx+xml según
-// cómo se subieran, y filtrar por tipo se dejaría la mitad fuera.
-func esGpx(nombre string) bool {
+// they were uploaded, and filtering by type would leave half of them out.
+func isGpx(nombre string) bool {
 	return strings.HasSuffix(strings.ToLower(nombre), ".gpx")
 }
 

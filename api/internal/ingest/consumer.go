@@ -10,15 +10,16 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/queue"
 )
 
-// Consumer vacía la queue de Redis que llena n8n.
+// Consumer drains the Redis queue that n8n fills.
 //
-// Vive en el proceso de ingesta y no en la API a propósito: process un file
-// puede llevar segundos —parsear miles de points, volcarlos, recalcular el día—
-// y eso no puede competir por el mismo proceso que atiende el panel.
+// It deliberately lives in the ingest process and not in the API: processing one
+// file can take seconds — parsing thousands of points, bulk-loading them,
+// recomputing the day — and that cannot compete for the same process that serves
+// the panel.
 type Consumer struct {
 	svc   *Service
 	queue *queue.Queue
-	// bus puede ser nil: los avisos en vivo son un extra, no una dependencia.
+	// bus may be nil: live notifications are an extra, not a dependency.
 	bus *events.Bus
 	log *slog.Logger
 }
@@ -27,9 +28,10 @@ func NewConsumer(svc *Service, c *queue.Queue, bus *events.Bus, log *slog.Logger
 	return &Consumer{svc: svc, queue: c, bus: bus, log: log}
 }
 
-// avisa al panel de que algo cambió. Nunca interrumpe el job: si Redis no
-// acepta el aviso, el file ya está guardado y el panel se enterará al recargar.
-func (c *Consumer) avisa(ctx context.Context, e events.Event) {
+// notify tells the panel something changed. It never interrupts the job: if Redis
+// refuses the notification the file is already stored and the panel will find out
+// on the next reload.
+func (c *Consumer) notify(ctx context.Context, e events.Event) {
 	if c.bus == nil {
 		return
 	}
@@ -38,10 +40,11 @@ func (c *Consumer) avisa(ctx context.Context, e events.Event) {
 	}
 }
 
-// Run consume hasta que se cancele el contexto.
+// Run consumes until the context is cancelled.
 func (c *Consumer) Run(ctx context.Context) {
-	// Lo que quedó a medias en el último reinicio vuelve a la queue. Sin esto, un
-	// despliegue en mal momento se llevaría por delante el recorrido de ese día.
+	// Whatever was left half-done by the last restart goes back on the queue.
+	// Without this, a deploy at the wrong moment would take that day's route with
+	// it.
 	if n, err := c.queue.Recover(ctx); err != nil {
 		c.log.Error("no se pudo recuperar la queue", "error", err)
 	} else if n > 0 {
@@ -56,8 +59,8 @@ func (c *Consumer) Run(ctx context.Context) {
 			return
 		}
 
-		// La espera es del propio Redis (BRPOPLPUSH bloqueante): ni sondeo ni
-		// pausas artificiales. Cinco segundos para que la cancelación se note.
+		// Redis itself does the waiting (blocking BRPOPLPUSH): no polling and no
+		// artificial sleeps. Five seconds so cancellation is noticed.
 		job, crudo, err := c.queue.Take(ctx, 5*time.Second)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -77,15 +80,15 @@ func (c *Consumer) Run(ctx context.Context) {
 			if err := c.queue.Fail(ctx, crudo, *job); err != nil {
 				c.log.Error("no se pudo devolver el job a la queue", "error", err)
 			}
-			c.avisa(ctx, events.Event{Type: events.TypeQueue, Detail: "fallido"})
+			c.notify(ctx, events.Event{Type: events.TypeQueue, Detail: "fallido"})
 			continue
 		}
 
 		if err := c.queue.Finish(ctx, crudo); err != nil {
 			c.log.Error("no se pudo cerrar el job", "error", err)
 		}
-		// Fichero dentro: la bandeja y los contadores de la queue cambian.
-		c.avisa(ctx, events.Event{Type: events.TypeFile, Detail: "procesado"})
+		// File is in: the inbox and the queue counters change.
+		c.notify(ctx, events.Event{Type: events.TypeFile, Detail: "procesado"})
 	}
 }
 

@@ -14,45 +14,45 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Varias cuentas de Google, una por sucursal.
+// Several Google accounts, one per branch.
 //
 // El montaje real de Procovar: cada sucursal tiene su propia cuenta de Google,
-// con el nombre de la sucursal, y las carpetas de rutas viven dentro. Es el
-// mismo modelo que ya usa n8n, donde hay una credencial "Account padre" y otras
+// named after the branch, and the route folders live inside. It is the same model
+// n8n already uses, where there is a "parent account" credential and others
 // por sucursal ("Granma", …).
 //
-// Por eso el sistema no habla con "un Drive" sino con un JUEGO de cuentas, y
-// cada carpeta dice con cuál se lee. Si el día de mañana todas las carpetas se
-// comparten en una sola cuenta, todas las fuentes apuntan a la misma clave y
-// esto sigue funcionando sin tocar nada.
+// That is why the system does not talk to "a Drive" but to a SET of accounts, and
+// each folder says which one reads it. If one day every folder is shared into a
+// single account, all sources point at the same key and this keeps working without
+// a change.
 
-// Account es la credencial de una cuenta de Google.
+// Account is one Google account's credential.
 type Account struct {
-	// Key con la que la referencian las fuentes ("principal", "granma", …).
+	// Key the sources refer to it by ("principal", "granma", …).
 	Key string `json:"clave"`
 	// Type: "oauth" (como n8n) o "service_account".
 	Type string `json:"tipo"`
 
-	// OAuth: lo mismo que n8n guarda en su credencial de Google Drive.
+	// OAuth: the same thing n8n stores in its Google Drive credential.
 	ClientID     string `json:"clientId,omitempty"`
 	ClientSecret string `json:"clientSecret,omitempty"`
 	RefreshToken string `json:"refreshToken,omitempty"`
 
-	// Service account: el JSON de la clave.
+	// Service account: the key's JSON.
 	CredentialJSON string `json:"credencialJson,omitempty"`
 }
 
-// Set mantiene un cliente por cuenta y los crea a demanda.
+// Set keeps one client per account and builds them on demand.
 type Set struct {
-	cuentas  map[string]Account
-	clientes map[string]Cliente
+	accounts  map[string]Account
+	clientes map[string]Client
 	mu       sync.Mutex
 }
 
-// LoadAccounts lee las credenciales de la configuración.
+// LoadAccounts reads the credentials from configuration.
 //
-// `datos` es un JSON con la lista de cuentas. Se admite también una sola cuenta
-// suelta, por comodidad cuando todavía no hay más que una.
+// `data` is a JSON list of accounts. A single loose account is also accepted, for
+// convenience while there is still only one.
 func LoadAccounts(datos []byte) (*Set, error) {
 	texto := strings.TrimSpace(string(datos))
 	if texto == "" {
@@ -68,7 +68,7 @@ func LoadAccounts(datos []byte) (*Set, error) {
 		lista = []Account{una}
 	}
 
-	j := &Set{cuentas: map[string]Account{}, clientes: map[string]Cliente{}}
+	j := &Set{accounts: map[string]Account{}, clientes: map[string]Client{}}
 	for _, c := range lista {
 		if c.Key == "" {
 			c.Key = "principal"
@@ -80,10 +80,10 @@ func LoadAccounts(datos []byte) (*Set, error) {
 				c.Type = "service_account"
 			}
 		}
-		j.cuentas[c.Key] = c
+		j.accounts[c.Key] = c
 	}
-	if len(j.cuentas) == 0 {
-		return nil, fmt.Errorf("la lista de cuentas de Google está vacía")
+	if len(j.accounts) == 0 {
+		return nil, fmt.Errorf("la lista de accounts de Google está vacía")
 	}
 	return j, nil
 }
@@ -97,31 +97,31 @@ func CargarCuentasDeFichero(ruta string) (*Set, error) {
 	return LoadAccounts(datos)
 }
 
-// Keys lista las cuentas configuradas.
+// Keys lists the configured accounts.
 func (j *Set) Keys() []string {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	out := make([]string, 0, len(j.cuentas))
-	for k := range j.cuentas {
+	out := make([]string, 0, len(j.accounts))
+	for k := range j.accounts {
 		out = append(out, k)
 	}
 	return out
 }
 
-// Para devuelve el cliente de una cuenta.
+// For returns an account's client.
 //
-// Si la clave no existe se cae a "principal" en vez de fallar: una carpeta mal
-// etiquetada debe leerse con la cuenta por defecto, no quedarse sin barrer en
+// When the key does not exist it falls back to "principal" instead of failing: a
+// mislabelled folder should be read with the default account, not go unscanned in
 // silencio. Si tampoco hay principal, entonces sí es un error.
-func (j *Set) Para(ctx context.Context, clave string) (Cliente, error) {
+func (j *Set) For(ctx context.Context, clave string) (Client, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
 	if clave == "" {
 		clave = "principal"
 	}
-	if _, hay := j.cuentas[clave]; !hay {
-		if _, hayPrincipal := j.cuentas["principal"]; !hayPrincipal {
+	if _, hay := j.accounts[clave]; !hay {
+		if _, hayPrincipal := j.accounts["principal"]; !hayPrincipal {
 			return nil, fmt.Errorf("no hay credencial para la cuenta %q", clave)
 		}
 		clave = "principal"
@@ -131,7 +131,7 @@ func (j *Set) Para(ctx context.Context, clave string) (Cliente, error) {
 		return c, nil
 	}
 
-	cuenta := j.cuentas[clave]
+	cuenta := j.accounts[clave]
 	cli, err := abrir(ctx, cuenta)
 	if err != nil {
 		return nil, err
@@ -140,10 +140,10 @@ func (j *Set) Para(ctx context.Context, clave string) (Cliente, error) {
 	return cli, nil
 }
 
-func abrir(ctx context.Context, c Account) (Cliente, error) {
+func abrir(ctx context.Context, c Account) (Client, error) {
 	switch c.Type {
 	case "service_account":
-		return Nuevo(ctx, []byte(c.CredentialJSON))
+		return New(ctx, []byte(c.CredentialJSON))
 
 	case "oauth":
 		if c.ClientID == "" || c.ClientSecret == "" || c.RefreshToken == "" {
@@ -153,11 +153,11 @@ func abrir(ctx context.Context, c Account) (Cliente, error) {
 			ClientID:     c.ClientID,
 			ClientSecret: c.ClientSecret,
 			Endpoint:     google.Endpoint,
-			// Solo lectura: este sistema nunca mueve ni borra nada del Drive de
-			// los trabajadores, y conviene que ni siquiera pueda.
+			// Read-only: this system never moves or deletes anything in the sellers'
+			// Drive, and it is better that it cannot even try.
 			Scopes: []string{drive.DriveReadonlyScope},
 		}
-		// El token de acceso se renueva solo con el de refresco.
+		// The access token refreshes itself using the refresh token.
 		fuente := cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: c.RefreshToken})
 		svc, err := drive.NewService(ctx, option.WithTokenSource(fuente))
 		if err != nil {

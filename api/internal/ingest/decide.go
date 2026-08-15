@@ -79,7 +79,7 @@ func Examine(f drive.File, datos []byte, ent Env) Verdict {
 		}
 	}
 
-	res := gpx.ResolverTrabajador(gpx.Context{
+	res := gpx.ResolveSeller(gpx.Context{
 		SourceType:     ent.SourceType,
 		SourceSellerID: ent.SourceSellerID,
 		SourceName:     ent.SourceName,
@@ -92,7 +92,7 @@ func Examine(f drive.File, datos []byte, ent Env) Verdict {
 	v := Verdict{
 		SellerID:  res.SellerID,
 		Via:       res.Via,
-		AliasHint: res.Pista,
+		AliasHint: res.Hint,
 		Parsed:    parseado,
 	}
 	if v.AliasHint == "" {
@@ -108,8 +108,8 @@ func Examine(f drive.File, datos []byte, ent Env) Verdict {
 	case parseado.FirstFix != nil:
 		v.Date = parseado.FirstFix.In(zona).Format("2006-01-02")
 		v.DateSource = DateFromPoints
-	case gpx.FechaDelNombre(f.Name) != "":
-		v.Date = gpx.FechaDelNombre(f.Name)
+	case gpx.DateFromName(f.Name) != "":
+		v.Date = gpx.DateFromName(f.Name)
 		v.DateSource = DateFromName
 	case !f.Created.IsZero():
 		// The weakest one: the Drive upload date. It can be days later than the
