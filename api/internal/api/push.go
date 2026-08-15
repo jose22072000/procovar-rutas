@@ -60,10 +60,17 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "el contenido no es base64 válido")
 		return
 	}
-	if p.DriveFileID == "" || p.Name == "" || len(contenido) == 0 {
-		respondError(w, http.StatusBadRequest, "faltan driveFileId, nombre o contenido")
+	if p.DriveFileID == "" || p.Name == "" {
+		respondError(w, http.StatusBadRequest, "faltan driveFileId o name")
 		return
 	}
+
+	// Un fichero VACÍO no es una petición mal hecha: es un .gpx de 0 bytes en Drive,
+	// y los hay. Rechazarlo con 400 hacía dos cosas malas a la vez: n8n daba la
+	// ejecución entera por fallida —el resto de los ficheros de esa tanda se
+	// quedaban sin entrar— y el fichero desaparecía sin dejar rastro, justo lo que
+	// este sistema promete que no pasa. Se acepta y queda registrado con su error,
+	// visible en la bandeja.
 
 	creado := time.Now().UTC()
 	if p.Created != "" {

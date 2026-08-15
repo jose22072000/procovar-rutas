@@ -42,7 +42,7 @@ function Visor() {
     setDatos(null);
     setInstante(-1);
     ask<DayResponse>(
-      `/api/day?seller=${seller}&fecha=${fecha}${completa ? "&workday=completa" : ""}`,
+      `/api/day?seller=${seller}&date=${fecha}${completa ? "&workday=full" : ""}`,
     )
       .then(setDatos)
       .catch((e) => setError(e.message));

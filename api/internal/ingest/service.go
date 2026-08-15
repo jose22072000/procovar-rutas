@@ -372,8 +372,14 @@ func (s *Service) Save(
 				"carpeta", source.Name, "error", err)
 		} else {
 			v.SellerID = id
-			v.Status = StatusProcessed
 			v.AliasHint = ""
+			// Solo se levanta el "sin asignar", que era lo único que impedía darlo
+			// por bueno. Un fichero ilegible o sin fecha CONSERVA su estado: saber de
+			// quién es no lo arregla, y marcarlo como procesado escondería el fallo
+			// justo donde tiene que verse.
+			if v.Status == StatusUnassigned {
+				v.Status = StatusProcessed
+			}
 		}
 	}
 

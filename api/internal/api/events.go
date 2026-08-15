@@ -43,6 +43,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	// at once at the end, which is exactly the opposite of the point.
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	// A first comment right away, before anything has happened.
+	//
+	// Headers with no body bytes leave an HTTP/2 stream open and empty, and Chrome
+	// through Traefik cuts it with ERR_HTTP2_PROTOCOL_ERROR before the first real
+	// event ever arrives. Two bytes are enough to settle it.
+	_, _ = w.Write([]byte(": ok\n\n"))
 	flush.Flush()
 
 	// A heartbeat now and then: with nothing travelling, some middlebox declares the

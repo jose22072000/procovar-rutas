@@ -100,7 +100,7 @@ export default function Administracion() {
     setBarriendo(true);
     setError(null);
     try {
-      await enviar(`/api/ingest/scan?tipo=${tipoBarrido}`, {});
+      await enviar(`/api/ingest/scan?type=${tipoBarrido}`, {});
       await cargar();
     } catch (e) {
       setError((e as Error).message);

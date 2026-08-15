@@ -208,7 +208,7 @@ func (s *Server) createSource(w http.ResponseWriter, r *http.Request) {
 func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
-	tipo := r.URL.Query().Get("tipo")
+	tipo := r.URL.Query().Get("type")
 	if tipo == "" {
 		tipo = ingest.TipoManual
 	}

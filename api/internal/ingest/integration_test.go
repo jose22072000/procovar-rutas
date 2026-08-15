@@ -361,9 +361,18 @@ func TestEstructuraRealCarpetaPorPerfilDeGps(t *testing.T) {
 	}
 }
 
-// And if the GPS profile is the tablet's name rather than the seller's, the file
-// lands in the inbox with the hint to match it ONCE.
-func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
+// A folder named after the tablet rather than the person still resolves on its own.
+//
+// This test used to require the opposite: the file went to the inbox with a hint so
+// an admin could match it once. That was dropped deliberately. Every shared folder
+// IS somebody's GPS profile, so its name identifies whose route it is well enough
+// for what the panel is for — a manager looks at their branch's GPS and already
+// knows who is who. Asking them to match 53 folders by hand, and one more per
+// tablet swap, was asking them to type in what the folder already said.
+//
+// What must NOT be lost is the trail: the file keeps its folder and its branch, so
+// it can always be traced back.
+func TestPerfilConNombreDeTabletSeResuelveSolo(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
@@ -382,33 +391,20 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Status != store.FileUnassigned {
-		t.Fatalf("status = %s, se esperaba SIN_ASIGNAR", f.Status)
+	if f.Status != store.FileProcessed {
+		t.Fatalf("status = %s, se esperaba PROCESADO: la carpeta ya dice de quién es", f.Status)
 	}
-	if f.AliasHint == nil || *f.AliasHint != "TAB-CMG-04" {
-		t.Errorf("pista = %v; es lo que el admin casa con el vendedor", f.AliasHint)
+	if f.SellerID == nil {
+		t.Fatal("debería haber quedado con vendedor, sin pasar por la bandeja")
 	}
 
-	// Once the alias is matched, the next file from that tablet resolves on its own.
-	if _, err := q.CreateAlias(ctx, store.CreateAliasParams{
-		ID: "a2", Alias: gpx.Normalize("TAB-CMG-04"), OriginalAlias: "TAB-CMG-04",
-		SellerID: "t-alex", BranchID: ptr("s1"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	fake.Add(carpeta, drive.File{
-		ID: "d2", Name: "20260811.gpx", FolderPath: []string{"TAB-CMG-04"},
-	}, gpxWithName("TAB-CMG-04", `<trkpt lat="21.38" lon="-77.91"><time>2026-08-11T13:00:00Z</time></trkpt>`))
-
-	if _, err := svc.Scan(ctx, ingest.TypeNightly); err != nil {
-		t.Fatal(err)
-	}
-	f2, err := q.FileByDriveID(ctx, "d2")
+	// El vendedor se llama como la carpeta, que es de donde salió.
+	v, err := q.SellerByID(ctx, *f.SellerID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f2.SellerID == nil || *f2.SellerID != "t-alex" {
-		t.Errorf("tras casar el alias ya no debería preguntar: %v", f2.SellerID)
+	if v.Name != "Rutas Camagüey" && v.Name != "TAB-CMG-04" {
+		t.Errorf("el vendedor debería llamarse como su carpeta, y se llama %q", v.Name)
 	}
 }
 

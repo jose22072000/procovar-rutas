@@ -41,9 +41,12 @@ type Pushed struct {
 }
 
 // Receive processes a pushed file.
+//
+// An empty file is recorded rather than refused: a 0-byte .gpx exists in Drive, and
+// what has to be visible is that it arrived empty, not nothing at all.
 func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
-	if e.DriveFileID == "" || e.Name == "" || len(e.Content) == 0 {
-		return false, 0, fmt.Errorf("faltan el identificador, el nombre o el contenido")
+	if e.DriveFileID == "" || e.Name == "" {
+		return false, 0, fmt.Errorf("faltan el identificador o el nombre")
 	}
 
 	source, err := s.findSource(ctx, e)
