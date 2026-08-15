@@ -95,7 +95,7 @@ export default function Calendar() {
       {!loading && bySeller.size === 0 && !error && (
         <div className="tarjeta">
           <p>
-            No hay data para esta semana. Si es la primera vez, hay que dar de
+            No hay datos para esta semana. Si es la primera vez, hay que dar de
             alta las carpetas de Drive en <b>Administración</b> y lanzar un
             barrido.
           </p>

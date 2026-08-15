@@ -87,7 +87,7 @@ function Visor() {
       </div>
 
       {error && <p className="aviso">{error}</p>}
-      {!datos && !error && <p className="cargando">Cargando el track…</p>}
+      {!datos && !error && <p className="cargando">Cargando el recorrido…</p>}
 
       {datos && (
         <div className="visor">
@@ -146,7 +146,7 @@ function Visor() {
 
               {datos.day.status === "SIN_MOVIMIENTO" && (
                 <p className="sub" style={{ marginTop: "0.75rem" }}>
-                  Los points no se alejaron del mismo lugar en toda la workday.
+                  Los puntos no se alejaron del mismo lugar en toda la jornada.
                   {datos.day.placeLabel ? ` Estuvo en ${datos.day.placeLabel}.` : ""}
                 </p>
               )}

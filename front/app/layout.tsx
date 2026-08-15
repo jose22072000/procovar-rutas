@@ -59,15 +59,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <html lang="es" className={`${archivo.variable} ${plex.variable} ${plexMono.variable}`}>
       <body>
         <header className="barra">
-          {/* The bracket framing the monogram is the logotype's own, and it is
-              what makes this read as Procovar before anything else loads. */}
+          {/* The wordmark exactly as Accesos uses it: 516×119 artwork, set by
+              height with the width left free. Boxing it or forcing it square
+              squashes the letters into an illegible smudge — which is what it did
+              the first time round. The application's name goes beside it, because
+              that is the only thing that changes between Procovar's panels. */}
           <Link href="/" className="marca">
-            <span className="pv-marco">
-              <Image src="/logo.png" alt="" width={22} height={22} priority />
-            </span>
-            <span className="marca-nombre">
-              Rutas <span>Procovar</span>
-            </span>
+            <Image src="/logo.png" alt="Procovar" width={150} height={30} className="marca-logo" priority />
+            <span className="marca-app">Rutas</span>
           </Link>
           <nav>
             <Link href="/">Calendario</Link>

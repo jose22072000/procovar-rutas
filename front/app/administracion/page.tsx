@@ -156,7 +156,7 @@ export default function Administracion() {
           />
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="SUCURSAL">Carpeta de una sucursal</option>
-            <option value="VENDEDOR">Carpeta de un solo seller</option>
+            <option value="VENDEDOR">Carpeta de un solo vendedor</option>
             <option value="MIXTA">Mezclada</option>
           </select>
           <button className="pv-boton pv-boton-primario" onClick={crear}>

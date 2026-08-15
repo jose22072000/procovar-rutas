@@ -249,16 +249,27 @@ a { color: inherit; text-decoration: none; }
     z-index: 500;
 }
 
-.marca { display: flex; align-items: center; gap: 0.6rem; }
+.marca { display: flex; align-items: center; gap: 0.7rem; }
 
-.marca-nombre {
+/* Por alto, nunca por ancho: el logotipo es apaisado (516×119) y forzarlo a un
+   cuadrado lo deja ilegible. */
+.marca-logo {
+    height: 20px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* El nombre de la aplicación, separado del logotipo por una línea fina: se lee
+   "Procovar · Rutas", que es lo que es. */
+.marca-app {
+    padding-left: 0.7rem;
+    border-left: 1px solid rgba(255, 255, 255, .25);
     font-family: var(--font-archivo), system-ui, sans-serif;
-    font-weight: 700;
-    font-size: 15px;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.02em;
     color: #FFFFFF;
 }
-.marca-nombre span { color: #9FBACA; font-weight: 400; }
 
 .barra nav { display: flex; gap: 0.35rem; }
 
