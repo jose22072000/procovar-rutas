@@ -249,19 +249,38 @@ func DetectarParadas(puntos []PuntoEvaluado, cfg Config) []Parada {
 	seq := 0
 
 	for i < len(puntos) {
-		// El grupo crece mientras TODO él siga cabiendo en un círculo de radio
-		// ParadaRadioM alrededor de su propio centro.
+		// El grupo crece mientras el punto siguiente esté cerca del CENTRO del
+		// grupo, con el centro actualizándose sobre la marcha.
 		//
-		// La versión evidente —medir contra el primer punto— se rompe justo con
-		// el caso que importa: si el GPS tiembla 22 m a cada lado, dos fixes
-		// consecutivos distan 60 m entre sí aunque ninguno se aleje 31 m del
-		// centro real. Midiendo contra el primero, la parada no llega a formarse
-		// nunca y una visita de media hora desaparece del reporte.
+		// Dos trampas, y las dos costaron un fallo:
+		//
+		//  1. Medir contra el PRIMER punto no vale: si el GPS tiembla 22 m a cada
+		//     lado, dos fixes consecutivos distan 60 m aunque ninguno se aleje
+		//     31 m del centro real, y la parada no llegaría a formarse nunca. Al
+		//     segundo punto se le exige la mitad —el radio de una pareja es la
+		//     mitad de lo que las separa—; admitirlo sin condición fabricaba
+		//     paradas falsas entre dos fixes lejanos cuando el aparato muestrea
+		//     cada varios minutos.
+		//
+		//  2. Recalcular el radio del grupo entero en cada paso es O(n²). Con los
+		//     49 000 puntos de un fichero real de GPSLogger —muestrea cada
+		//     segundo— eso eran casi treinta segundos por día. El centro se lleva
+		//     incremental y queda lineal.
+		sumLat, sumLon := puntos[i].Lat, puntos[i].Lon
+		n := 1.0
 		j := i + 1
 		for j < len(puntos) {
-			if RadioDispersionM(aCoords(puntos[i:j+1])) > cfg.ParadaRadioM {
+			centro := Coord{Lat: sumLat / n, Lon: sumLon / n}
+			limite := cfg.ParadaRadioM
+			if n == 1 {
+				limite = 2 * cfg.ParadaRadioM
+			}
+			if DistanciaM(centro, puntos[j].coord()) > limite {
 				break
 			}
+			sumLat += puntos[j].Lat
+			sumLon += puntos[j].Lon
+			n++
 			j++
 		}
 
@@ -282,11 +301,17 @@ func DetectarParadas(puntos []PuntoEvaluado, cfg Config) []Parada {
 					Seq:         seq,
 				})
 				seq++
-				i = j
-				continue
 			}
 		}
-		i++
+
+		// Se avanza SIEMPRE hasta donde llegó el grupo, haya salido parada o no.
+		//
+		// Volver a empezar en i+1 cuando el grupo era demasiado corto parece más
+		// cuidadoso, pero es lo que hacía el cálculo cuadrático: con los 25 000
+		// puntos de una jornada real, diecisiete segundos por día. Y no se pierde
+		// nada: si todo el grupo cabía en el radio y aun así duró menos de lo
+		// exigido, cualquier trozo suyo dura todavía menos.
+		i = j
 	}
 
 	return paradas
@@ -298,6 +323,33 @@ func aCoords(puntos []PuntoEvaluado) []Coord {
 		out[i] = p.coord()
 	}
 	return out
+}
+
+// distanciaNeta suma el recorrido descontando el temblor del GPS.
+//
+// La versión evidente —descartar cada tramo de menos de PasoMinimoM— parece
+// razonable y es falsa: los loggers reales muestrean cada segundo, así que dos
+// fixes consecutivos distan tres o cuatro metros AUNQUE la persona vaya en
+// coche. Filtrando paso a paso se descarta el día entero y el recorrido sale de
+// cero kilómetros.
+//
+// Lo correcto es medir contra un ANCLA: se avanza mientras el punto siga cerca
+// del ancla —eso es temblor— y solo cuando se aleja de verdad se suma el salto y
+// el ancla pasa a ser ese punto. Así el resultado no depende de cada cuánto
+// muestree el aparato, que es justo lo que no debe cambiar la cuenta.
+func distanciaNeta(puntos []PuntoEvaluado, pasoMinimoM float64) float64 {
+	if len(puntos) < 2 {
+		return 0
+	}
+	var metros float64
+	ancla := puntos[0]
+	for _, p := range puntos[1:] {
+		if d := DistanciaM(ancla.coord(), p.coord()); d >= pasoMinimoM {
+			metros += d
+			ancla = p
+		}
+	}
+	return metros
 }
 
 // cobertura mide qué parte de la jornada tuvo señal.
@@ -364,17 +416,7 @@ func CalcularDia(entrada []PuntoEntrada, cfg Config) ResultadoDia {
 		return res
 	}
 
-	// Kilómetros con suelo de ruido: los tramos de menos de PasoMinimoM no suman.
-	// Sin esto, un teléfono quieto encima de una mesa "recorre" varios kilómetros
-	// al día a base de fixes que bailan, y el reporte le atribuye una ruta que no
-	// hizo.
-	var metros float64
-	for i := 1; i < len(jornada); i++ {
-		if d := DistanciaM(jornada[i-1].coord(), jornada[i].coord()); d >= cfg.PasoMinimoM {
-			metros += d
-		}
-	}
-	kmNetos := math.Round(metros/1000*100) / 100
+	kmNetos := math.Round(distanciaNeta(jornada, cfg.PasoMinimoM)/1000*100) / 100
 
 	paradas := DetectarParadas(jornada, cfg)
 	minParado := 0

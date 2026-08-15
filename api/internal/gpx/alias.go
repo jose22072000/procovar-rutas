@@ -43,6 +43,10 @@ type Contexto struct {
 	TipoFuente TipoFuente
 	// TrabajadorIDFuente es el dueño de la carpeta entera, si TipoFuente = VENDEDOR.
 	TrabajadorIDFuente string
+	// NombreFuente es el nombre de la carpeta dada de alta. En el montaje real
+	// de Procovar cada carpeta compartida ES el perfil de GPS de un vendedor
+	// ("GPS Diana Acosta", "STGGari"), así que muchas veces es la única pista.
+	NombreFuente string
 	// RutaCarpeta son las subcarpetas dentro de la fuente, de fuera a dentro.
 	RutaCarpeta   []string
 	NombreFichero string
@@ -117,7 +121,14 @@ func ResolverTrabajador(ctx Contexto) Resolucion {
 		}
 	}
 
-	// 3. Nombre del fichero.
+	// 3. Nombre de la propia carpeta dada de alta.
+	if ctx.NombreFuente != "" {
+		if id, ok := ctx.Alias[Normalizar(ctx.NombreFuente)]; ok {
+			return Resolucion{TrabajadorID: id, Via: ViaCarpeta, Pista: ctx.NombreFuente}
+		}
+	}
+
+	// 4. Nombre del fichero.
 	for _, cand := range candidatosDeNombre(ctx.NombreFichero) {
 		if cand == "" {
 			continue
@@ -127,7 +138,7 @@ func ResolverTrabajador(ctx Contexto) Resolucion {
 		}
 	}
 
-	// 4. Contenido del GPX: muchos loggers meten ahí el nombre del dispositivo.
+	// 5. Contenido del GPX: muchos loggers meten ahí el nombre del dispositivo.
 	for _, pista := range ctx.PistasGpx {
 		if id, ok := ctx.Alias[Normalizar(pista)]; ok {
 			return Resolucion{TrabajadorID: id, Via: ViaGpx, Pista: pista}
@@ -139,6 +150,9 @@ func ResolverTrabajador(ctx Contexto) Resolucion {
 	pista := ctx.NombreFichero
 	if len(ctx.PistasGpx) > 0 {
 		pista = ctx.PistasGpx[0]
+	}
+	if ctx.NombreFuente != "" {
+		pista = ctx.NombreFuente
 	}
 	if len(ctx.RutaCarpeta) > 0 {
 		pista = ctx.RutaCarpeta[len(ctx.RutaCarpeta)-1]

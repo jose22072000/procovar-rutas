@@ -261,6 +261,7 @@ func (s *Servicio) Guardar(
 	v := Examinar(f, datos, Entorno{
 		TipoFuente:         gpx.TipoFuente(fuente.Tipo),
 		TrabajadorIDFuente: valor(fuente.TrabajadorID),
+		NombreFuente:       fuente.Nombre,
 		Alias:              alias,
 		Zona:               zona,
 	})

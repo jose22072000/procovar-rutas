@@ -18,20 +18,41 @@ Plan completo: [`../PLAN-RUTAS-GPX.md`](../PLAN-RUTAS-GPX.md)
 
 Hay una cuenta de Google por sucursal, pero todas las carpetas están compartidas además
 en la cuenta padre **`tablets.procovar`**: con esa sola credencial se ven todas.
+Comprobado el 15/08/2026 contra el Drive real — **53 carpetas de rutas y 1795 ficheros**:
 
 ```
 Cuenta padre tablets.procovar      ← una sola credencial lo ve todo
-└── Carpeta de rutas de Granma     ← se da de alta como fuente
-    ├── Alexander/                 ← una carpeta por perfil de GPS
-    │   ├── 20260810.gpx           ← un fichero por día
-    │   └── 20260811.gpx
-    └── TAB-CMG-04/                ← a veces el perfil es la tableta, no la persona
-        └── 20260810.gpx
+├── GPS Diana Acosta/              ← cada carpeta compartida ES un perfil de GPS
+│   ├── 20260812.gpx               ← un fichero por día
+│   └── 20260813.gpx
+├── STGGari/                       ← a veces con prefijo de sucursal
+├── ALEXANDER/
+├── TABLET3/                       ← y a veces el perfil es la tableta, no la persona
+└── PEDIDOS/                       ← ésta NO es nuestra: es la ingesta de pedidos
 ```
 
-El nombre del fichero solo trae la fecha, así que **el vendedor sale de la carpeta**.
-Cuando el perfil es el nombre de una tableta, el fichero cae en la **bandeja**, un admin
-lo casa una vez, y a partir de ahí los de ese dispositivo se resuelven solos.
+El nombre del fichero solo trae la fecha, así que **el vendedor sale del nombre de la
+carpeta**. Cuando el perfil es el nombre de una tableta, el fichero cae en la
+**bandeja**, un admin lo casa una vez, y a partir de ahí los de ese dispositivo se
+resuelven solos.
+
+Las 53 carpetas reales están listas para dar de alta en
+[`api/semilla/carpetas-rutas.sql`](api/semilla/carpetas-rutas.sql).
+
+### Cómo son los ficheros de verdad
+
+Los genera **GPSLogger 135** (mendhak) y no se parecen a lo que uno supondría:
+
+| | |
+|---|---|
+| Tamaño | **12,6 MB** un solo día |
+| Puntos | **49 565** — muestrea cada segundo, no cada minuto |
+| Horas | `2026-08-12T04:27:47.592Z`, en UTC y con milésimas |
+| Extras | `<ele>`, `<src>` (gps / network / fused) y velocidad de Garmin |
+
+Un fichero cubre el día local completo, y **en UTC se sale del día**: el de `20260812`
+va de las 04:27 del 12 a las 02:39 del 13 en UTC, que en Cuba es del 00:27 al 22:39 del
+día 12. Agrupar por día UTC lo partiría en dos.
 
 ## Estructura
 
@@ -150,6 +171,7 @@ de Drive, ni alias, ni umbrales.
 - [x] API HTTP con sesión de procovar-auth
 - [x] Frontend: calendario, visor, bandeja, administración, reporte semanal
 - [x] Cola en Redis y puerta de servicio para n8n, con flujo listo para importar
-- [ ] Probarlo con `.gpx` reales y con las carpetas de verdad
+- [x] Probado con un `.gpx` real de 49 565 puntos y con las 53 carpetas del Drive
+- [ ] Desplegar y hacer la primera pasada de verdad (backfill de los 1795 ficheros)
 - [ ] Cruce de paradas con la geo de clientes (visitas probables)
 - [ ] Despliegue en Dokploy

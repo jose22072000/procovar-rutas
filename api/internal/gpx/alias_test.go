@@ -100,3 +100,32 @@ func TestFechaDelNombre(t *testing.T) {
 		}
 	}
 }
+
+// En el montaje real de Procovar cada carpeta compartida ES el perfil de GPS de
+// un vendedor ("GPS Diana Acosta", "STGGari"), y los ficheros dentro solo llevan
+// la fecha. Sin mirar el nombre de la propia carpeta, no habría de dónde sacar
+// el vendedor y TODO acabaría en la bandeja.
+func TestResolverPorElNombreDeLaCarpetaDadaDeAlta(t *testing.T) {
+	alias := map[string]string{Normalizar("GPS Diana Acosta"): "t-diana"}
+	r := ResolverTrabajador(Contexto{
+		TipoFuente:    FuenteMixta,
+		NombreFuente:  "GPS Diana Acosta",
+		NombreFichero: "20260812.gpx",
+		Alias:         alias,
+	})
+	if r.TrabajadorID != "t-diana" || r.Via != ViaCarpeta {
+		t.Errorf("= %+v", r)
+	}
+}
+
+func TestCarpetaSinCasarLlevaSuNombreALaBandeja(t *testing.T) {
+	r := ResolverTrabajador(Contexto{
+		TipoFuente:    FuenteMixta,
+		NombreFuente:  "TABLET3",
+		NombreFichero: "20260812.gpx",
+		Alias:         map[string]string{},
+	})
+	if r.TrabajadorID != "" || r.Pista != "TABLET3" {
+		t.Errorf("= %+v", r)
+	}
+}

@@ -1,0 +1,80 @@
+# Despliegue de procovar-rutas en Dokploy.
+#
+# Tres servicios del mismo binario: las migraciones se aplican al arrancar, la
+# API atiende el panel y la ingesta consume la cola de n8n y barre Drive.
+#
+# Postgres y Redis se toman de los que ya hay en el servidor; por eso no se
+# declaran aquí. El prefijo `procovar-rutas:` es lo que mantiene las claves de
+# Redis separadas de las de PEDIDO.
+
+services:
+  migrar:
+    build:
+      context: ./api
+    command: ["/usr/local/bin/migrar", "up"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    restart: "no"
+    networks: [procovar]
+
+  api:
+    build:
+      context: ./api
+    command: ["/usr/local/bin/api"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      PREFIJO_REDIS: procovar-rutas:
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+      PUERTO: "3600"
+      ENTORNO: prod
+      APP_URL: ${APP_URL}
+      QB_AUTH_URL: ${QB_AUTH_URL}
+      QB_AUTH_CLIENT_ID: procovar-rutas
+      QB_AUTH_SIGNING_KEY: ${QB_AUTH_SIGNING_KEY}
+      QB_SESSION_COOKIE_DOMAIN: ${QB_SESSION_COOKIE_DOMAIN}
+      GOOGLE_CUENTAS: ${GOOGLE_CUENTAS}
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    # Si la base se cae, el contenedor muere y Dokploy lo reinicia; sin esto,
+    # quedaría vivo devolviendo errores y el panel parecería "funcionando".
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3600/salud"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks: [procovar]
+
+  ingesta:
+    build:
+      context: ./api
+    command: ["/usr/local/bin/ingesta", "--demonio"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      PREFIJO_REDIS: procovar-rutas:
+      GOOGLE_CUENTAS: ${GOOGLE_CUENTAS}
+      INTERVALO_BARRIDO: ${INTERVALO_BARRIDO:-30m}
+      HORA_REPASO_NOCTURNO: ${HORA_REPASO_NOCTURNO:-2}
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks: [procovar]
+
+  front:
+    build:
+      context: ./front
+    environment:
+      NEXT_PUBLIC_API_URL: ${APP_URL}
+    depends_on: [api]
+    restart: unless-stopped
+    networks: [procovar]
+
+networks:
+  procovar:
+    external: true
+    name: ${RED_DOCKER:-dokploy-network}

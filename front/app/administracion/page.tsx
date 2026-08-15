@@ -24,6 +24,13 @@ interface Alias {
   Trabajador: string;
 }
 
+interface EstadoCola {
+  activa: boolean;
+  pendientes?: number;
+  procesando?: number;
+  fallidos?: number;
+}
+
 interface Barrido {
   ID: string;
   Tipo: string;
@@ -41,6 +48,7 @@ export default function Administracion() {
   const [fuentes, setFuentes] = useState<Fuente[]>([]);
   const [alias, setAlias] = useState<Alias[]>([]);
   const [barridos, setBarridos] = useState<Barrido[]>([]);
+  const [cola, setCola] = useState<EstadoCola | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [barriendo, setBarriendo] = useState(false);
 
@@ -50,14 +58,16 @@ export default function Administracion() {
 
   async function cargar() {
     try {
-      const [f, a, b] = await Promise.all([
+      const [f, a, b, c] = await Promise.all([
         pedir<Fuente[]>("/api/fuentes"),
         pedir<Alias[]>("/api/alias"),
         pedir<Barrido[]>("/api/barridos"),
+        pedir<EstadoCola>("/api/cola"),
       ]);
       setFuentes(f ?? []);
       setAlias(a ?? []);
       setBarridos(b ?? []);
+      setCola(c ?? null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -146,6 +156,39 @@ export default function Administracion() {
             Añadir carpeta
           </button>
         </div>
+      </div>
+
+      <div className="tarjeta">
+        <b>Cola de n8n</b>
+        <p className="sub">
+          Los ficheros que empuja n8n esperan aquí y los procesa el servicio de
+          ingesta. Si «pendientes» crece y no baja, el servicio de ingesta está
+          parado.
+        </p>
+        {cola?.activa ? (
+          <>
+            <div className="dato">
+              <span>Pendientes</span>
+              <span>{cola.pendientes}</span>
+            </div>
+            <div className="dato">
+              <span>Procesándose</span>
+              <span>{cola.procesando}</span>
+            </div>
+            <div className="dato">
+              <span>Apartados tras varios intentos</span>
+              <span
+                style={{ color: (cola.fallidos ?? 0) > 0 ? "var(--falta)" : undefined }}
+              >
+                {cola.fallidos}
+              </span>
+            </div>
+          </>
+        ) : (
+          <p className="sub">
+            Sin Redis: lo que empuje n8n se procesará en el acto, sin cola.
+          </p>
+        )}
       </div>
 
       <div className="tarjeta">

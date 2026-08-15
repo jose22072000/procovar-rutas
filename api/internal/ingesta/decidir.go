@@ -55,6 +55,8 @@ type Veredicto struct {
 type Entorno struct {
 	TipoFuente         gpx.TipoFuente
 	TrabajadorIDFuente string
+	// NombreFuente es el nombre de la carpeta dada de alta.
+	NombreFuente string
 	// Alias normalizado -> trabajadorID.
 	Alias map[string]string
 	// Zona horaria de la sucursal, para pasar de instante UTC a día local.
@@ -80,6 +82,7 @@ func Examinar(f drive.Fichero, datos []byte, ent Entorno) Veredicto {
 	res := gpx.ResolverTrabajador(gpx.Contexto{
 		TipoFuente:         ent.TipoFuente,
 		TrabajadorIDFuente: ent.TrabajadorIDFuente,
+		NombreFuente:       ent.NombreFuente,
 		RutaCarpeta:        f.RutaCarpeta,
 		NombreFichero:      f.Nombre,
 		PistasGpx:          parseado.Pistas,
