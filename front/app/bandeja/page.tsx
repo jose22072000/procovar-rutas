@@ -1,17 +1,16 @@
 "use client";
 
 /**
- * La bandeja: los ficheros que la ingesta no supo asignar o fechar.
+ * The inbox: the files ingest could not assign or date.
  *
- * Es lo que garantiza que ningún fichero se pierda en silencio. Al asignar se
- * puede recordar el alias del dispositivo, y entonces los próximos ficheros de
- * ese teléfono se resuelven solos: el trabajo es una vez por dispositivo, no
- * todos los días.
+ * It is what guarantees no file is lost in silence. When assigning, the device
+ * alias can be remembered, and from then on that phone's files resolve on their
+ * own: the work is once per device, not every single day.
  */
 
 import { useEffect, useState } from "react";
-import { useEventos } from "@/lib/eventos";
-import { enviar, pedir } from "@/lib/api";
+import { useEvents } from "@/lib/events";
+import { enviar, ask } from "@/lib/api";
 
 interface FicheroBandeja {
   id: string;
@@ -47,8 +46,8 @@ export default function Bandeja() {
   async function cargar() {
     try {
       const [f, v] = await Promise.all([
-        pedir<FicheroBandeja[]>("/api/inbox"),
-        pedir<Vendedor[]>("/api/sellers"),
+        ask<FicheroBandeja[]>("/api/inbox"),
+        ask<Vendedor[]>("/api/sellers"),
       ]);
       setFicheros(f ?? []);
       setVendedores(v ?? []);
@@ -57,8 +56,8 @@ export default function Bandeja() {
     }
   }
 
-  // Un fichero nuevo, o uno que otra persona acaba de asignar.
-  useEventos(["file"], () => {
+  // A new file, or one somebody else has just assigned.
+  useEvents(["file"], () => {
     void cargar();
   });
 
@@ -159,6 +158,7 @@ function FilaBandeja({
           </select>
 
           <input
+            className="pv-campo"
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
@@ -174,7 +174,7 @@ function FilaBandeja({
           </label>
 
           <button
-            className="primario"
+            className="pv-boton pv-boton-primario"
             disabled={!seller || guardando}
             onClick={() => onAsignar(fichero, seller, fecha, recordar)}
           >

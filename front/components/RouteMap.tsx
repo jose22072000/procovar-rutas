@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * El mapa del visor.
+ * The viewer's map.
  *
- * La polilínea va con degradado temporal —de claro a oscuro— para que se vea el
- * ORDEN del track sin tener que reproducirlo: dónde empezó y hacia dónde
- * fue. Una línea de un solo color solo dice por dónde pasó, no en qué orden, y
- * con una ruta que se cruza consigo misma eso es justo lo que hace falta saber.
+ * The polyline carries a time gradient — light to dark — so the ORDER of the track
+ * can be seen without replaying it: where it started and which way it went. A
+ * single-colour line only says where someone passed, not in what order, and with a
+ * route that crosses itself that is exactly what you need to know.
  *
- * Leaflet toca `window`, así que este componente se carga sin SSR desde la
+ * Leaflet touches `window`, so this component is loaded without SSR from the
  * página.
  */
 
 import { useEffect, useRef } from "react";
-import type { Parada, PuntoRuta } from "@/lib/api";
+import type { Stop, TrackPoint } from "@/lib/api";
 import "leaflet/dist/leaflet.css";
 
 interface Props {
-  points: PuntoRuta[];
-  stops: Parada[];
-  /** Índice hasta el que se pinta, para la línea de tiempo. -1 = todo. */
+  points: TrackPoint[];
+  stops: Stop[];
+  /** Index up to which it is drawn, for the timeline. -1 = everything. */
   to?: number;
 }
 
@@ -52,7 +52,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
         return;
       }
 
-      // Degradado por tramos: cada segmento se pinta según su posición en el día.
+      // Gradient by legs: each segment is painted according to its place in the day.
       for (let i = 1; i < visibles.length; i++) {
         const t = i / Math.max(1, visibles.length - 1);
         L.polyline(
@@ -68,7 +68,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
         ).addTo(capa.current);
       }
 
-      // Inicio y fin de la workday.
+      // Start and end of the workday.
       const primero = visibles[0];
       const ultimo = visibles[visibles.length - 1];
       L.circleMarker([primero.lat, primero.lon], {
@@ -88,8 +88,8 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
         .bindPopup(`Último fix — ${hora(ultimo.ts)}`)
         .addTo(capa.current);
 
-      // Las stops, con el tamaño en proporción a lo que duraron: una visita de
-      // media hora tiene que saltar a la vista frente a un semáforo.
+      // The stops, sized in proportion to how long they lasted: a half-hour visit
+      // has to stand out against a traffic light.
       for (const p of stops) {
         L.circleMarker([p.lat, p.lon], {
           radius: Math.min(28, 8 + p.durationMin / 3),
@@ -99,7 +99,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
           weight: 2,
         })
           .bindPopup(
-            `<b>Parada de ${p.durationMin} min</b><br>${hora(p.start)} – ${hora(
+            `<b>Stop de ${p.durationMin} min</b><br>${hora(p.start)} – ${hora(
               p.end,
             )}${
               p.clientName

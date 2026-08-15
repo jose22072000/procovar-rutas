@@ -1,18 +1,17 @@
 "use client";
 
 /**
- * El reporte de un vendedor: de lunes a viernes, con cada movimiento
- * detallado entre las 9:00 y las 16:00.
+ * A seller's report: every movement detailed between 9:00 and 16:00.
  *
- * Se imprime a PDF desde el propio navegador (Ctrl+P → Guardar como PDF). No hay
- * generador de PDF en el servidor a propósito: el navegador ya sabe paginar,
- * y una segunda maquetación en el backend sería otra cosa más que mantener
- * sincronizada con esta.
+ * It is printed to PDF from the browser itself (Ctrl+P → Save as PDF). There is
+ * deliberately no PDF generator on the server: the browser already knows how to
+ * paginate, and a second layout in the backend would be one more thing to keep in
+ * sync with this one.
  */
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { pedir } from "@/lib/api";
+import { ask } from "@/lib/api";
 
 interface Movimiento {
   type: string;
@@ -63,15 +62,15 @@ function Reporte() {
   const params = useSearchParams();
   const router = useRouter();
   const seller = params.get("seller") ?? "";
-  // El rango es libre: ?from= y ?to=. Sin ellos, el API devuelve la semana en
-  // curso, que es como se pedía este reporte antes de aceptar fechas sueltas.
+  // The range is free: ?from= and ?to=. Without them the API returns the current
+  // week, which is how this report was asked for before it accepted loose dates.
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const [doc, setDoc] = useState<Documento | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Cambiar el rango es navegar: la URL manda, y así funcionan el botón de
-  // atrás y el enlace copiado.
+  // Changing the range is navigation: the URL is the source of truth, which is
+  // what makes the back button and a copied link work.
   function cambiarRango(nuevoDesde: string, nuevoHasta: string) {
     const p = new URLSearchParams({ seller });
     if (nuevoDesde && nuevoHasta) {
@@ -84,7 +83,7 @@ function Reporte() {
   useEffect(() => {
     if (!seller) return;
     const rango = from && to ? `&from=${from}&to=${to}` : "";
-    pedir<Documento>(`/api/report?seller=${seller}${rango}`)
+    ask<Documento>(`/api/report?seller=${seller}${rango}`)
       .then(setDoc)
       .catch((e) => setError(e.message));
   }, [seller, from, to]);
@@ -100,11 +99,12 @@ function Reporte() {
   return (
     <>
       <div className="controles no-imprimir">
-        {/* El rango se edita aquí mismo y se guarda en la URL: así el reporte
-            de unos días concretos se puede enviar por chat tal cual. */}
+        {/* The range is edited right here and kept in the URL: that way a report
+            for a few particular days can be sent over chat as it is. */}
         <label>
           Desde{" "}
           <input
+            className="pv-campo"
             type="date"
             value={from || doc.header.from}
             onChange={(e) => cambiarRango(e.target.value, to || doc.header.to)}
@@ -113,13 +113,14 @@ function Reporte() {
         <label>
           Hasta{" "}
           <input
+            className="pv-campo"
             type="date"
             value={to || doc.header.to}
             onChange={(e) => cambiarRango(from || doc.header.from, e.target.value)}
           />
         </label>
-        <button onClick={() => cambiarRango("", "")}>Semana en curso</button>
-        <button className="primario" onClick={() => window.print()}>
+        <button className="pv-boton" onClick={() => cambiarRango("", "")}>Semana en curso</button>
+        <button className="pv-boton pv-boton-primario" onClick={() => window.print()}>
           Imprimir / Guardar como PDF
         </button>
       </div>
@@ -196,7 +197,7 @@ function Reporte() {
                       <td>{m.endTime}</td>
                       <td>{m.durationMin} min</td>
                       <td>
-                        {m.type === "parada" ? <b>Parada</b> : "Desplazamiento"}
+                        {m.type === "parada" ? <b>Stop</b> : "Desplazamiento"}
                       </td>
                       <td>{m.type === "parada" ? "—" : `${m.distanceKm} km`}</td>
                       <td>{m.type === "parada" ? "—" : `${m.avgSpeed} km/h`}</td>

@@ -1,16 +1,16 @@
 /**
- * Cliente de la API de rutas.
+ * Client for the routes API.
  *
- * El frontend NO habla con la base de datos ni con procovar-auth: solo con esta
- * API, y siempre con la cookie de sesión. Todo el control de quién ve qué vive
- * en el servidor — aquí no hay ni un filtro por rol, a propósito: un filtro en
- * el navegador es una sugerencia, no una restricción.
+ * The front end does NOT talk to the database or to procovar-auth: only to this
+ * API, and always with the session cookie. All the control over who sees what
+ * lives on the server — there is deliberately not a single role filter here: a
+ * filter in the browser is a suggestion, not a restriction.
  */
 
 export const API =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3600";
 
-export type EstadoDia =
+export type DayStatus =
   | "OK"
   | "SIN_FICHERO"
   | "SIN_FECHA"
@@ -18,12 +18,12 @@ export type EstadoDia =
   | "MOVIMIENTO_ESCASO"
   | "NO_LABORABLE";
 
-export interface DiaCalendario {
+export interface SellerDay {
   sellerId: string;
   seller: string;
   branchId: string;
   date: string;
-  status: EstadoDia;
+  status: DayStatus;
   netKm: number;
   coverage: number;
   firstFix: string | null;
@@ -33,7 +33,7 @@ export interface DiaCalendario {
   placeLabel: string | null;
 }
 
-export interface FilaResumen {
+export interface SummaryRow {
   sellerId: string;
   seller: string;
   daysNoFile: number;
@@ -43,22 +43,22 @@ export interface FilaResumen {
   totalKm: number;
 }
 
-export interface RespuestaCalendario {
+export interface CalendarResponse {
   from: string;
   to: string;
-  days: DiaCalendario[];
-  summary: FilaResumen[];
+  days: SellerDay[];
+  summary: SummaryRow[];
   workdays: string[];
 }
 
-export interface Vendedor {
+export interface Seller {
   id: string;
   name: string;
   branchId: string;
   active: boolean;
 }
 
-export interface PuntoRuta {
+export interface TrackPoint {
   ts: string | null;
   lat: number;
   lon: number;
@@ -67,7 +67,7 @@ export interface PuntoRuta {
   seq: number;
 }
 
-export interface Parada {
+export interface Stop {
   id: string;
   start: string;
   end: string;
@@ -79,11 +79,11 @@ export interface Parada {
   seq: number;
 }
 
-export interface DetalleDia {
+export interface DayDetail {
   id: string;
   seller: string;
   date: string;
-  status: EstadoDia;
+  status: DayStatus;
   netKm: number;
   coverage: number;
   minMovement: number;
@@ -96,42 +96,43 @@ export interface DetalleDia {
   placeLabel: string | null;
 }
 
-export interface RespuestaDia {
-  day: DetalleDia;
-  points: PuntoRuta[];
-  stops: Parada[];
+export interface DayResponse {
+  day: DayDetail;
+  points: TrackPoint[];
+  stops: Stop[];
   timezone: string;
 }
 
-export class ErrorApi extends Error {
+export class ApiError extends Error {
   constructor(
-    public estado: number,
-    mensaje: string,
+    public status: number,
+    message: string,
   ) {
-    super(mensaje);
+    super(message);
   }
 }
 
-export async function pedir<T>(ruta: string): Promise<T> {
-  // credentials: "include" es imprescindible: la sesión va en la cookie que
-  // pone procovar-auth, y sin esto el navegador no la manda a otro puerto.
-  const res = await fetch(`${API}${ruta}`, { credentials: "include" });
+export async function ask<T>(path: string): Promise<T> {
+  // credentials: "include" is essential: the session travels in the cookie
+  // procovar-auth sets, and without this the browser will not send it to another
+  // origin.
+  const res = await fetch(`${API}${path}`, { credentials: "include" });
 
   if (res.status === 401) {
-    // Sesión caducada: al login, y que vuelva a donde estaba.
+    // Expired session: off to the login, and back to where they were.
     if (typeof window !== "undefined") {
       window.location.href = `${API}/api/auth/login?returnTo=${encodeURIComponent(
         window.location.href,
       )}`;
     }
-    throw new ErrorApi(401, "sin sesión");
+    throw new ApiError(401, "sin sesión");
   }
 
-  const cuerpo = await res.json().catch(() => ({}));
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ErrorApi(res.status, cuerpo.error ?? `error ${res.status}`);
+    throw new ApiError(res.status, body.error ?? `error ${res.status}`);
   }
-  return cuerpo as T;
+  return body as T;
 }
 
 export async function enviar<T>(ruta: string, datos: unknown): Promise<T> {
@@ -141,54 +142,54 @@ export async function enviar<T>(ruta: string, datos: unknown): Promise<T> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(datos),
   });
-  const cuerpo = await res.json().catch(() => ({}));
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ErrorApi(res.status, cuerpo.error ?? `error ${res.status}`);
+    throw new ApiError(res.status, body.error ?? `error ${res.status}`);
   }
-  return cuerpo as T;
+  return body as T;
 }
 
-// --- presentación de los estados -------------------------------------------
+// --- how statuses are presented ---------------------------------------------
 
-export const ESTADOS: Record<
-  EstadoDia,
-  { etiqueta: string; color: string; texto: string }
-> = {
-  OK: { etiqueta: "Trabajó", color: "var(--ok)", texto: "#0b3d1f" },
-  SIN_FICHERO: { etiqueta: "Sin fichero", color: "var(--falta)", texto: "#fff" },
-  SIN_FECHA: { etiqueta: "Sin fecha", color: "var(--aviso)", texto: "#3d2c00" },
-  SIN_MOVIMIENTO: { etiqueta: "Sin moverse", color: "var(--alerta)", texto: "#fff" },
-  MOVIMIENTO_ESCASO: { etiqueta: "Poco movimiento", color: "var(--flojo)", texto: "#3d2c00" },
-  NO_LABORABLE: { etiqueta: "No laborable", color: "var(--gris)", texto: "#555" },
+// Only the wording lives here. The colour is in the stylesheet, keyed off
+// data-status: it is Procovar's shared palette, and a colour written in the code
+// would drift from Accesos and PEDIDO the first time one of them changes.
+export const STATUS_LABEL: Record<DayStatus, string> = {
+  OK: "Trabajó",
+  SIN_FICHERO: "Sin fichero",
+  SIN_FECHA: "Sin fecha",
+  SIN_MOVIMIENTO: "Sin moverse",
+  MOVIMIENTO_ESCASO: "Poco movimiento",
+  NO_LABORABLE: "No laborable",
 };
 
-export const BANDERAS: Record<string, string> = {
+export const FLAG_LABEL: Record<string, string> = {
   entrada_tardia: "Entró tarde",
   salida_temprana: "Salió temprano",
   hueco_largo: "Hueco de señal",
-  poca_cobertura: "Poca coverage",
+  poca_cobertura: "Poca cobertura",
   sin_movimiento: "No se movió del sitio",
   movimiento_escaso: "Movimiento escaso",
   sin_horas: "El fichero no trae horas",
-  sin_datos_en_jornada: "Sin datos en la workday",
+  sin_datos_en_jornada: "Sin datos en la jornada",
 };
 
-export function fechaCorta(iso: string): string {
+export function shortDate(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}`;
 }
 
-export function nombreDia(iso: string): string {
+export function dayName(iso: string): string {
   const days = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
   return days[new Date(`${iso.slice(0, 10)}T12:00:00Z`).getUTCDay()];
 }
 
-/** Lunes a viernes de la semana que contiene la fecha. La workday es L–V. */
-export function semanaLaboral(iso: string): string[] {
+/** Monday to Friday of the week containing the date. The working week is Mon–Fri. */
+export function workWeek(iso: string): string[] {
   const d = new Date(`${iso}T12:00:00Z`);
-  const isoDia = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-  const lunes = new Date(d.getTime() - (isoDia - 1) * 86400000);
+  const isoDay = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
+  const monday = new Date(d.getTime() - (isoDay - 1) * 86400000);
   return Array.from({ length: 5 }, (_, i) =>
-    new Date(lunes.getTime() + i * 86400000).toISOString().slice(0, 10),
+    new Date(monday.getTime() + i * 86400000).toISOString().slice(0, 10),
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * El visor: un seller, un día, su track en el mapa.
+ * The viewer: one seller, one day, their track on the map.
  *
- * Es lo que sustituye a descargar el .gpx y abrirlo en una aplicación externa.
- * Por defecto se recorta a la workday (9:00–16:00), con interruptor para ver el
- * día completo — porque el control es de la workday, pero a veces hace falta ver
- * qué pasó fuera de ella.
+ * It is what replaces downloading the .gpx and opening it in some other program.
+ * By default it is trimmed to working hours (9:00–16:00), with a switch to see the
+ * full day — because the tracking is about the workday, but sometimes you need to
+ * see what happened outside it.
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -14,14 +14,14 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  BANDERAS,
-  ESTADOS,
-  pedir,
-  type RespuestaDia,
+  FLAG_LABEL,
+  STATUS_LABEL,
+  ask,
+  type DayResponse,
 } from "@/lib/api";
 
-// Leaflet toca `window`: fuera del renderizado en servidor.
-const MapaRuta = dynamic(() => import("@/components/MapaRuta"), {
+// Leaflet touches `window`: kept out of server rendering.
+const MapaRuta = dynamic(() => import("@/components/RouteMap"), {
   ssr: false,
   loading: () => <div className="mapa" />,
 });
@@ -31,7 +31,7 @@ function Visor() {
   const seller = params.get("seller") ?? "";
   const fecha = params.get("fecha") ?? "";
 
-  const [datos, setDatos] = useState<RespuestaDia | null>(null);
+  const [datos, setDatos] = useState<DayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completa, setCompleta] = useState(false);
   const [instante, setInstante] = useState(-1);
@@ -41,7 +41,7 @@ function Visor() {
     setError(null);
     setDatos(null);
     setInstante(-1);
-    pedir<RespuestaDia>(
+    ask<DayResponse>(
       `/api/day?seller=${seller}&fecha=${fecha}${completa ? "&workday=completa" : ""}`,
     )
       .then(setDatos)
@@ -60,7 +60,6 @@ function Visor() {
     return <p className="aviso">Falta el vendedor o la fecha.</p>;
   }
 
-  const est = datos ? ESTADOS[datos.day.status] : null;
 
   return (
     <>
@@ -83,7 +82,7 @@ function Visor() {
           Ver el día completo (fuera de 9:00–16:00)
         </label>
         <Link href={`/reporte?seller=${seller}&from=${fecha}&to=${fecha}`}>
-          <button className="primario">Reporte de la semana</button>
+          <button className="pv-boton pv-boton-primario">Reporte de la semana</button>
         </Link>
       </div>
 
@@ -94,16 +93,10 @@ function Visor() {
         <div className="visor">
           <div>
             <div className="tarjeta">
-              <div
-                className="pastilla"
-                style={{
-                  background: est!.color,
-                  color: est!.texto,
-                  display: "inline-block",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                {est!.etiqueta}
+              {/* The status pill takes its colour from the stylesheet through
+                  data-status, like the calendar cells. */}
+              <div className="celda" data-status={datos.day.status} style={{ marginBottom: "0.75rem" }}>
+                {STATUS_LABEL[datos.day.status]}
               </div>
 
               <div className="dato">
@@ -145,7 +138,7 @@ function Visor() {
                 <div className="flags">
                   {datos.day.flags.map((b) => (
                     <span key={b} className="bandera">
-                      {BANDERAS[b] ?? b}
+                      {FLAG_LABEL[b] ?? b}
                     </span>
                   ))}
                 </div>
@@ -203,7 +196,7 @@ function Visor() {
                   )}{" "}
                   ({datos.points.length} points)
                 </span>
-                <button onClick={() => setInstante(-1)}>Todo el día</button>
+                <button className="pv-boton" onClick={() => setInstante(-1)}>Todo el día</button>
               </div>
             )}
           </div>

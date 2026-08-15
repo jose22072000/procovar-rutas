@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * Administración: las carpetas de Drive, los alias memorizados y el estado de
- * los barridos.
+ * Administration: the Drive folders, the remembered aliases and the state of the
+ * scans.
  */
 
 import { useEffect, useState } from "react";
-import { useEventos } from "@/lib/eventos";
-import { enviar, pedir } from "@/lib/api";
+import { useEvents } from "@/lib/events";
+import { enviar, ask } from "@/lib/api";
 
 interface Fuente {
   id: string;
@@ -61,10 +61,10 @@ export default function Administracion() {
   async function cargar() {
     try {
       const [f, a, b, c] = await Promise.all([
-        pedir<Fuente[]>("/api/sources"),
-        pedir<Alias[]>("/api/aliases"),
-        pedir<Barrido[]>("/api/scans"),
-        pedir<EstadoCola>("/api/queue"),
+        ask<Fuente[]>("/api/sources"),
+        ask<Alias[]>("/api/aliases"),
+        ask<Barrido[]>("/api/scans"),
+        ask<EstadoCola>("/api/queue"),
       ]);
       setFuentes(f ?? []);
       setAlias(a ?? []);
@@ -75,8 +75,8 @@ export default function Administracion() {
     }
   }
 
-  // La cola y los barridos se mueven solos: que la pantalla lo siga sin recargar.
-  useEventos(["queue", "file", "scan"], () => {
+  // The queue and the scans move on their own: let the screen follow without a reload.
+  useEvents(["queue", "file", "scan"], () => {
     void cargar();
   });
 
@@ -159,7 +159,7 @@ export default function Administracion() {
             <option value="VENDEDOR">Carpeta de un solo seller</option>
             <option value="MIXTA">Mezclada</option>
           </select>
-          <button className="primario" onClick={crear}>
+          <button className="pv-boton pv-boton-primario" onClick={crear}>
             Añadir carpeta
           </button>
         </div>
