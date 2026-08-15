@@ -20,8 +20,18 @@ type Config struct {
 	Puerto  string
 	Entorno string // "dev" | "prod"
 
-	// procovar-auth. Ver docs/CONSUMER-PATTERN.md en ese repo.
+	// procovar-auth. See docs/CONSUMER-PATTERN.md in that repo.
+	//
+	// AuthURL is used server to server, and inside Dokploy that is the container's
+	// internal name (`http://procovar-auth-xxxx:3500`), which does not leave the
+	// Docker network.
+	//
+	// AuthPublicURL is the one the BROWSER has to reach. They are separate because
+	// sending a person to the internal name is a dead end that only shows up when
+	// somebody clicks: the login flow does not notice — the public URL comes back
+	// in auth's own response — but signing out builds the address here.
 	AuthURL        string
+	AuthPublicURL  string
 	AuthClientID   string
 	AuthSigningKey string
 	AppURL         string
@@ -55,6 +65,7 @@ func Cargar() (*Config, error) {
 		Puerto:                porDefecto("PUERTO", "3600"),
 		Entorno:               porDefecto("ENTORNO", "dev"),
 		AuthURL:               os.Getenv("QB_AUTH_URL"),
+		AuthPublicURL:         porDefecto("QB_AUTH_PUBLIC_URL", "https://auth.procovar.cloud"),
 		AuthClientID:          porDefecto("QB_AUTH_CLIENT_ID", "procovar-rutas"),
 		AuthSigningKey:        os.Getenv("QB_AUTH_SIGNING_KEY"),
 		AppURL:                os.Getenv("APP_URL"),

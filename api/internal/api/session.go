@@ -70,10 +70,12 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 // and cookie here intact. Delivery, which clears before leaving, strands whoever
 // cancels without a cookie and makes them log in again.
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	// The PUBLIC address, not the internal one: this redirect is followed by the
+	// browser, which knows nothing about the Docker network.
 	v := url.Values{}
 	v.Set("returnTo", s.cfg.AppURL+"/api/auth/logout/done")
 	v.Set("cancelUrl", s.cfg.AppURL+"/")
-	http.Redirect(w, r, s.cfg.AuthURL+"/logout?"+v.Encode(), http.StatusFound)
+	http.Redirect(w, r, s.cfg.AuthPublicURL+"/logout?"+v.Encode(), http.StatusFound)
 }
 
 // logoutDone is where the return from Accounts lands, that session already closed.
