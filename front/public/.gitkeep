@@ -1,0 +1,9 @@
+# Este fichero solo existe para que `public/` esté en el repo.
+#
+# Git no guarda carpetas vacías. La carpeta estaba en el disco de quien
+# desarrolla, así que `docker build` funcionaba en local, pero al clonar en el
+# servidor no existía y el despliegue moría en:
+#
+#     COPY --from=construccion /app/public ./public   ->   "/app/public": not found
+#
+# Cuando haya algo dentro (un logo, un favicon), este fichero sobra.
