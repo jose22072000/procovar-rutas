@@ -166,6 +166,32 @@ func (q *Queries) BranchByID(ctx context.Context, id string) (Branch, error) {
 	return i, err
 }
 
+const branchByName = `-- name: BranchByName :one
+
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE nombre = $1 LIMIT 1
+`
+
+// Find-or-create by name, for the folder-name-is-the-seller flow.
+//
+// Each shared Drive folder IS a seller's GPS profile, so its name identifies them
+// well enough for what the panel is for: a manager looks at their branch's GPS and
+// already knows who is who. Making somebody match every folder to a person by hand
+// would be asking them to type in what the folder already says.
+func (q *Queries) BranchByName(ctx context.Context, name string) (Branch, error) {
+	row := q.db.QueryRow(ctx, branchByName, name)
+	var i Branch
+	err := row.Scan(
+		&i.ID,
+		&i.AuthOrgID,
+		&i.Name,
+		&i.Active,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const branchConfig = `-- name: BranchConfig :one
 SELECT id, sucursal_id, jornada_inicio, jornada_fin, dias_laborables, parada_radio_m, parada_minutos, paso_minimo_m, sin_mov_radio_m, sin_mov_span_min, escaso_km_netos, max_velocidad_kmh, max_accuracy_m, hueco_minutos, cobertura_gap_min, cobertura_minima, tolerancia_entrada_min, tolerancia_salida_min, visita_radio_m FROM sucursal_config WHERE sucursal_id = $1
 `
@@ -250,6 +276,62 @@ func (q *Queries) CloseImportLog(ctx context.Context, arg CloseImportLogParams) 
 		arg.Detail,
 	)
 	return err
+}
+
+const createBranchByName = `-- name: CreateBranchByName :one
+INSERT INTO sucursal (id, nombre) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at
+`
+
+type CreateBranchByNameParams struct {
+	ID   string
+	Name string
+}
+
+func (q *Queries) CreateBranchByName(ctx context.Context, arg CreateBranchByNameParams) (Branch, error) {
+	row := q.db.QueryRow(ctx, createBranchByName, arg.ID, arg.Name)
+	var i Branch
+	err := row.Scan(
+		&i.ID,
+		&i.AuthOrgID,
+		&i.Name,
+		&i.Active,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSellerByName = `-- name: CreateSellerByName :one
+INSERT INTO trabajador (id, nombre, sucursal_id) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+RETURNING id, auth_user_id, nombre, sucursal_id, es_vendedor, activo, desde, hasta, created_at, updated_at
+`
+
+type CreateSellerByNameParams struct {
+	ID       string
+	Name     string
+	BranchID string
+}
+
+func (q *Queries) CreateSellerByName(ctx context.Context, arg CreateSellerByNameParams) (Seller, error) {
+	row := q.db.QueryRow(ctx, createSellerByName, arg.ID, arg.Name, arg.BranchID)
+	var i Seller
+	err := row.Scan(
+		&i.ID,
+		&i.AuthUserID,
+		&i.Name,
+		&i.BranchID,
+		&i.IsSeller,
+		&i.Active,
+		&i.From,
+		&i.To,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const createSource = `-- name: CreateSource :one
@@ -774,6 +856,33 @@ SELECT id, auth_user_id, nombre, sucursal_id, es_vendedor, activo, desde, hasta,
 
 func (q *Queries) SellerByID(ctx context.Context, id string) (Seller, error) {
 	row := q.db.QueryRow(ctx, sellerByID, id)
+	var i Seller
+	err := row.Scan(
+		&i.ID,
+		&i.AuthUserID,
+		&i.Name,
+		&i.BranchID,
+		&i.IsSeller,
+		&i.Active,
+		&i.From,
+		&i.To,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const sellerByNameInBranch = `-- name: SellerByNameInBranch :one
+SELECT id, auth_user_id, nombre, sucursal_id, es_vendedor, activo, desde, hasta, created_at, updated_at FROM trabajador WHERE nombre = $1 AND sucursal_id = $2 LIMIT 1
+`
+
+type SellerByNameInBranchParams struct {
+	Name     string
+	BranchID string
+}
+
+func (q *Queries) SellerByNameInBranch(ctx context.Context, arg SellerByNameInBranchParams) (Seller, error) {
+	row := q.db.QueryRow(ctx, sellerByNameInBranch, arg.Name, arg.BranchID)
 	var i Seller
 	err := row.Scan(
 		&i.ID,

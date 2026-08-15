@@ -23,6 +23,14 @@ import (
 // scan later passes over the same file — nothing is duplicated.
 
 type pushRequest struct {
+	// Account is the Google account that OWNS the shared folder, and that is what
+	// says which branch the file belongs to.
+	//
+	// Everything arrives through the parent account (tablets.procovar), so the
+	// account n8n authenticates with says nothing about the origin. What does say it
+	// is the folder's owner: each branch — Camagüey, Holguín, Santiago… — shares its
+	// tablets' folders from its own account, and Drive keeps that in `owners`.
+	Account     string   `json:"account"`
 	SourceID    string   `json:"sourceId"`
 	FolderID    string   `json:"folderId"`
 	DriveFileID string   `json:"driveFileId"`
@@ -92,6 +100,7 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nuevo, puntos, err := s.ingest.Receive(r.Context(), ingest.Pushed{
+		Account:     p.Account,
 		SourceID:    p.SourceID,
 		FolderID:    p.FolderID,
 		DriveFileID: p.DriveFileID,

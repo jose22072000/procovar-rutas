@@ -22,6 +22,10 @@ import (
 
 // Pushed is what n8n sends.
 type Pushed struct {
+	// Account is the Google account that owns the shared folder: the branch's. It
+	// is not the one n8n signs in with — everything comes through the parent
+	// account — but the folder's owner, which is what Drive records in `owners`.
+	Account string
 	// SourceID or FolderID identify the folder already registered.
 	SourceID string
 	FolderID string
@@ -77,11 +81,19 @@ func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 	return nuevo, points, nil
 }
 
-// findSource locates the folder the file belongs to.
+// findSource locates the folder the file belongs to, registering it the first time
+// if the push says which account it came from.
 //
-// It is not created on the fly when missing: an unknown folder is almost always a
-// misconfiguration in n8n, and creating it silently would make files show up under
-// a phantom source with no branch and no time zone.
+// It used to refuse to create it, on the grounds that an unknown folder is usually
+// an n8n misconfiguration. That reasoning does not survive contact with how this is
+// actually set up: every shared folder IS a seller's GPS profile, so a folder
+// nobody has seen before is a new seller, not a mistake — and there are dozens.
+// Refusing meant somebody had to register 53 folders by hand before a single file
+// could get in, and one more every time a seller changed tablet.
+//
+// What stops it from being a phantom source is the account: it names the branch,
+// so the folder is born with its branch already set. Without an account it still
+// refuses, because then there really is nothing to attach it to.
 func (s *Service) findSource(ctx context.Context, e Pushed) (store.DriveSource, error) {
 	if e.SourceID != "" {
 		f, err := s.q.SourceByID(ctx, e.SourceID)
@@ -104,6 +116,25 @@ func (s *Service) findSource(ctx context.Context, e Pushed) (store.DriveSource, 
 			return f, nil
 		}
 	}
-	return store.DriveSource{}, fmt.Errorf(
-		"la carpeta %s no está dada de alta en Administración", e.FolderID)
+
+	if e.Account == "" {
+		return store.DriveSource{}, fmt.Errorf(
+			"la carpeta %s no está dada de alta y el empuje no dice de qué cuenta viene", e.FolderID)
+	}
+
+	// El nombre de la carpeta es el del perfil de GPS, o sea el del vendedor.
+	nombre := e.FolderID
+	if len(e.FolderPath) > 0 && e.FolderPath[len(e.FolderPath)-1] != "" {
+		nombre = e.FolderPath[len(e.FolderPath)-1]
+	}
+
+	branchID, err := s.branchOfAccount(ctx, e.Account)
+	if err != nil {
+		return store.DriveSource{}, err
+	}
+
+	return s.q.CreateSource(ctx, store.CreateSourceParams{
+		ID: newID(), Name: nombre, FolderID: e.FolderID,
+		Type: store.SourceSeller, BranchID: &branchID, Credential: e.Account,
+	})
 }

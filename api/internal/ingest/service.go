@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -106,7 +107,7 @@ func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo
 	res := Summary{}
 
 	registro, err := s.q.OpenImportLog(ctx, store.OpenImportLogParams{
-		ID: nuevoID(), SourceID: &source.ID, Type: tipo,
+		ID: newID(), SourceID: &source.ID, Type: tipo,
 	})
 	if err != nil {
 		return res, fmt.Errorf("abriendo registro de importación: %w", err)
@@ -199,6 +200,84 @@ type claveDia struct {
 	date       time.Time
 }
 
+// sellerFromFolder devuelve el vendedor que representa una carpeta, creándolo la
+// primera vez.
+//
+// Es find-or-create y no un alta: la ingesta corre cada hora sobre las mismas
+// carpetas, así que crear a ciegas duplicaría a la misma persona una vez por
+// fichero.
+func (s *Service) sellerFromFolder(ctx context.Context, source store.DriveSource) (string, error) {
+	branchID, err := s.branchOfSource(ctx, source)
+	if err != nil {
+		return "", err
+	}
+
+	if t, err := s.q.SellerByNameInBranch(ctx, store.SellerByNameInBranchParams{
+		Name: source.Name, BranchID: branchID,
+	}); err == nil {
+		return t.ID, nil
+	}
+
+	t, err := s.q.CreateSellerByName(ctx, store.CreateSellerByNameParams{
+		ID: newID(), Name: source.Name, BranchID: branchID,
+	})
+	if err != nil {
+		// Otra ingesta pudo crearlo entre la consulta y el alta.
+		if t2, err2 := s.q.SellerByNameInBranch(ctx, store.SellerByNameInBranchParams{
+			Name: source.Name, BranchID: branchID,
+		}); err2 == nil {
+			return t2.ID, nil
+		}
+		return "", err
+	}
+	return t.ID, nil
+}
+
+// branchOfSource: la sucursal de una carpeta es la de la CUENTA de Google desde la
+// que se lee. Si la carpeta ya trae sucursal puesta a mano, esa manda.
+func (s *Service) branchOfSource(ctx context.Context, source store.DriveSource) (string, error) {
+	if source.BranchID != nil && *source.BranchID != "" {
+		return *source.BranchID, nil
+	}
+	return s.branchOfAccount(ctx, source.Credential)
+}
+
+// branchOfAccount traduce el nombre de la cuenta de Google a una sucursal, creándola
+// la primera vez. Hay una cuenta por sucursal —Camagüey, Holguín, Santiago…— así que
+// el nombre de la cuenta ES el de la sucursal.
+func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, error) {
+	nombre := cuenta
+	if nombre == "" {
+		nombre = "principal"
+	}
+
+	if suc, err := s.q.BranchByName(ctx, nombre); err == nil {
+		return suc.ID, nil
+	}
+	suc, err := s.q.CreateBranchByName(ctx, store.CreateBranchByNameParams{ID: newID(), Name: nombre})
+	if err != nil {
+		if suc2, err2 := s.q.BranchByName(ctx, nombre); err2 == nil {
+			return suc2.ID, nil
+		}
+		return "", err
+	}
+	return suc.ID, nil
+}
+
+// nombreDeCuenta deja el nombre de la sucursal a partir de la cuenta de Google:
+// "camaguey.procovar@gmail.com" -> "camaguey". Si no parece un correo, se usa tal
+// cual, que es lo que pasa cuando la cuenta se dio de alta por su nombre.
+func nombreDeCuenta(cuenta string) string {
+	c := strings.TrimSpace(cuenta)
+	if i := strings.IndexByte(c, '@'); i > 0 {
+		c = c[:i]
+	}
+	if i := strings.IndexByte(c, '.'); i > 0 {
+		c = c[:i]
+	}
+	return c
+}
+
 // processFile downloads a .gpx, judges it and stores it. Returns whether it was new.
 func (s *Service) processFile(
 	ctx context.Context,
@@ -271,6 +350,29 @@ func (s *Service) Save(
 		Alias:          alias,
 		Zone:           zona,
 	})
+
+	// Si nadie lo resolvió, el nombre de la CARPETA es el vendedor.
+	//
+	// Cada carpeta compartida es el perfil de GPS de una persona ("STGGari",
+	// "GPS Diana Acosta"), así que el nombre ya identifica a quién se está mirando.
+	// Antes esto se mandaba a la bandeja para que un admin lo casara a mano, y eso
+	// era pedirle que teclease lo que la carpeta ya dice: son 53 carpetas, y el
+	// gerente que abre el panel mira los GPS de su sucursal sabiendo perfectamente
+	// quién es quién.
+	//
+	// La sucursal sale de la CUENTA de Google de la que vino, que es como está
+	// montado: una cuenta por sucursal. Mientras solo haya una cuenta dada de alta,
+	// todo cae en su sucursal; al añadir las demás, cada carpeta va a la suya.
+	if v.SellerID == "" && source.Name != "" {
+		if id, err := s.sellerFromFolder(ctx, source); err != nil {
+			s.log.Warn("no se pudo crear el vendedor desde la carpeta",
+				"carpeta", source.Name, "error", err)
+		} else {
+			v.SellerID = id
+			v.Status = StatusProcessed
+			v.AliasHint = ""
+		}
+	}
 
 	sucursalID := source.BranchID
 	if v.SellerID != "" {
@@ -403,7 +505,7 @@ func (s *Service) RecomputeDay(ctx context.Context, trabajadorID string, date ti
 	for _, p := range res.Stops {
 		radio := p.RadiusM
 		if err := s.q.CreateStop(ctx, store.CreateStopParams{
-			ID:          nuevoID(),
+			ID:          newID(),
 			TrackDayID:  dia.ID,
 			SellerID:    trabajadorID,
 			BranchID:    trab.BranchID,
@@ -614,7 +716,7 @@ func idFichero(yaEstaba bool, previo string) string {
 	if yaEstaba {
 		return previo
 	}
-	return nuevoID()
+	return newID()
 }
 
 func idDia(trabajadorID string, date time.Time) string {
@@ -622,7 +724,7 @@ func idDia(trabajadorID string, date time.Time) string {
 	return hex.EncodeToString(suma[:16])
 }
 
-func nuevoID() string {
+func newID() string {
 	b := make([]byte, 16)
 	if _, err := randRead(b); err != nil {
 		// Without randomness a unique identifier cannot be generated; better a panic

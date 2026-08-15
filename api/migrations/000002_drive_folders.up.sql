@@ -14,6 +14,11 @@
 -- (ON CONFLICT DO NOTHING) and does not touch what has been added from the screen.
 --
 -- The trailing number is how many .gpx each folder had on the day of the dump.
+--
+-- They go in with no branch and no account on purpose: everything comes through the
+-- parent account, so who OWNS each shared folder is what says which branch it
+-- belongs to, and that arrives with the file (Drive's `owners`). The first push
+-- fills it in.
 
 INSERT INTO drive_source (id, nombre, folder_id, tipo, credencial) VALUES
     (md5('1lO4WmKdE0-lyhI2oIBwD_OiDPuv0Z4y-'), 'JEAN MICHEL', '1lO4WmKdE0-lyhI2oIBwD_OiDPuv0Z4y-', 'MIXTA', 'principal'),  -- 118

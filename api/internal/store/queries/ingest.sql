@@ -170,3 +170,26 @@ INSERT INTO sucursal (id, nombre, auth_org_id) VALUES ($1, $2, $3) RETURNING *;
 INSERT INTO trabajador (id, nombre, sucursal_id, auth_user_id, desde)
 VALUES ($1, $2, $3, $4, COALESCE(sqlc.narg('desde')::date, DATE '2020-01-01'))
 RETURNING *;
+
+-- Find-or-create by name, for the folder-name-is-the-seller flow.
+--
+-- Each shared Drive folder IS a seller's GPS profile, so its name identifies them
+-- well enough for what the panel is for: a manager looks at their branch's GPS and
+-- already knows who is who. Making somebody match every folder to a person by hand
+-- would be asking them to type in what the folder already says.
+
+-- name: BranchByName :one
+SELECT * FROM sucursal WHERE nombre = @name LIMIT 1;
+
+-- name: CreateBranchByName :one
+INSERT INTO sucursal (id, nombre) VALUES (@id, @name)
+ON CONFLICT DO NOTHING
+RETURNING *;
+
+-- name: SellerByNameInBranch :one
+SELECT * FROM trabajador WHERE nombre = @name AND sucursal_id = @branch_id LIMIT 1;
+
+-- name: CreateSellerByName :one
+INSERT INTO trabajador (id, nombre, sucursal_id) VALUES (@id, @name, @branch_id)
+ON CONFLICT DO NOTHING
+RETURNING *;
