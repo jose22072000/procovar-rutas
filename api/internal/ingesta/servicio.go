@@ -123,6 +123,12 @@ func (s *Servicio) BarrerFuente(ctx context.Context, fuente almacen.DriveSource,
 	if err != nil {
 		return res, fmt.Errorf("credencial %q: %w", fuente.Credencial, err)
 	}
+	// Sin cliente de Drive no se puede barrer, pero eso NO es motivo para caerse:
+	// mientras la entrada sea el empuje de n8n, el sistema funciona igual. Antes
+	// esto reventaba con un puntero nulo en mitad del barrido.
+	if cli == nil {
+		return res, fmt.Errorf("no hay acceso a Drive para la carpeta %q; solo entrará lo que empuje n8n", fuente.Nombre)
+	}
 
 	ficheros, errListar := cli.Listar(ctx, fuente.FolderID, desde, s.max)
 	res.Vistos = len(ficheros)

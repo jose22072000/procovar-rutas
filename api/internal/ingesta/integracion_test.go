@@ -411,3 +411,19 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 		t.Errorf("tras casar el alias ya no debería preguntar: %v", f2.TrabajadorID)
 	}
 }
+
+// Sin credenciales de Google el barrido no puede hacer nada, pero tampoco puede
+// tumbar el proceso: la entrada por n8n sigue funcionando.
+func TestSinAccesoADriveNoRevienta(t *testing.T) {
+	pool, q := base(t)
+	semilla(t, q)
+
+	svc := servicio(t, pool, nil) // sin cliente de Drive
+	res, err := svc.Barrer(context.Background(), ingesta.TipoIncremental)
+	if err != nil {
+		t.Fatalf("Barrer no debe devolver error global: %v", err)
+	}
+	if res.Nuevos != 0 {
+		t.Errorf("nuevos = %d", res.Nuevos)
+	}
+}
