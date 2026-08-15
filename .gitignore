@@ -19,3 +19,7 @@ out/
 # Datos de prueba con recorridos reales
 *.gpx
 !api/internal/gpx/testdata/*.gpx
+
+# Frontend
+front/node_modules/
+front/.next/

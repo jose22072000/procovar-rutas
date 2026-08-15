@@ -91,9 +91,15 @@ CREATE INDEX supervision_gestor_idx ON supervision (gestor_id, desde, hasta);
 -- Origen de los datos: carpetas de Drive
 -- ---------------------------------------------------------------------------
 
--- Modelo heredado de la ingesta de PEDIDO: una cuenta padre de Google comparte
--- hasta 4 carpetas (límite de Google), así que credential_ref agrupa las
--- carpetas que se leen con la misma credencial.
+-- Una carpeta de Drive que se barre en busca de .gpx.
+--
+-- El montaje real: HAY UNA CUENTA DE GOOGLE POR SUCURSAL, y cada una se llama
+-- como su sucursal. Dentro, una carpeta por perfil de GPS —con el nombre del
+-- vendedor o de la tableta— y dentro de esa, los ficheros `AAAAMMDD.gpx`.
+--
+-- Por eso cada fuente dice con QUÉ credencial se lee (`credencial`, la clave de
+-- la cuenta en la configuración). Si mañana todas las carpetas se comparten en
+-- una sola cuenta, basta con que todas las fuentes apunten a la misma.
 CREATE TABLE drive_source (
     id             TEXT PRIMARY KEY,
     nombre         TEXT NOT NULL,
@@ -102,11 +108,12 @@ CREATE TABLE drive_source (
     sucursal_id    TEXT REFERENCES sucursal (id),
     -- Si tipo = VENDEDOR, a quién pertenece todo lo que caiga aquí.
     trabajador_id  TEXT REFERENCES trabajador (id),
-    credential_ref TEXT NOT NULL,
+    -- Clave de la cuenta de Google con la que se lee esta carpeta.
+    credencial     TEXT NOT NULL DEFAULT 'principal',
     activa         BOOLEAN NOT NULL DEFAULT TRUE,
     -- Cursor del barrido incremental: último modifiedTime visto. El repaso
     -- nocturno lo ignora a propósito y recorre la carpeta entera.
-    cursor         TIMESTAMPTZ,
+    cursor_modificado TIMESTAMPTZ,
     ultimo_barrido TIMESTAMPTZ,
     ultimo_error   TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),

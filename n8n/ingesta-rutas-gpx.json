@@ -1,0 +1,150 @@
+{
+  "name": "Ingesta Rutas GPX — cuenta padre tablets.procovar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=name contains '.gpx' and trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedTime > '{{ $now.minus(3, 'days').toUTC().toISO() }}'",
+        "returnAll": true,
+        "filter": {},
+        "options": {
+          "fields": ["id", "name", "parents", "createdTime", "modifiedTime"]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Buscar GPX",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [220, 0],
+      "notes": "Ventana de 3 días a propósito: la API deduplica por driveFileId y por sha256, así que re-mandar lo mismo no duplica nada, y en cambio un fichero que llegó tarde no se pierde."
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Por fichero",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [440, 0],
+      "notes": "Uno a uno: un fichero malo no puede tumbar el resto del lote."
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "get",
+        "folderNoRootId": {
+          "__rl": true,
+          "value": "={{ $json.parents[0] }}",
+          "mode": "id"
+        },
+        "options": {
+          "fields": ["id", "name"]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Carpeta del perfil",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [660, 0],
+      "notes": "El nombre del fichero solo trae la fecha (AAAAMMDD.gpx). Quién es el vendedor sale del nombre de esta carpeta, que es el perfil del GPS."
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Por fichero').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Descargar",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [880, 0],
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://rutas.procovar.cloud/api/ingesta/fichero",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.RUTAS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ folderId: $('Buscar GPX').first().json.parents ? $('Por fichero').item.json.parents[0] : '', driveFileId: $('Por fichero').item.json.id, nombre: $('Por fichero').item.json.name, rutaCarpeta: [$('Carpeta del perfil').item.json.name], creado: $('Por fichero').item.json.createdTime, contenidoBase64: $binary.data.data }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Enviar a Rutas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "La API encola en Redis y contesta 202 enseguida. El procesado va aparte, en el servicio de ingesta. Con ?sync=1 se procesa en el acto (útil para probar)."
+    }
+  ],
+  "connections": {
+    "Cada hora": {
+      "main": [[{ "node": "Buscar GPX", "type": "main", "index": 0 }]]
+    },
+    "Buscar GPX": {
+      "main": [[{ "node": "Por fichero", "type": "main", "index": 0 }]]
+    },
+    "Por fichero": {
+      "main": [
+        [],
+        [{ "node": "Carpeta del perfil", "type": "main", "index": 0 }]
+      ]
+    },
+    "Carpeta del perfil": {
+      "main": [[{ "node": "Descargar", "type": "main", "index": 0 }]]
+    },
+    "Descargar": {
+      "main": [[{ "node": "Enviar a Rutas", "type": "main", "index": 0 }]]
+    },
+    "Enviar a Rutas": {
+      "main": [[{ "node": "Por fichero", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

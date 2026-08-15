@@ -133,3 +133,24 @@ func contiene(xs []string, s string) bool {
 	}
 	return false
 }
+
+// El gerente está por encima del supervisor y ve toda su sucursal, pero NO
+// administra: no toca carpetas de Drive, ni alias, ni umbrales.
+func TestGerenteVeLaSucursalPeroNoAdministra(t *testing.T) {
+	f, err := Calcular(sesion(RolGerente), agosto, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.SucursalID != "s-cmg" || len(f.TrabajadoresIn) != 0 {
+		t.Errorf("= %+v; el gerente ve la sucursal entera, no un equipo", f)
+	}
+	if PuedeAdministrar(RolGerente) {
+		t.Error("el gerente no administra")
+	}
+	if !PuedeAdministrar(RolAdmin) || !PuedeAdministrar(RolSuperAdmin) {
+		t.Error("admin y super admin sí administran")
+	}
+	if !PuedeExportar(RolGerente) {
+		t.Error("el gerente sí exporta reportes")
+	}
+}
