@@ -30,8 +30,13 @@ RUN apk add --no-cache ca-certificates tzdata && \
     adduser -D -u 10001 rutas
 
 COPY --from=construccion /bin/api /bin/ingesta /bin/migrar /usr/local/bin/
+COPY entrada.sh /usr/local/bin/entrada
+RUN chmod +x /usr/local/bin/entrada
 
 USER rutas
 EXPOSE 3600
 
+# Todo pasa por `entrada`, que migra la base antes de ceder el paso al comando.
+# Vale igual para `ingesta`, que sobrescribe el CMD pero no el ENTRYPOINT.
+ENTRYPOINT ["/usr/local/bin/entrada"]
 CMD ["/usr/local/bin/api"]

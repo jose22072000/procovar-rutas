@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -157,6 +158,13 @@ func crearBaseSiFalta(url string) error {
 	// El nombre no puede ir como parámetro en un CREATE DATABASE, así que se cita
 	// con las reglas de identificadores de Postgres en vez de concatenarlo tal cual.
 	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{objetivo}.Sanitize()); err != nil {
+		// `api` e `ingesta` arrancan a la vez y comparten imagen: los dos pueden ver
+		// que la base falta y lanzar el CREATE. El que llega segundo recibe
+		// "duplicate_database", que es exactamente el resultado que buscaba.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42P04" {
+			return nil
+		}
 		return fmt.Errorf("creando la base %q: %w", objetivo, err)
 	}
 	fmt.Printf("base %q creada\n", objetivo)
