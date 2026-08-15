@@ -1,0 +1,21 @@
+# Go
+/api/bin/
+*.exe
+
+# Entorno
+.env
+.env.local
+*.env
+
+# Credenciales de Google: la clave de la service account NUNCA se versiona
+credenciales/
+*service-account*.json
+
+# Frontend
+node_modules/
+.next/
+out/
+
+# Datos de prueba con recorridos reales
+*.gpx
+!api/internal/gpx/testdata/*.gpx
