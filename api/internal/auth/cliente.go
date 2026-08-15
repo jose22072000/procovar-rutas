@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-type Cliente struct {
+type Client struct {
 	baseURL    string
 	clientID   string
 	clave      []byte
@@ -31,7 +31,7 @@ type Cliente struct {
 	http       *http.Client
 }
 
-func NuevoCliente(baseURL, clientID, claveHex string, keyVersion int) (*Cliente, error) {
+func NuevoCliente(baseURL, clientID, claveHex string, keyVersion int) (*Client, error) {
 	if baseURL == "" || clientID == "" {
 		return nil, fmt.Errorf("faltan QB_AUTH_URL o QB_AUTH_CLIENT_ID")
 	}
@@ -45,7 +45,7 @@ func NuevoCliente(baseURL, clientID, claveHex string, keyVersion int) (*Cliente,
 	if keyVersion == 0 {
 		keyVersion = 1
 	}
-	return &Cliente{
+	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		clientID:   clientID,
 		clave:      clave,
@@ -79,8 +79,8 @@ type SesionInterna struct {
 	ActiveOrganizationID string `json:"activeOrganizationId"`
 }
 
-// Sesion es la respuesta de /api/auth/verify-session.
-type Sesion struct {
+// Session es la respuesta de /api/auth/verify-session.
+type Session struct {
 	Valid       bool          `json:"valid"`
 	User        Usuario       `json:"user"`
 	Session     SesionInterna `json:"session"`
@@ -92,8 +92,8 @@ type Sesion struct {
 }
 
 // VerificarSesion cambia la cookie de sesión por la identidad de quien la trae.
-func (c *Cliente) VerificarSesion(ctx context.Context, token string) (*Sesion, error) {
-	var s Sesion
+func (c *Client) VerificarSesion(ctx context.Context, token string) (*Session, error) {
+	var s Session
 	if err := c.llamar(ctx, http.MethodPost, "/api/auth/verify-session",
 		map[string]string{"sessionToken": token}, &s); err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (c *Cliente) VerificarSesion(ctx context.Context, token string) (*Sesion, e
 }
 
 // CrearTokenCallback arranca el flujo de login y devuelve a dónde redirigir.
-func (c *Cliente) CrearTokenCallback(ctx context.Context, callbackURL, returnTo string) (string, error) {
+func (c *Client) CrearTokenCallback(ctx context.Context, callbackURL, returnTo string) (string, error) {
 	var res struct {
 		RedirectURL string `json:"redirectUrl"`
 	}
@@ -118,7 +118,7 @@ func (c *Cliente) CrearTokenCallback(ctx context.Context, callbackURL, returnTo 
 }
 
 // Canjear cambia el código de vuelta del login por una sesión.
-func (c *Cliente) Canjear(ctx context.Context, codigo string) (map[string]any, error) {
+func (c *Client) Canjear(ctx context.Context, codigo string) (map[string]any, error) {
 	var res map[string]any
 	err := c.llamar(ctx, http.MethodPost, "/api/auth/exchange", map[string]string{"code": codigo}, &res)
 	return res, err
@@ -127,7 +127,7 @@ func (c *Cliente) Canjear(ctx context.Context, codigo string) (map[string]any, e
 // RegistrarAuditoria deja constancia en procovar-auth de una acción sensible
 // (asignar un alias, cambiar una carpeta, exportar un reporte). Es best-effort:
 // que la auditoría falle no puede tumbar la operación del usuario.
-func (c *Cliente) RegistrarAuditoria(ctx context.Context, accion, recurso, usuarioID string) {
+func (c *Client) RegistrarAuditoria(ctx context.Context, accion, recurso, usuarioID string) {
 	_ = c.llamar(ctx, http.MethodPost, "/api/audit", map[string]string{
 		"action":   accion,
 		"resource": recurso,
@@ -138,7 +138,7 @@ func (c *Cliente) RegistrarAuditoria(ctx context.Context, accion, recurso, usuar
 
 // firmar construye las cabeceras de servicio. El orden de los campos del texto
 // a firmar tiene que ser IDÉNTICO al del SDK TypeScript.
-func (c *Cliente) firmar(metodo, ruta string, cuerpo []byte) map[string]string {
+func (c *Client) firmar(metodo, ruta string, cuerpo []byte) map[string]string {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 
 	nonceBytes := make([]byte, 16)
@@ -168,7 +168,7 @@ func (c *Cliente) firmar(metodo, ruta string, cuerpo []byte) map[string]string {
 	return cab
 }
 
-func (c *Cliente) llamar(ctx context.Context, metodo, ruta string, cuerpo any, destino any) error {
+func (c *Client) llamar(ctx context.Context, metodo, ruta string, cuerpo any, destino any) error {
 	var datos []byte
 	if cuerpo != nil {
 		var err error

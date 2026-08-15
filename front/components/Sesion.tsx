@@ -9,9 +9,10 @@
  * termina se levanta creyendo que ha salido y la siguiente se encuentra la sesión
  * abierta con los datos de todos los vendedores.
  *
- * Cerrar se hace en el servidor (POST /api/auth/logout). La cookie es httpOnly, o
- * sea que el JavaScript no puede borrarla — y debe ser así: un token que puede leer
- * el navegador puede leerlo cualquier script de la página.
+ * Salir no se resuelve aquí: se va a Accesos. La sesión vive allí, así que allí
+ * está el cartel de "¿seguro?" y allí se cierra. Un panel que borrara solo su
+ * cookie estaría mintiendo: la sesión de Accesos seguiría abierta y el botón de
+ * entrar devolvería adentro sin preguntar.
  */
 
 import { useEffect, useState } from "react";
@@ -27,7 +28,6 @@ interface Yo {
 
 export default function Sesion() {
   const [yo, setYo] = useState<Yo | null>(null);
-  const [saliendo, setSaliendo] = useState(false);
 
   useEffect(() => {
     // Si no hay sesión, `pedir` ya manda al login: aquí no hay nada que hacer.
@@ -35,20 +35,6 @@ export default function Sesion() {
       .then(setYo)
       .catch(() => {});
   }, []);
-
-  async function salir() {
-    setSaliendo(true);
-    try {
-      await fetch(`${API}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } finally {
-      // Al login pase lo que pase: si la llamada falló, la cookie puede seguir
-      // viva, y dejar a la persona en el panel le haría creer que ya salió.
-      window.location.href = `${API}/api/auth/login`;
-    }
-  }
 
   if (!yo) return null;
 
@@ -58,9 +44,11 @@ export default function Sesion() {
         {yo.user}
         <span className="sesion-rol">{yo.role}</span>
       </span>
-      <button onClick={salir} disabled={saliendo} className="sesion-salir">
-        {saliendo ? "Saliendo…" : "Cerrar sesión"}
-      </button>
+      {/* Un enlace, no un botón con fetch: salir es un viaje a Accesos, que es
+          donde se pregunta "¿seguro?" y donde se cierra de verdad. */}
+      <a href={`${API}/api/auth/logout`} className="sesion-salir">
+        Cerrar sesión
+      </a>
     </div>
   );
 }

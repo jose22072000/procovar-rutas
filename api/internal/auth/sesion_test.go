@@ -3,17 +3,17 @@ package auth
 import (
 	"testing"
 
-	"github.com/procovar/procovar-rutas/api/internal/alcance"
+	"github.com/procovar/procovar-rutas/api/internal/scope"
 )
 
 func TestMapearRolReconoceLasVariantes(t *testing.T) {
-	casos := map[string]alcance.Rol{
-		"Administrador": alcance.RolAdmin,
-		"admin":         alcance.RolAdmin,
-		"SUPERVISOR":    alcance.RolSupervisor,
-		"Gestor":        alcance.RolGestor,
-		"gerente":       alcance.RolGerente,
-		"super_admin":   alcance.RolSuperAdmin,
+	casos := map[string]scope.Role{
+		"Administrador": scope.RoleAdmin,
+		"admin":         scope.RoleAdmin,
+		"SUPERVISOR":    scope.RoleSupervisor,
+		"Gestor":        scope.RoleAgent,
+		"gerente":       scope.RoleManager,
+		"super_admin":   scope.RoleSuperAdmin,
 	}
 	for entrada, esperado := range casos {
 		if got := MapearRol([]string{entrada}, false); got != esperado {
@@ -32,19 +32,19 @@ func TestRolDesconocidoNoDaAcceso(t *testing.T) {
 
 func TestConVariosRolesGanaElMasAmplio(t *testing.T) {
 	got := MapearRol([]string{"supervisor", "administrador"}, false)
-	if got != alcance.RolAdmin {
+	if got != scope.RoleAdmin {
 		t.Errorf("= %q, se esperaba admin", got)
 	}
 }
 
 func TestAdminDeSistemaEsSuperAdmin(t *testing.T) {
-	if got := MapearRol([]string{"gestor"}, true); got != alcance.RolSuperAdmin {
+	if got := MapearRol([]string{"gestor"}, true); got != scope.RoleSuperAdmin {
 		t.Errorf("= %q", got)
 	}
 }
 
 func TestMembresiaActivaRespetaLaOrganizacionDeLaSesion(t *testing.T) {
-	s := &Sesion{
+	s := &Session{
 		Memberships: []Membresia{
 			{Roles: []string{"gestor"}, Organization: Organizacion{ID: "org-hol", Name: "Holguín"}},
 			{Roles: []string{"admin"}, Organization: Organizacion{ID: "org-cmg", Name: "Camagüey"}},
@@ -56,25 +56,25 @@ func TestMembresiaActivaRespetaLaOrganizacionDeLaSesion(t *testing.T) {
 	if m == nil || m.Organization.ID != "org-cmg" {
 		t.Fatalf("membresía = %+v", m)
 	}
-	if id := s.Traducir(); id.Rol != alcance.RolAdmin || id.AuthOrgID != "org-cmg" {
+	if id := s.Traducir(); id.Role != scope.RoleAdmin || id.AuthOrgID != "org-cmg" {
 		t.Errorf("identidad = %+v", id)
 	}
 }
 
 func TestTraducirCaeAlRbacSiLaMembresiaNoTraeRolConocido(t *testing.T) {
-	s := &Sesion{
+	s := &Session{
 		Memberships: []Membresia{{Roles: []string{"algo_raro"}, Organization: Organizacion{ID: "org-cmg"}}},
 	}
 	s.Rbac.Roles = []string{"supervisor"}
 
-	if id := s.Traducir(); id.Rol != alcance.RolSupervisor {
-		t.Errorf("rol = %q", id.Rol)
+	if id := s.Traducir(); id.Role != scope.RoleSupervisor {
+		t.Errorf("rol = %q", id.Role)
 	}
 }
 
 func TestSinMembresiasNiRolNoHayAcceso(t *testing.T) {
-	s := &Sesion{}
-	if id := s.Traducir(); id.Rol != "" {
-		t.Errorf("rol = %q, se esperaba ninguno", id.Rol)
+	s := &Session{}
+	if id := s.Traducir(); id.Role != "" {
+		t.Errorf("rol = %q, se esperaba ninguno", id.Role)
 	}
 }

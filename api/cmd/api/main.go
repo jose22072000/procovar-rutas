@@ -15,10 +15,11 @@ import (
 
 	"github.com/procovar/procovar-rutas/api/internal/api"
 	"github.com/procovar/procovar-rutas/api/internal/auth"
-	"github.com/procovar/procovar-rutas/api/internal/cola"
 	"github.com/procovar/procovar-rutas/api/internal/config"
 	"github.com/procovar/procovar-rutas/api/internal/drive"
-	"github.com/procovar/procovar-rutas/api/internal/ingesta"
+	"github.com/procovar/procovar-rutas/api/internal/events"
+	"github.com/procovar/procovar-rutas/api/internal/ingest"
+	"github.com/procovar/procovar-rutas/api/internal/queue"
 )
 
 func main() {
@@ -54,11 +55,11 @@ func main() {
 	// El panel puede arrancar sin credencial de Google: sirve el histórico que ya
 	// está en la base. Lo que no funcionará es lanzar un barrido a mano, y el
 	// arranque lo dice en vez de fallar más tarde con un error críptico.
-	var cuentas ingesta.Cuentas
+	var cuentas ingest.Accounts
 	if credencial, err := cfg.Credenciales(); err == nil {
-		if j, err := drive.CargarCuentas(credencial); err == nil {
+		if j, err := drive.LoadAccounts(credencial); err == nil {
 			cuentas = j
-			log.Info("cuentas de Google cargadas", "cuentas", j.Claves())
+			log.Info("cuentas de Google cargadas", "cuentas", j.Keys())
 		} else {
 			log.Warn("credenciales de Google ilegibles; el panel servirá solo lo ya ingerido", "error", err)
 		}
@@ -66,14 +67,14 @@ func main() {
 		log.Warn("sin credenciales de Google; el barrido manual no estará disponible", "motivo", err)
 	}
 	if cuentas == nil {
-		cuentas = ingesta.UnaCuenta(nil)
+		cuentas = ingest.SingleAccount(nil)
 	}
 
 	// Sin Redis el sistema sigue funcionando: el empuje de n8n se procesa en el
 	// acto en vez de encolarse. Peor bajo carga, pero preferible a no arrancar.
-	var colaRedis *cola.Cola
+	var colaRedis *queue.Queue
 	if cfg.RedisURL != "" {
-		c, err := cola.Nueva(cfg.RedisURL, cfg.PrefijoRedis)
+		c, err := queue.New(cfg.RedisURL, cfg.PrefijoRedis)
 		if err != nil {
 			log.Error("Redis", "error", err)
 			os.Exit(1)
@@ -82,19 +83,34 @@ func main() {
 			log.Warn("Redis no responde; el empuje de n8n se procesará en el acto", "error", err)
 		} else {
 			colaRedis = c
-			defer c.Cerrar()
+			defer c.Close()
 			log.Info("cola en Redis lista", "prefijo", cfg.PrefijoRedis)
 		}
 	} else {
 		log.Warn("sin REDIS_URL; el empuje de n8n se procesará en el acto")
 	}
 
-	svcIngesta := ingesta.NuevoServicio(pool, cuentas, log, cfg.MaxFicherosPorBarrido)
-	servidor := api.NuevoServidor(cfg, pool, cliAuth, svcIngesta, colaRedis, log)
+	// El mismo Redis y el mismo prefijo que la cola, para los avisos en vivo del
+	// panel (SSE). Sin Redis no hay avisos y el panel recarga a mano: molesto,
+	// pero no es motivo para no arrancar.
+	var bus *events.Bus
+	if cfg.RedisURL != "" {
+		b, err := events.New(cfg.RedisURL, cfg.PrefijoRedis)
+		if err != nil {
+			log.Warn("sin avisos en vivo", "error", err)
+		} else {
+			bus = b
+			defer b.Close()
+			log.Info("avisos en vivo listos", "prefijo", cfg.PrefijoRedis)
+		}
+	}
+
+	svcIngesta := ingest.NewService(pool, cuentas, log, cfg.MaxFicherosPorBarrido)
+	servidor := api.NewServer(cfg, pool, cliAuth, svcIngesta, colaRedis, bus, log)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Puerto,
-		Handler:           servidor.Rutas(),
+		Handler:           servidor.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

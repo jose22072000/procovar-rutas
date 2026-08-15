@@ -316,6 +316,8 @@ table.movimientos tr.parada {
 }
 
 .sesion-salir {
+  display: inline-block;
+  text-decoration: none;
   border: 1px solid var(--borde);
   border-radius: 6px;
   padding: 0.35rem 0.7rem;

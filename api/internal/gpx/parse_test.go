@@ -27,17 +27,17 @@ func TestParsePistaNormal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no debería fallar: %v", err)
 	}
-	if len(r.Puntos) != 2 {
-		t.Errorf("puntos = %d, se esperaban 2", len(r.Puntos))
+	if len(r.Points) != 2 {
+		t.Errorf("puntos = %d, se esperaban 2", len(r.Points))
 	}
-	if r.SinHora != 0 {
-		t.Errorf("sinHora = %d, se esperaba 0", r.SinHora)
+	if r.NoTime != 0 {
+		t.Errorf("sinHora = %d, se esperaba 0", r.NoTime)
 	}
-	if r.PrimerFix == nil || r.PrimerFix.Format("15:04") != "13:00" {
-		t.Errorf("primerFix = %v", r.PrimerFix)
+	if r.FirstFix == nil || r.FirstFix.Format("15:04") != "13:00" {
+		t.Errorf("primerFix = %v", r.FirstFix)
 	}
-	if !contiene(r.Pistas, "ALEXANDER") || !contiene(r.Pistas, "GPS Logger") {
-		t.Errorf("pistas = %v, faltan el nombre de la pista o el creador", r.Pistas)
+	if !contiene(r.Hints, "ALEXANDER") || !contiene(r.Hints, "GPS Logger") {
+		t.Errorf("pistas = %v, faltan el nombre de la pista o el creador", r.Hints)
 	}
 }
 
@@ -49,10 +49,10 @@ func TestParseVariosTrkYTrkseg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if len(r.Puntos) != 3 {
-		t.Fatalf("puntos = %d, se esperaban 3", len(r.Puntos))
+	if len(r.Points) != 3 {
+		t.Fatalf("puntos = %d, se esperaban 3", len(r.Points))
 	}
-	for i, p := range r.Puntos {
+	for i, p := range r.Points {
 		if p.Seq != i {
 			t.Errorf("seq[%d] = %d", i, p.Seq)
 		}
@@ -66,11 +66,11 @@ func TestParseSinHoras(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if len(r.Puntos) != 2 || r.SinHora != 2 {
-		t.Errorf("puntos = %d, sinHora = %d", len(r.Puntos), r.SinHora)
+	if len(r.Points) != 2 || r.NoTime != 2 {
+		t.Errorf("puntos = %d, sinHora = %d", len(r.Points), r.NoTime)
 	}
-	if r.PrimerFix != nil {
-		t.Errorf("no debería haber primer fix: %v", r.PrimerFix)
+	if r.FirstFix != nil {
+		t.Errorf("no debería haber primer fix: %v", r.FirstFix)
 	}
 }
 
@@ -84,8 +84,8 @@ func TestParseDescartaCoordenadasImposibles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if len(r.Puntos) != 2 {
-		t.Errorf("puntos = %d, se esperaban 2 (el fichero sigue siendo válido)", len(r.Puntos))
+	if len(r.Points) != 2 {
+		t.Errorf("puntos = %d, se esperaban 2 (el fichero sigue siendo válido)", len(r.Points))
 	}
 }
 
@@ -97,8 +97,8 @@ func TestParseOrdenaSesionesDesordenadas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if r.PrimerFix.Format("15:04") != "13:00" || r.UltimoFix.Format("15:04") != "15:00" {
-		t.Errorf("primer=%v ultimo=%v", r.PrimerFix, r.UltimoFix)
+	if r.FirstFix.Format("15:04") != "13:00" || r.LastFix.Format("15:04") != "15:00" {
+		t.Errorf("primer=%v ultimo=%v", r.FirstFix, r.LastFix)
 	}
 }
 
@@ -110,11 +110,11 @@ func TestParsePrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if r.Puntos[0].Accuracy == nil || *r.Puntos[0].Accuracy != 10 {
-		t.Errorf("hdop 2 debería dar 10 m, dio %v", r.Puntos[0].Accuracy)
+	if r.Points[0].Accuracy == nil || *r.Points[0].Accuracy != 10 {
+		t.Errorf("hdop 2 debería dar 10 m, dio %v", r.Points[0].Accuracy)
 	}
-	if r.Puntos[1].Accuracy == nil || *r.Puntos[1].Accuracy != 12 {
-		t.Errorf("accuracy = %v", r.Puntos[1].Accuracy)
+	if r.Points[1].Accuracy == nil || *r.Points[1].Accuracy != 12 {
+		t.Errorf("accuracy = %v", r.Points[1].Accuracy)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestParseWaypointsSueltos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if len(r.Puntos) != 1 {
-		t.Errorf("puntos = %d", len(r.Puntos))
+	if len(r.Points) != 1 {
+		t.Errorf("puntos = %d", len(r.Points))
 	}
 }
 

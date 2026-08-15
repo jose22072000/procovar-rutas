@@ -4,142 +4,142 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/procovar/procovar-rutas/api/internal/almacen"
-	"github.com/procovar/procovar-rutas/api/internal/calendario"
+	"github.com/procovar/procovar-rutas/api/internal/calendar"
+	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// El calendario de cumplimiento: la cuadrícula de vendedores × días laborables
+// El calendar de cumplimiento: la cuadrícula de sellers × días laborables
 // que es la pantalla de entrada del panel.
-func (s *Servidor) calendario(w http.ResponseWriter, r *http.Request) {
-	c := DeContexto(r)
+func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
 
-	desde, hasta, err := rangoDeConsulta(r)
+	desde, hasta, err := queryRange(r)
 	if err != nil {
-		responderError(w, http.StatusBadRequest, err.Error())
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// El alcance se calcula con la fecha CONSULTADA, no con hoy: si un supervisor
 	// pide agosto en octubre, ve el equipo que tenía en agosto.
-	filtro, err := c.Alcance(desde)
+	filtro, err := c.Scope(desde)
 	if err != nil {
-		responderError(w, http.StatusForbidden, err.Error())
+		respondError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	p := deFiltro(filtro)
-	if p.Vacio {
-		responder(w, http.StatusOK, map[string]any{"days": []any{}, "summary": []any{}})
+	p := fromFilter(filtro)
+	if p.Empty {
+		respond(w, http.StatusOK, map[string]any{"days": []any{}, "summary": []any{}})
 		return
 	}
 
-	dias, err := s.q.Calendario(r.Context(), almacen.CalendarioParams{
-		Desde: desde, Hasta: hasta,
-		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
+	dias, err := s.q.Calendar(r.Context(), store.CalendarParams{
+		FromDate: desde, ToDate: hasta,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
-		s.fallo(w, "calendario", err)
+		s.fail(w, "calendar", err)
 		return
 	}
 
-	resumen, err := s.q.ResumenIncidencias(r.Context(), almacen.ResumenIncidenciasParams{
-		Desde: desde, Hasta: hasta,
-		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
+	resumen, err := s.q.IncidentSummary(r.Context(), store.IncidentSummaryParams{
+		FromDate: desde, ToDate: hasta,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
-		s.fallo(w, "resumen", err)
+		s.fail(w, "resumen", err)
 		return
 	}
 
-	responder(w, http.StatusOK, map[string]any{
+	respond(w, http.StatusOK, map[string]any{
 		"from":    desde.Format(iso),
 		"to":      hasta.Format(iso),
 		"days":    aSellerDays(dias),
 		"summary": aSummaryRows(resumen),
 		// Los días laborables van al cliente para que la cuadrícula no tenga que
 		// suponer cuáles son: se configuran por sucursal.
-		"workdays": calendario.DiasLaborables(desde, hasta, nil),
+		"workdays": calendar.Workdays(desde, hasta, nil),
 	})
 }
 
-func (s *Servidor) vendedores(w http.ResponseWriter, r *http.Request) {
-	c := DeContexto(r)
+func (s *Server) sellers(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
 
-	filtro, err := c.Alcance(time.Now())
+	filtro, err := c.Scope(time.Now())
 	if err != nil {
-		responderError(w, http.StatusForbidden, err.Error())
+		respondError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	p := deFiltro(filtro)
-	if p.Vacio {
-		responder(w, http.StatusOK, []any{})
+	p := fromFilter(filtro)
+	if p.Empty {
+		respond(w, http.StatusOK, []any{})
 		return
 	}
 
-	lista, err := s.q.TrabajadoresDelAlcance(r.Context(), almacen.TrabajadoresDelAlcanceParams{
-		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
+	lista, err := s.q.SellersInScope(r.Context(), store.SellersInScopeParams{
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
-		s.fallo(w, "vendedores", err)
+		s.fail(w, "sellers", err)
 		return
 	}
-	responder(w, http.StatusOK, aSellers(lista))
+	respond(w, http.StatusOK, aSellers(lista))
 }
 
 // El visor: el día de un vendedor con sus puntos y sus paradas.
-func (s *Servidor) dia(w http.ResponseWriter, r *http.Request) {
-	c := DeContexto(r)
+func (s *Server) day(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
 
 	trabajadorID := r.URL.Query().Get("seller")
 	if trabajadorID == "" {
-		responderError(w, http.StatusBadRequest, "falta el vendedor")
+		respondError(w, http.StatusBadRequest, "falta el vendedor")
 		return
 	}
-	fecha, err := fechaDe(r.URL.Query().Get("date"))
+	fecha, err := parseDate(r.URL.Query().Get("date"))
 	if err != nil {
-		responderError(w, http.StatusBadRequest, err.Error())
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	filtro, err := c.Alcance(fecha)
+	filtro, err := c.Scope(fecha)
 	if err != nil {
-		responderError(w, http.StatusForbidden, err.Error())
+		respondError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	p := deFiltro(filtro)
-	if p.Vacio {
-		responderError(w, http.StatusForbidden, "sin acceso a ese vendedor")
+	p := fromFilter(filtro)
+	if p.Empty {
+		respondError(w, http.StatusForbidden, "sin acceso a ese vendedor")
 		return
 	}
 
-	dia, err := s.q.DiaDeTrabajador(r.Context(), almacen.DiaDeTrabajadorParams{
-		TrabajadorID: trabajadorID, Fecha: fecha,
-		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
+	day, err := s.q.SellerDay(r.Context(), store.SellerDayParams{
+		SellerID: trabajadorID, Date: fecha,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
 		// No distinguir "no existe" de "no puedes verlo" es deliberado: si el
 		// mensaje fuera distinto, cualquiera podría averiguar qué días tiene un
 		// vendedor de otro equipo probando fechas.
-		responderError(w, http.StatusNotFound, "sin datos para ese día")
+		respondError(w, http.StatusNotFound, "sin datos para ese día")
 		return
 	}
 
-	zona := s.zonaDeSucursal(r, dia.SucursalID)
+	zona := s.branchZone(r, day.BranchID)
 	inicio, fin := "00:00", "23:59"
 	if r.URL.Query().Get("workday") != "full" {
-		inicio, fin = s.jornadaDeSucursal(r, dia.SucursalID)
+		inicio, fin = s.branchWorkday(r, day.BranchID)
 	}
 
-	puntos, err := s.q.PuntosDeDia(r.Context(), almacen.PuntosDeDiaParams{
-		TrackDayID: dia.ID, Zona: zona, JornadaInicio: inicio, JornadaFin: fin,
+	puntos, err := s.q.DayPoints(r.Context(), store.DayPointsParams{
+		TrackDayID: day.ID, Zone: zona, WorkdayStart: inicio, WorkdayEnd: fin,
 	})
 	if err != nil {
-		s.fallo(w, "puntos", err)
+		s.fail(w, "puntos", err)
 		return
 	}
 
-	paradas, err := s.q.ParadasDeDia(r.Context(), dia.ID)
+	paradas, err := s.q.DayStops(r.Context(), day.ID)
 	if err != nil {
-		s.fallo(w, "paradas", err)
+		s.fail(w, "paradas", err)
 		return
 	}
 
@@ -147,64 +147,64 @@ func (s *Servidor) dia(w http.ResponseWriter, r *http.Request) {
 	// <quién>": sin esto saldría el identificador. Si la consulta falla no se
 	// tumba la página por un rótulo; se cae al identificador.
 	nombreVendedor := trabajadorID
-	if t, err := s.q.TrabajadorPorID(r.Context(), trabajadorID); err == nil {
-		nombreVendedor = t.Nombre
+	if t, err := s.q.SellerByID(r.Context(), trabajadorID); err == nil {
+		nombreVendedor = t.Name
 	}
 
-	responder(w, http.StatusOK, map[string]any{
-		"day":      aDayDetail(dia, nombreVendedor),
+	respond(w, http.StatusOK, map[string]any{
+		"day":      aDayDetail(day, nombreVendedor),
 		"points":   aTrackPoints(puntos),
 		"stops":    aStops(paradas),
 		"timezone": zona,
 	})
 }
 
-func (s *Servidor) semana(w http.ResponseWriter, r *http.Request) {
-	c := DeContexto(r)
+func (s *Server) week(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
 
 	trabajadorID := r.URL.Query().Get("seller")
 	if trabajadorID == "" {
-		responderError(w, http.StatusBadRequest, "falta el vendedor")
+		respondError(w, http.StatusBadRequest, "falta el vendedor")
 		return
 	}
-	fecha, err := fechaDe(r.URL.Query().Get("date"))
+	fecha, err := parseDate(r.URL.Query().Get("date"))
 	if err != nil {
-		responderError(w, http.StatusBadRequest, err.Error())
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// La semana del panel es LUNES A VIERNES, que es la jornada de la empresa.
-	dias := calendario.SemanaLaboral(fecha)
+	// La week del panel es LUNES A VIERNES, que es la jornada de la empresa.
+	dias := calendar.WorkWeek(fecha)
 	desde, hasta := dias[0], dias[len(dias)-1]
 
-	filtro, err := c.Alcance(desde)
+	filtro, err := c.Scope(desde)
 	if err != nil {
-		responderError(w, http.StatusForbidden, err.Error())
+		respondError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	p := deFiltro(filtro)
-	if p.Vacio {
-		responderError(w, http.StatusForbidden, "sin acceso a ese vendedor")
+	p := fromFilter(filtro)
+	if p.Empty {
+		respondError(w, http.StatusForbidden, "sin acceso a ese vendedor")
 		return
 	}
 
 	nombreSemana := trabajadorID
-	if t, err := s.q.TrabajadorPorID(r.Context(), trabajadorID); err == nil {
-		nombreSemana = t.Nombre
+	if t, err := s.q.SellerByID(r.Context(), trabajadorID); err == nil {
+		nombreSemana = t.Name
 	}
 
-	filas, err := s.q.SemanaDeTrabajador(r.Context(), almacen.SemanaDeTrabajadorParams{
-		TrabajadorID: trabajadorID, Desde: desde, Hasta: hasta,
-		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
+	filas, err := s.q.SellerWeek(r.Context(), store.SellerWeekParams{
+		SellerID: trabajadorID, FromDate: desde, ToDate: hasta,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
-		s.fallo(w, "semana", err)
+		s.fail(w, "week", err)
 		return
 	}
 
-	responder(w, http.StatusOK, map[string]any{
+	respond(w, http.StatusOK, map[string]any{
 		"from": desde.Format(iso),
 		"to":   hasta.Format(iso),
-		"days": aSellerDaysDeTrackDay(filas, nombreSemana),
+		"days": aSellerDaysFromTrackDay(filas, nombreSemana),
 	})
 }

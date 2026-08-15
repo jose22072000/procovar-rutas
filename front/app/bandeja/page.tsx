@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useEventos } from "@/lib/eventos";
 import { enviar, pedir } from "@/lib/api";
 
 interface FicheroBandeja {
@@ -55,6 +56,11 @@ export default function Bandeja() {
       setError((e as Error).message);
     }
   }
+
+  // Un fichero nuevo, o uno que otra persona acaba de asignar.
+  useEventos(["file"], () => {
+    void cargar();
+  });
 
   useEffect(() => {
     cargar();

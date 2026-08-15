@@ -8,7 +8,7 @@
 //
 // El parser no decide nada de negocio: extrae, normaliza y cuenta. Quién es el
 // vendedor lo resuelve alias.go, y si el día fue bueno o malo, el paquete
-// metricas.
+// metrics.
 package gpx
 
 import (
@@ -20,8 +20,8 @@ import (
 	"time"
 )
 
-// Punto es un fix del GPS ya normalizado.
-type Punto struct {
+// Point es un fix del GPS ya normalizado.
+type Point struct {
 	Lat float64
 	Lon float64
 	Ele *float64
@@ -32,17 +32,17 @@ type Punto struct {
 	Seq      int
 }
 
-// Parseado es el resultado de leer un fichero.
-type Parseado struct {
-	Puntos []Punto
-	// SinHora cuenta los puntos que no traían <time>. Si iguala a len(Puntos),
+// Parsed es el resultado de leer un fichero.
+type Parsed struct {
+	Points []Point
+	// NoTime cuenta los puntos que no traían <time>. Si iguala a len(Points),
 	// no hay jornada que medir.
-	SinHora int
-	// Pistas son los textos de los que se puede deducir el dueño del fichero:
+	NoTime int
+	// Hints son los textos de los que se puede deducir el dueño del fichero:
 	// nombre de la pista, autor, programa que lo generó.
-	Pistas    []string
-	PrimerFix *time.Time
-	UltimoFix *time.Time
+	Hints    []string
+	FirstFix *time.Time
+	LastFix  *time.Time
 }
 
 // --- Estructuras de deserialización XML ------------------------------------
@@ -127,7 +127,7 @@ func parseHora(s string) *time.Time {
 // Devuelve error solo cuando el fichero entero es inservible (XML roto, sin
 // raíz <gpx>, sin ningún punto). Un punto malo suelto no invalida el fichero:
 // se descarta y el resto de la ruta se aprovecha.
-func Parse(datos []byte) (*Parseado, error) {
+func Parse(datos []byte) (*Parsed, error) {
 	var doc xmlGpx
 	if err := xml.Unmarshal(datos, &doc); err != nil {
 		return nil, fmt.Errorf("XML ilegible: %w", err)
@@ -146,7 +146,7 @@ func Parse(datos []byte) (*Parseado, error) {
 	agregarPista(doc.Metadata.Name)
 	agregarPista(doc.Metadata.Author.Name)
 
-	puntos := []Punto{}
+	puntos := []Point{}
 	agregar := func(p xmlPunto) {
 		// Coordenadas imposibles: exportador roto o fichero corrupto. Se descarta
 		// el punto, no el fichero.
@@ -158,7 +158,7 @@ func Parse(datos []byte) (*Parseado, error) {
 		if p.Lat == 0 && p.Lon == 0 {
 			return
 		}
-		puntos = append(puntos, Punto{
+		puntos = append(puntos, Point{
 			Lat:      p.Lat,
 			Lon:      p.Lon,
 			Ele:      p.Ele,
@@ -209,16 +209,16 @@ func Parse(datos []byte) (*Parseado, error) {
 		puntos[i].Seq = i
 	}
 
-	res := &Parseado{Puntos: puntos, Pistas: pistas}
+	res := &Parsed{Points: puntos, Hints: pistas}
 	for _, p := range puntos {
 		if p.Ts == nil {
-			res.SinHora++
+			res.NoTime++
 			continue
 		}
-		if res.PrimerFix == nil {
-			res.PrimerFix = p.Ts
+		if res.FirstFix == nil {
+			res.FirstFix = p.Ts
 		}
-		res.UltimoFix = p.Ts
+		res.LastFix = p.Ts
 	}
 
 	return res, nil

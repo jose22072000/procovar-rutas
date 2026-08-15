@@ -18,7 +18,7 @@ import (
 //
 // El montaje real de Procovar: cada sucursal tiene su propia cuenta de Google,
 // con el nombre de la sucursal, y las carpetas de rutas viven dentro. Es el
-// mismo modelo que ya usa n8n, donde hay una credencial "Cuenta padre" y otras
+// mismo modelo que ya usa n8n, donde hay una credencial "Account padre" y otras
 // por sucursal ("Granma", …).
 //
 // Por eso el sistema no habla con "un Drive" sino con un JUEGO de cuentas, y
@@ -26,12 +26,12 @@ import (
 // comparten en una sola cuenta, todas las fuentes apuntan a la misma clave y
 // esto sigue funcionando sin tocar nada.
 
-// Cuenta es la credencial de una cuenta de Google.
-type Cuenta struct {
-	// Clave con la que la referencian las fuentes ("principal", "granma", …).
-	Clave string `json:"clave"`
-	// Tipo: "oauth" (como n8n) o "service_account".
-	Tipo string `json:"tipo"`
+// Account es la credencial de una cuenta de Google.
+type Account struct {
+	// Key con la que la referencian las fuentes ("principal", "granma", …).
+	Key string `json:"clave"`
+	// Type: "oauth" (como n8n) o "service_account".
+	Type string `json:"tipo"`
 
 	// OAuth: lo mismo que n8n guarda en su credencial de Google Drive.
 	ClientID     string `json:"clientId,omitempty"`
@@ -39,48 +39,48 @@ type Cuenta struct {
 	RefreshToken string `json:"refreshToken,omitempty"`
 
 	// Service account: el JSON de la clave.
-	CredencialJSON string `json:"credencialJson,omitempty"`
+	CredentialJSON string `json:"credencialJson,omitempty"`
 }
 
-// Juego mantiene un cliente por cuenta y los crea a demanda.
-type Juego struct {
-	cuentas  map[string]Cuenta
+// Set mantiene un cliente por cuenta y los crea a demanda.
+type Set struct {
+	cuentas  map[string]Account
 	clientes map[string]Cliente
 	mu       sync.Mutex
 }
 
-// CargarCuentas lee las credenciales de la configuración.
+// LoadAccounts lee las credenciales de la configuración.
 //
 // `datos` es un JSON con la lista de cuentas. Se admite también una sola cuenta
 // suelta, por comodidad cuando todavía no hay más que una.
-func CargarCuentas(datos []byte) (*Juego, error) {
+func LoadAccounts(datos []byte) (*Set, error) {
 	texto := strings.TrimSpace(string(datos))
 	if texto == "" {
 		return nil, fmt.Errorf("no hay ninguna cuenta de Google configurada")
 	}
 
-	var lista []Cuenta
+	var lista []Account
 	if err := json.Unmarshal([]byte(texto), &lista); err != nil {
-		var una Cuenta
+		var una Account
 		if err2 := json.Unmarshal([]byte(texto), &una); err2 != nil {
 			return nil, fmt.Errorf("las credenciales de Google no son un JSON válido: %w", err)
 		}
-		lista = []Cuenta{una}
+		lista = []Account{una}
 	}
 
-	j := &Juego{cuentas: map[string]Cuenta{}, clientes: map[string]Cliente{}}
+	j := &Set{cuentas: map[string]Account{}, clientes: map[string]Cliente{}}
 	for _, c := range lista {
-		if c.Clave == "" {
-			c.Clave = "principal"
+		if c.Key == "" {
+			c.Key = "principal"
 		}
-		if c.Tipo == "" {
+		if c.Type == "" {
 			if c.RefreshToken != "" {
-				c.Tipo = "oauth"
+				c.Type = "oauth"
 			} else {
-				c.Tipo = "service_account"
+				c.Type = "service_account"
 			}
 		}
-		j.cuentas[c.Clave] = c
+		j.cuentas[c.Key] = c
 	}
 	if len(j.cuentas) == 0 {
 		return nil, fmt.Errorf("la lista de cuentas de Google está vacía")
@@ -89,16 +89,16 @@ func CargarCuentas(datos []byte) (*Juego, error) {
 }
 
 // CargarCuentasDeFichero es lo mismo, leyendo de disco.
-func CargarCuentasDeFichero(ruta string) (*Juego, error) {
+func CargarCuentasDeFichero(ruta string) (*Set, error) {
 	datos, err := os.ReadFile(ruta)
 	if err != nil {
 		return nil, fmt.Errorf("leyendo %s: %w", ruta, err)
 	}
-	return CargarCuentas(datos)
+	return LoadAccounts(datos)
 }
 
-// Claves lista las cuentas configuradas.
-func (j *Juego) Claves() []string {
+// Keys lista las cuentas configuradas.
+func (j *Set) Keys() []string {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	out := make([]string, 0, len(j.cuentas))
@@ -113,7 +113,7 @@ func (j *Juego) Claves() []string {
 // Si la clave no existe se cae a "principal" en vez de fallar: una carpeta mal
 // etiquetada debe leerse con la cuenta por defecto, no quedarse sin barrer en
 // silencio. Si tampoco hay principal, entonces sí es un error.
-func (j *Juego) Para(ctx context.Context, clave string) (Cliente, error) {
+func (j *Set) Para(ctx context.Context, clave string) (Cliente, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -140,14 +140,14 @@ func (j *Juego) Para(ctx context.Context, clave string) (Cliente, error) {
 	return cli, nil
 }
 
-func abrir(ctx context.Context, c Cuenta) (Cliente, error) {
-	switch c.Tipo {
+func abrir(ctx context.Context, c Account) (Cliente, error) {
+	switch c.Type {
 	case "service_account":
-		return Nuevo(ctx, []byte(c.CredencialJSON))
+		return Nuevo(ctx, []byte(c.CredentialJSON))
 
 	case "oauth":
 		if c.ClientID == "" || c.ClientSecret == "" || c.RefreshToken == "" {
-			return nil, fmt.Errorf("a la cuenta %q le faltan clientId, clientSecret o refreshToken", c.Clave)
+			return nil, fmt.Errorf("a la cuenta %q le faltan clientId, clientSecret o refreshToken", c.Key)
 		}
 		cfg := &oauth2.Config{
 			ClientID:     c.ClientID,
@@ -161,11 +161,11 @@ func abrir(ctx context.Context, c Cuenta) (Cliente, error) {
 		fuente := cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: c.RefreshToken})
 		svc, err := drive.NewService(ctx, option.WithTokenSource(fuente))
 		if err != nil {
-			return nil, fmt.Errorf("abriendo Drive de %q: %w", c.Clave, err)
+			return nil, fmt.Errorf("abriendo Drive de %q: %w", c.Key, err)
 		}
 		return &clienteGoogle{svc: svc}, nil
 
 	default:
-		return nil, fmt.Errorf("tipo de credencial desconocido en %q: %s", c.Clave, c.Tipo)
+		return nil, fmt.Errorf("tipo de credencial desconocido en %q: %s", c.Key, c.Type)
 	}
 }

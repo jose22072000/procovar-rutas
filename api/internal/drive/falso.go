@@ -13,9 +13,9 @@ import (
 // esperar a que lleguen las carpetas reales.
 type Falso struct {
 	// Ficheros por ID de carpeta.
-	Carpetas map[string][]Fichero
-	// Contenido por ID de fichero.
-	Contenido map[string][]byte
+	Carpetas map[string][]File
+	// Content por ID de fichero.
+	Content map[string][]byte
 	// Fallos fuerza un error al descargar ese fichero, para probar que un
 	// fichero malo no tumba el barrido entero.
 	Fallos map[string]error
@@ -26,29 +26,29 @@ type Falso struct {
 
 func NuevoFalso() *Falso {
 	return &Falso{
-		Carpetas:  map[string][]Fichero{},
-		Contenido: map[string][]byte{},
-		Fallos:    map[string]error{},
+		Carpetas: map[string][]File{},
+		Content:  map[string][]byte{},
+		Fallos:   map[string]error{},
 	}
 }
 
 // Agregar mete un fichero en una carpeta.
-func (f *Falso) Agregar(folderID string, fich Fichero, contenido []byte) {
-	if fich.Modificado.IsZero() {
-		fich.Modificado = time.Now().UTC()
+func (f *Falso) Agregar(folderID string, fich File, contenido []byte) {
+	if fich.Modified.IsZero() {
+		fich.Modified = time.Now().UTC()
 	}
-	if fich.Creado.IsZero() {
-		fich.Creado = fich.Modificado
+	if fich.Created.IsZero() {
+		fich.Created = fich.Modified
 	}
-	fich.Tamano = int64(len(contenido))
+	fich.Size = int64(len(contenido))
 	f.Carpetas[folderID] = append(f.Carpetas[folderID], fich)
-	f.Contenido[fich.ID] = contenido
+	f.Content[fich.ID] = contenido
 }
 
-func (f *Falso) Listar(_ context.Context, folderID string, desde time.Time, max int) ([]Fichero, error) {
-	out := []Fichero{}
+func (f *Falso) Listar(_ context.Context, folderID string, desde time.Time, max int) ([]File, error) {
+	out := []File{}
 	for _, fich := range f.Carpetas[folderID] {
-		if !desde.IsZero() && !fich.Modificado.After(desde) {
+		if !desde.IsZero() && !fich.Modified.After(desde) {
 			continue
 		}
 		if len(out) >= max {
@@ -64,7 +64,7 @@ func (f *Falso) Descargar(_ context.Context, fileID string) ([]byte, error) {
 	if err, mal := f.Fallos[fileID]; mal {
 		return nil, err
 	}
-	datos, ok := f.Contenido[fileID]
+	datos, ok := f.Content[fileID]
 	if !ok {
 		return nil, fmt.Errorf("fichero %s no encontrado", fileID)
 	}

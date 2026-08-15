@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useEventos } from "@/lib/eventos";
 import { enviar, pedir } from "@/lib/api";
 
 interface Fuente {
@@ -73,6 +74,11 @@ export default function Administracion() {
       setError((e as Error).message);
     }
   }
+
+  // La cola y los barridos se mueven solos: que la pantalla lo siga sin recargar.
+  useEventos(["queue", "file", "scan"], () => {
+    void cargar();
+  });
 
   useEffect(() => {
     cargar();

@@ -3,21 +3,21 @@ package api
 import (
 	"time"
 
-	"github.com/procovar/procovar-rutas/api/internal/almacen"
+	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
 // Lo que sale por el API, en inglés y con forma propia.
 //
 // Antes los handlers serializaban directamente las structs que genera sqlc, y eso
 // tenía dos problemas. Uno: las claves salían con el nombre del campo de Go
-// (`TrabajadorID`, `KmNetos`), o sea el esquema de la base asomando por la API en
+// (`SellerID`, `KmNetos`), o sea el esquema de la base asomando por la API en
 // dos idiomas a la vez. Y dos, más serio: cualquier `ALTER TABLE` cambiaba el JSON
 // sin que nadie lo decidiera, y el front se rompía sin tocar una línea del front.
 //
 // Con estos tipos, el nombre de una columna es asunto de la base y el nombre de un
 // campo del JSON es asunto del API. Se traduce aquí, en un solo sitio.
 
-// SellerDay es una celda del calendario: un vendedor en un día.
+// SellerDay es una celda del calendar: un vendedor en un día.
 type SellerDay struct {
 	SellerID   string     `json:"sellerId"`
 	Seller     string     `json:"seller"`
@@ -33,22 +33,22 @@ type SellerDay struct {
 	PlaceLabel *string    `json:"placeLabel"`
 }
 
-func aSellerDay(f almacen.CalendarioRow) SellerDay {
+func aSellerDay(f store.CalendarRow) SellerDay {
 	return SellerDay{
-		SellerID: f.TrabajadorID,
-		Seller:   f.Trabajador,
-		BranchID: f.SucursalID,
+		SellerID: f.SellerID,
+		Seller:   f.Seller,
+		BranchID: f.BranchID,
 		// Solo la fecha: la hora sobra en una cuadrícula por días y una marca
 		// completa arrastraría la zona horaria del servidor al cliente.
-		Date:       f.Fecha.Format(iso),
-		Status:     string(f.Estado),
-		NetKm:      f.KmNetos,
-		Coverage:   f.Cobertura,
-		FirstFix:   f.PrimerFix,
-		LastFix:    f.UltimoFix,
-		Flags:      f.Banderas,
-		SpreadM:    f.RadioDispersion,
-		PlaceLabel: f.LugarTexto,
+		Date:       f.Date.Format(iso),
+		Status:     string(f.Status),
+		NetKm:      f.NetKm,
+		Coverage:   f.Coverage,
+		FirstFix:   f.FirstFix,
+		LastFix:    f.LastFix,
+		Flags:      f.Flags,
+		SpreadM:    f.SpreadM,
+		PlaceLabel: f.PlaceLabel,
 	}
 }
 
@@ -63,15 +63,15 @@ type SummaryRow struct {
 	TotalKm        float64 `json:"totalKm"`
 }
 
-func aSummaryRow(f almacen.ResumenIncidenciasRow) SummaryRow {
+func aSummaryRow(f store.IncidentSummaryRow) SummaryRow {
 	return SummaryRow{
-		SellerID:       f.TrabajadorID,
-		Seller:         f.Trabajador,
-		DaysNoFile:     f.SinFichero,
-		DaysNoDate:     f.SinFecha,
-		DaysNoMovement: f.SinMovimiento,
-		DaysOk:         f.DiasOk,
-		TotalKm:        f.KmTotal,
+		SellerID:       f.SellerID,
+		Seller:         f.Seller,
+		DaysNoFile:     f.DaysNoFile,
+		DaysNoDate:     f.DaysNoDate,
+		DaysNoMovement: f.DaysNoMovement,
+		DaysOk:         f.DaysOk,
+		TotalKm:        f.TotalKm,
 	}
 }
 
@@ -83,8 +83,8 @@ type Seller struct {
 	Active   bool   `json:"active"`
 }
 
-func aSeller(t almacen.Trabajador) Seller {
-	return Seller{ID: t.ID, Name: t.Nombre, BranchID: t.SucursalID, Active: t.Activo}
+func aSeller(t store.Seller) Seller {
+	return Seller{ID: t.ID, Name: t.Name, BranchID: t.BranchID, Active: t.Active}
 }
 
 // DayDetail es la ficha del día que abre el visor del mapa.
@@ -105,22 +105,22 @@ type DayDetail struct {
 	PlaceLabel  *string    `json:"placeLabel"`
 }
 
-func aDayDetail(d almacen.DiaDeTrabajadorRow, vendedor string) DayDetail {
+func aDayDetail(d store.SellerDayRow, vendedor string) DayDetail {
 	return DayDetail{
 		ID:          d.ID,
 		Seller:      vendedor,
-		Date:        d.Fecha.Format(iso),
-		Status:      string(d.Estado),
-		NetKm:       d.KmNetos,
-		Coverage:    d.Cobertura,
-		MinMovement: d.MinMovimiento,
-		MinStopped:  d.MinParado,
-		Gaps:        d.Huecos,
-		FirstFix:    d.PrimerFix,
-		LastFix:     d.UltimoFix,
-		SpreadM:     d.RadioDispersion,
-		Flags:       d.Banderas,
-		PlaceLabel:  d.LugarTexto,
+		Date:        d.Date.Format(iso),
+		Status:      string(d.Status),
+		NetKm:       d.NetKm,
+		Coverage:    d.Coverage,
+		MinMovement: d.MinMovement,
+		MinStopped:  d.MinStopped,
+		Gaps:        d.Gaps,
+		FirstFix:    d.FirstFix,
+		LastFix:     d.LastFix,
+		SpreadM:     d.SpreadM,
+		Flags:       d.Flags,
+		PlaceLabel:  d.PlaceLabel,
 	}
 }
 
@@ -134,7 +134,7 @@ type TrackPoint struct {
 	Seq     int32      `json:"seq"`
 }
 
-func aTrackPoint(p almacen.PuntosDeDiaRow) TrackPoint {
+func aTrackPoint(p store.DayPointsRow) TrackPoint {
 	return TrackPoint{
 		Ts: p.Ts, Lat: p.Lat, Lon: p.Lon,
 		Speed: p.Speed, Quality: string(p.Quality), Seq: p.Seq,
@@ -154,17 +154,17 @@ type Stop struct {
 	Seq         int32     `json:"seq"`
 }
 
-func aStop(p almacen.Stop) Stop {
+func aStop(p store.Stop) Stop {
 	return Stop{
-		ID: p.ID, Start: p.Inicio, End: p.Fin, DurationMin: p.DuracionMin,
+		ID: p.ID, Start: p.Start, End: p.End, DurationMin: p.DurationMin,
 		Lat: p.Lat, Lon: p.Lon,
-		ClientName: p.ClienteNombre, ClientDistM: p.DistanciaClienteM, Seq: p.Seq,
+		ClientName: p.ClientName, ClientDistM: p.ClientDistM, Seq: p.Seq,
 	}
 }
 
 // Los tres convierten una lista de golpe. Devuelven [] y no nil a propósito: `nil`
 // se serializa como `null` y el front tendría que comprobarlo en cada sitio.
-func aSellerDays(fs []almacen.CalendarioRow) []SellerDay {
+func aSellerDays(fs []store.CalendarRow) []SellerDay {
 	out := make([]SellerDay, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, aSellerDay(f))
@@ -172,31 +172,31 @@ func aSellerDays(fs []almacen.CalendarioRow) []SellerDay {
 	return out
 }
 
-// La semana de un vendedor sale de la tabla entera, no de la consulta del
-// calendario, así que llega con otro tipo. Se convierte a la MISMA forma: para el
+// La week de un vendedor sale de la tabla entera, no de la consulta del
+// calendar, así que llega con otro tipo. Se convierte a la MISMA forma: para el
 // front una celda es una celda, venga de donde venga.
-func aSellerDaysDeTrackDay(ds []almacen.TrackDay, vendedor string) []SellerDay {
+func aSellerDaysFromTrackDay(ds []store.TrackDay, vendedor string) []SellerDay {
 	out := make([]SellerDay, 0, len(ds))
 	for _, d := range ds {
 		out = append(out, SellerDay{
-			SellerID:   d.TrabajadorID,
+			SellerID:   d.SellerID,
 			Seller:     vendedor,
-			BranchID:   d.SucursalID,
-			Date:       d.Fecha.Format(iso),
-			Status:     string(d.Estado),
-			NetKm:      d.KmNetos,
-			Coverage:   d.Cobertura,
-			FirstFix:   d.PrimerFix,
-			LastFix:    d.UltimoFix,
-			Flags:      d.Banderas,
-			SpreadM:    d.RadioDispersion,
-			PlaceLabel: d.LugarTexto,
+			BranchID:   d.BranchID,
+			Date:       d.Date.Format(iso),
+			Status:     string(d.Status),
+			NetKm:      d.NetKm,
+			Coverage:   d.Coverage,
+			FirstFix:   d.FirstFix,
+			LastFix:    d.LastFix,
+			Flags:      d.Flags,
+			SpreadM:    d.SpreadM,
+			PlaceLabel: d.PlaceLabel,
 		})
 	}
 	return out
 }
 
-func aSummaryRows(fs []almacen.ResumenIncidenciasRow) []SummaryRow {
+func aSummaryRows(fs []store.IncidentSummaryRow) []SummaryRow {
 	out := make([]SummaryRow, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, aSummaryRow(f))
@@ -204,7 +204,7 @@ func aSummaryRows(fs []almacen.ResumenIncidenciasRow) []SummaryRow {
 	return out
 }
 
-func aSellers(ts []almacen.Trabajador) []Seller {
+func aSellers(ts []store.Seller) []Seller {
 	out := make([]Seller, 0, len(ts))
 	for _, t := range ts {
 		out = append(out, aSeller(t))
@@ -212,7 +212,7 @@ func aSellers(ts []almacen.Trabajador) []Seller {
 	return out
 }
 
-func aTrackPoints(ps []almacen.PuntosDeDiaRow) []TrackPoint {
+func aTrackPoints(ps []store.DayPointsRow) []TrackPoint {
 	out := make([]TrackPoint, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, aTrackPoint(p))
@@ -220,7 +220,7 @@ func aTrackPoints(ps []almacen.PuntosDeDiaRow) []TrackPoint {
 	return out
 }
 
-func aStops(ps []almacen.Stop) []Stop {
+func aStops(ps []store.Stop) []Stop {
 	out := make([]Stop, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, aStop(p))

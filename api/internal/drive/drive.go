@@ -21,24 +21,24 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Fichero es un .gpx visto en una carpeta.
-type Fichero struct {
+// File es un .gpx visto en una carpeta.
+type File struct {
 	ID string
-	// Nombre incluye la extensión.
-	Nombre string
-	// RutaCarpeta son las subcarpetas desde la raíz de la fuente, de fuera a
+	// Name incluye la extensión.
+	Name string
+	// FolderPath son las subcarpetas desde la raíz de la fuente, de fuera a
 	// dentro. Es lo que permite deducir el vendedor cuando el árbol lo dice.
-	RutaCarpeta []string
-	Tamano      int64
-	Creado      time.Time
-	Modificado  time.Time
+	FolderPath []string
+	Size       int64
+	Created    time.Time
+	Modified   time.Time
 }
 
 // Cliente es lo que la ingesta necesita de Drive. Nada más.
 type Cliente interface {
 	// Listar devuelve los .gpx de la carpeta y de sus subcarpetas. Si `desde` no
 	// es cero, solo los modificados después (barrido incremental).
-	Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]Fichero, error)
+	Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error)
 	// Descargar trae el contenido de un fichero.
 	Descargar(ctx context.Context, fileID string) ([]byte, error)
 }
@@ -69,8 +69,8 @@ type pendiente struct {
 
 const mimeCarpeta = "application/vnd.google-apps.folder"
 
-func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]Fichero, error) {
-	ficheros := []Fichero{}
+func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.Time, max int) ([]File, error) {
+	ficheros := []File{}
 	cola := []pendiente{{id: folderID, ruta: nil}}
 	visitadas := map[string]bool{}
 
@@ -117,13 +117,13 @@ func (c *clienteGoogle) Listar(ctx context.Context, folderID string, desde time.
 				if !esGpx(f.Name) {
 					continue
 				}
-				ficheros = append(ficheros, Fichero{
-					ID:          f.Id,
-					Nombre:      f.Name,
-					RutaCarpeta: actual.ruta,
-					Tamano:      f.Size,
-					Creado:      parseHora(f.CreatedTime),
-					Modificado:  parseHora(f.ModifiedTime),
+				ficheros = append(ficheros, File{
+					ID:         f.Id,
+					Name:       f.Name,
+					FolderPath: actual.ruta,
+					Size:       f.Size,
+					Created:    parseHora(f.CreatedTime),
+					Modified:   parseHora(f.ModifiedTime),
 				})
 			}
 			if res.NextPageToken == "" || len(ficheros) >= max {

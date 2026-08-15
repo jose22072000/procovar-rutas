@@ -16,15 +16,15 @@ import (
 // bandeja y un admin lo casa a mano UNA vez; el alias queda memorizado y no
 // vuelve a preguntar. Ningún fichero se pierde en silencio.
 
-// TipoFuente dice qué representa una carpeta de Drive. No se deduce del árbol:
+// SourceType dice qué representa una carpeta de Drive. No se deduce del árbol:
 // se declara al dar la carpeta de alta, porque el árbol real varía de una cuenta
 // padre a otra.
-type TipoFuente string
+type SourceType string
 
 const (
-	FuenteSucursal TipoFuente = "SUCURSAL"
-	FuenteVendedor TipoFuente = "VENDEDOR"
-	FuenteMixta    TipoFuente = "MIXTA"
+	FuenteSucursal SourceType = "SUCURSAL"
+	FuenteVendedor SourceType = "VENDEDOR"
+	FuenteMixta    SourceType = "MIXTA"
 )
 
 // Via indica qué regla acertó, para poder explicarlo en la bandeja y depurar.
@@ -38,28 +38,28 @@ const (
 	ViaNinguna Via = ""
 )
 
-// Contexto es todo lo que se sabe de un fichero al intentar resolverlo.
-type Contexto struct {
-	TipoFuente TipoFuente
-	// TrabajadorIDFuente es el dueño de la carpeta entera, si TipoFuente = VENDEDOR.
-	TrabajadorIDFuente string
-	// NombreFuente es el nombre de la carpeta dada de alta. En el montaje real
+// Context es todo lo que se sabe de un fichero al intentar resolverlo.
+type Context struct {
+	SourceType SourceType
+	// SourceSellerID es el dueño de la carpeta entera, si SourceType = VENDEDOR.
+	SourceSellerID string
+	// SourceName es el nombre de la carpeta dada de alta. En el montaje real
 	// de Procovar cada carpeta compartida ES el perfil de GPS de un vendedor
 	// ("GPS Diana Acosta", "STGGari"), así que muchas veces es la única pista.
-	NombreFuente string
-	// RutaCarpeta son las subcarpetas dentro de la fuente, de fuera a dentro.
-	RutaCarpeta   []string
-	NombreFichero string
-	// PistasGpx son los textos sacados del propio fichero.
-	PistasGpx []string
+	SourceName string
+	// FolderPath son las subcarpetas dentro de la fuente, de fuera a dentro.
+	FolderPath []string
+	FileName   string
+	// GpxHints son los textos sacados del propio fichero.
+	GpxHints []string
 	// Alias mapea alias normalizado -> ID de trabajador.
 	Alias map[string]string
 }
 
-// Resolucion es el veredicto.
-type Resolucion struct {
-	TrabajadorID string
-	Via          Via
+// Resolution es el veredicto.
+type Resolution struct {
+	SellerID string
+	Via      Via
 	// Pista es el texto por el que se preguntará al admin si no se resolvió.
 	Pista string
 }
@@ -106,58 +106,58 @@ func candidatosDeNombre(nombre string) []string {
 }
 
 // ResolverTrabajador aplica la cadena de reglas; la primera que acierta gana.
-func ResolverTrabajador(ctx Contexto) Resolucion {
+func ResolverTrabajador(ctx Context) Resolution {
 	// 1. La carpeta entera es de un vendedor: no hay nada que deducir.
-	if ctx.TipoFuente == FuenteVendedor && ctx.TrabajadorIDFuente != "" {
-		return Resolucion{TrabajadorID: ctx.TrabajadorIDFuente, Via: ViaFuente}
+	if ctx.SourceType == FuenteVendedor && ctx.SourceSellerID != "" {
+		return Resolution{SellerID: ctx.SourceSellerID, Via: ViaFuente}
 	}
 
 	// 2. Subcarpetas, de la más interna hacia fuera: "Camagüey/Alexander/…" es
 	//    de Alexander, no de Camagüey.
-	for i := len(ctx.RutaCarpeta) - 1; i >= 0; i-- {
-		carpeta := ctx.RutaCarpeta[i]
+	for i := len(ctx.FolderPath) - 1; i >= 0; i-- {
+		carpeta := ctx.FolderPath[i]
 		if id, ok := ctx.Alias[Normalizar(carpeta)]; ok {
-			return Resolucion{TrabajadorID: id, Via: ViaCarpeta, Pista: carpeta}
+			return Resolution{SellerID: id, Via: ViaCarpeta, Pista: carpeta}
 		}
 	}
 
 	// 3. Nombre de la propia carpeta dada de alta.
-	if ctx.NombreFuente != "" {
-		if id, ok := ctx.Alias[Normalizar(ctx.NombreFuente)]; ok {
-			return Resolucion{TrabajadorID: id, Via: ViaCarpeta, Pista: ctx.NombreFuente}
+	if ctx.SourceName != "" {
+		if id, ok := ctx.Alias[Normalizar(ctx.SourceName)]; ok {
+			return Resolution{SellerID: id, Via: ViaCarpeta, Pista: ctx.SourceName}
 		}
 	}
 
 	// 4. Nombre del fichero.
-	for _, cand := range candidatosDeNombre(ctx.NombreFichero) {
+	for _, cand := range candidatosDeNombre(ctx.FileName) {
 		if cand == "" {
 			continue
 		}
 		if id, ok := ctx.Alias[Normalizar(cand)]; ok {
-			return Resolucion{TrabajadorID: id, Via: ViaFichero, Pista: cand}
+			return Resolution{SellerID: id, Via: ViaFichero, Pista: cand}
 		}
 	}
 
-	// 5. Contenido del GPX: muchos loggers meten ahí el nombre del dispositivo.
-	for _, pista := range ctx.PistasGpx {
+	// 5. Content del GPX: muchos loggers meten ahí el nombre del dispositivo.
+	for _, pista := range ctx.GpxHints {
 		if id, ok := ctx.Alias[Normalizar(pista)]; ok {
-			return Resolucion{TrabajadorID: id, Via: ViaGpx, Pista: pista}
+			return Resolution{SellerID: id, Via: ViaGpx, Pista: pista}
 		}
 	}
 
 	// Sin suerte: a la bandeja, con el texto más informativo que tengamos para
 	// que el admin vea QUÉ hay que casar.
-	pista := ctx.NombreFichero
-	if len(ctx.PistasGpx) > 0 {
-		pista = ctx.PistasGpx[0]
+	pista := ctx.FileName
+	if len(ctx.GpxHints) > 0 {
+		pista = ctx.GpxHints[0]
 	}
-	if ctx.NombreFuente != "" {
-		pista = ctx.NombreFuente
+	if ctx.SourceName != "" {
+		pista = ctx.SourceName
 	}
-	if len(ctx.RutaCarpeta) > 0 {
-		pista = ctx.RutaCarpeta[len(ctx.RutaCarpeta)-1]
+	if len(ctx.FolderPath) > 0 {
+		pista = ctx.FolderPath[len(ctx.FolderPath)-1]
 	}
-	return Resolucion{Via: ViaNinguna, Pista: pista}
+	return Resolution{Via: ViaNinguna, Pista: pista}
 }
 
 // FechaDelNombre saca la fecha de nombres como "RUTA_2026-08-15.gpx",

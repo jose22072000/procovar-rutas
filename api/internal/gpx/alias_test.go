@@ -22,48 +22,48 @@ func aliasDePrueba() map[string]string {
 }
 
 func TestResolverLaCarpetaDeVendedorMandaSobreTodo(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:         FuenteVendedor,
-		TrabajadorIDFuente: "t-yas",
-		NombreFichero:      "alexander_2026-08-10.gpx",
-		Alias:              aliasDePrueba(),
+	r := ResolverTrabajador(Context{
+		SourceType:     FuenteVendedor,
+		SourceSellerID: "t-yas",
+		FileName:       "alexander_2026-08-10.gpx",
+		Alias:          aliasDePrueba(),
 	})
-	if r.TrabajadorID != "t-yas" || r.Via != ViaFuente {
+	if r.SellerID != "t-yas" || r.Via != ViaFuente {
 		t.Errorf("= %+v", r)
 	}
 }
 
 func TestResolverUsaLaSubcarpetaMasInterna(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteSucursal,
-		RutaCarpeta:   []string{"Camaguey", "Alexander"},
-		NombreFichero: "ruta.gpx",
-		Alias:         aliasDePrueba(),
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteSucursal,
+		FolderPath: []string{"Camaguey", "Alexander"},
+		FileName:   "ruta.gpx",
+		Alias:      aliasDePrueba(),
 	})
-	if r.TrabajadorID != "t-alex" || r.Via != ViaCarpeta {
+	if r.SellerID != "t-alex" || r.Via != ViaCarpeta {
 		t.Errorf("= %+v", r)
 	}
 }
 
 func TestResolverPorNombreIgnorandoLaFecha(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteSucursal,
-		NombreFichero: "Alexander_2026-08-10.gpx",
-		Alias:         aliasDePrueba(),
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteSucursal,
+		FileName:   "Alexander_2026-08-10.gpx",
+		Alias:      aliasDePrueba(),
 	})
-	if r.TrabajadorID != "t-alex" || r.Via != ViaFichero {
+	if r.SellerID != "t-alex" || r.Via != ViaFichero {
 		t.Errorf("= %+v", r)
 	}
 }
 
 func TestResolverCaeAlContenidoDelGpx(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteSucursal,
-		NombreFichero: "track_001.gpx",
-		PistasGpx:     []string{"YASMANI"},
-		Alias:         aliasDePrueba(),
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteSucursal,
+		FileName:   "track_001.gpx",
+		GpxHints:   []string{"YASMANI"},
+		Alias:      aliasDePrueba(),
 	})
-	if r.TrabajadorID != "t-yas" || r.Via != ViaGpx {
+	if r.SellerID != "t-yas" || r.Via != ViaGpx {
 		t.Errorf("= %+v", r)
 	}
 }
@@ -71,13 +71,13 @@ func TestResolverCaeAlContenidoDelGpx(t *testing.T) {
 // Cuando ninguna regla acierta, el fichero va a la bandeja CON la pista que el
 // admin tiene que casar. Ningún fichero se pierde en silencio.
 func TestResolverMandaALaBandejaConPistaUtil(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteSucursal,
-		NombreFichero: "track_001.gpx",
-		PistasGpx:     []string{"Redmi Note 12"},
-		Alias:         aliasDePrueba(),
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteSucursal,
+		FileName:   "track_001.gpx",
+		GpxHints:   []string{"Redmi Note 12"},
+		Alias:      aliasDePrueba(),
 	})
-	if r.TrabajadorID != "" {
+	if r.SellerID != "" {
 		t.Errorf("no debería resolver: %+v", r)
 	}
 	if r.Pista != "Redmi Note 12" {
@@ -107,25 +107,25 @@ func TestFechaDelNombre(t *testing.T) {
 // el vendedor y TODO acabaría en la bandeja.
 func TestResolverPorElNombreDeLaCarpetaDadaDeAlta(t *testing.T) {
 	alias := map[string]string{Normalizar("GPS Diana Acosta"): "t-diana"}
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteMixta,
-		NombreFuente:  "GPS Diana Acosta",
-		NombreFichero: "20260812.gpx",
-		Alias:         alias,
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteMixta,
+		SourceName: "GPS Diana Acosta",
+		FileName:   "20260812.gpx",
+		Alias:      alias,
 	})
-	if r.TrabajadorID != "t-diana" || r.Via != ViaCarpeta {
+	if r.SellerID != "t-diana" || r.Via != ViaCarpeta {
 		t.Errorf("= %+v", r)
 	}
 }
 
 func TestCarpetaSinCasarLlevaSuNombreALaBandeja(t *testing.T) {
-	r := ResolverTrabajador(Contexto{
-		TipoFuente:    FuenteMixta,
-		NombreFuente:  "TABLET3",
-		NombreFichero: "20260812.gpx",
-		Alias:         map[string]string{},
+	r := ResolverTrabajador(Context{
+		SourceType: FuenteMixta,
+		SourceName: "TABLET3",
+		FileName:   "20260812.gpx",
+		Alias:      map[string]string{},
 	})
-	if r.TrabajadorID != "" || r.Pista != "TABLET3" {
+	if r.SellerID != "" || r.Pista != "TABLET3" {
 		t.Errorf("= %+v", r)
 	}
 }

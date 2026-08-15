@@ -3,11 +3,11 @@ package api
 import (
 	"time"
 
-	"github.com/procovar/procovar-rutas/api/internal/almacen"
+	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// Los mismos DTOs que en dto.go, para la parte de administración: bandeja,
-// alias, fuentes y barridos. Mismo motivo: que el nombre de una columna no sea
+// Los mismos DTOs que en dto.go, para la parte de administración: inbox,
+// alias, sources y scans. Mismo motivo: que el nombre de una columna no sea
 // el nombre de un campo del JSON.
 //
 // La credencial de Google de una fuente NO sale nunca: es el contenido de la
@@ -33,45 +33,45 @@ type InboxFile struct {
 	Source      string     `json:"source"`
 }
 
-func aInboxFile(f almacen.BandejaRow) InboxFile {
+func aInboxFile(f store.InboxRow) InboxFile {
 	var fecha *string
-	if f.Fecha != nil {
-		s := f.Fecha.Format(iso)
+	if f.Date != nil {
+		s := f.Date.Format(iso)
 		fecha = &s
 	}
 	return InboxFile{
-		ID: f.ID, Name: f.Nombre, FolderPath: f.RutaCarpeta,
-		Status: string(f.Estado), Error: f.Error,
-		SellerID: f.TrabajadorID, BranchID: f.SucursalID, Date: fecha,
-		DateSource: string(f.OrigenFecha),
-		Points:     f.PuntosTotal, ValidPoints: f.PuntosValidos,
-		FirstFix: f.PrimerFix, LastFix: f.UltimoFix,
-		AliasHint: f.PistaAlias, ImportedAt: f.ImportadoAt, Source: f.Fuente,
+		ID: f.ID, Name: f.Name, FolderPath: f.FolderPath,
+		Status: string(f.Status), Error: f.Error,
+		SellerID: f.SellerID, BranchID: f.BranchID, Date: fecha,
+		DateSource: string(f.DateSource),
+		Points:     f.TotalPoints, ValidPoints: f.ValidPoints,
+		FirstFix: f.FirstFix, LastFix: f.LastFix,
+		AliasHint: f.AliasHint, ImportedAt: f.ImportedAt, Source: f.Source,
 	}
 }
 
-// aAssignedFile: lo que devuelve asignar un fichero de la bandeja. Es la misma
-// forma que InboxFile, pero viene de la tabla y no de la consulta de bandeja, así
+// aAssignedFile: lo que devuelve assign un fichero de la inbox. Es la misma
+// forma que InboxFile, pero viene de la tabla y no de la consulta de inbox, así
 // que no trae el nombre de la fuente.
-func aAssignedFile(f almacen.GpxFile) InboxFile {
+func aAssignedFile(f store.GpxFile) InboxFile {
 	var fecha *string
-	if f.Fecha != nil {
-		d := f.Fecha.Format(iso)
+	if f.Date != nil {
+		d := f.Date.Format(iso)
 		fecha = &d
 	}
 	return InboxFile{
-		ID: f.ID, Name: f.Nombre, FolderPath: f.RutaCarpeta,
-		Status: string(f.Estado), Error: f.Error,
-		SellerID: f.TrabajadorID, BranchID: f.SucursalID, Date: fecha,
-		DateSource: string(f.OrigenFecha),
-		Points:     f.PuntosTotal, ValidPoints: f.PuntosValidos,
-		FirstFix: f.PrimerFix, LastFix: f.UltimoFix,
-		AliasHint: f.PistaAlias, ImportedAt: f.ImportadoAt,
+		ID: f.ID, Name: f.Name, FolderPath: f.FolderPath,
+		Status: string(f.Status), Error: f.Error,
+		SellerID: f.SellerID, BranchID: f.BranchID, Date: fecha,
+		DateSource: string(f.DateSource),
+		Points:     f.TotalPoints, ValidPoints: f.ValidPoints,
+		FirstFix: f.FirstFix, LastFix: f.LastFix,
+		AliasHint: f.AliasHint, ImportedAt: f.ImportedAt,
 	}
 }
 
 // DeviceAlias recuerda que un nombre de dispositivo es de un vendedor concreto,
-// para no volver a preguntarlo en la bandeja.
+// para no volver a preguntarlo en la inbox.
 type DeviceAlias struct {
 	ID            string    `json:"id"`
 	Alias         string    `json:"alias"`
@@ -82,11 +82,11 @@ type DeviceAlias struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
-func aDeviceAlias(a almacen.AliasDeSucursalRow) DeviceAlias {
+func aDeviceAlias(a store.BranchAliasesRow) DeviceAlias {
 	return DeviceAlias{
-		ID: a.ID, Alias: a.Alias, OriginalAlias: a.AliasOriginal,
-		SellerID: a.TrabajadorID, Seller: a.Trabajador,
-		BranchID: a.SucursalID, CreatedAt: a.CreatedAt,
+		ID: a.ID, Alias: a.Alias, OriginalAlias: a.OriginalAlias,
+		SellerID: a.SellerID, Seller: a.Seller,
+		BranchID: a.BranchID, CreatedAt: a.CreatedAt,
 	}
 }
 
@@ -105,12 +105,12 @@ type DriveSource struct {
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
-func aDriveSource(f almacen.DriveSource) DriveSource {
+func aDriveSource(f store.DriveSource) DriveSource {
 	return DriveSource{
-		ID: f.ID, Name: f.Nombre, FolderID: f.FolderID, Type: string(f.Tipo),
-		BranchID: f.SucursalID, SellerID: f.TrabajadorID, Active: f.Activa,
-		HasCredential: f.Credencial != "",
-		LastScan:      f.UltimoBarrido, LastError: f.UltimoError, CreatedAt: f.CreatedAt,
+		ID: f.ID, Name: f.Name, FolderID: f.FolderID, Type: string(f.Type),
+		BranchID: f.BranchID, SellerID: f.SellerID, Active: f.Active,
+		HasCredential: f.Credential != "",
+		LastScan:      f.LastScan, LastError: f.LastError, CreatedAt: f.CreatedAt,
 	}
 }
 
@@ -130,16 +130,16 @@ type ScanLog struct {
 	Detail         *string    `json:"detail"`
 }
 
-func aScanLog(l almacen.ImportLog) ScanLog {
+func aScanLog(l store.ImportLog) ScanLog {
 	return ScanLog{
-		ID: l.ID, SourceID: l.SourceID, Type: l.Tipo,
-		Start: l.Inicio, End: l.Fin,
-		FilesSeen: l.FicherosVistos, FilesNew: l.FicherosNuevos, FilesFailed: l.FicherosError,
-		PointsInserted: l.PuntosInsertados, Ok: l.Ok, Detail: l.Detalle,
+		ID: l.ID, SourceID: l.SourceID, Type: l.Type,
+		Start: l.Start, End: l.End,
+		FilesSeen: l.FilesSeen, FilesNew: l.FilesNew, FilesFailed: l.FilesFailed,
+		PointsInserted: l.InsertedPoints, Ok: l.Ok, Detail: l.Detail,
 	}
 }
 
-func aInboxFiles(fs []almacen.BandejaRow) []InboxFile {
+func aInboxFiles(fs []store.InboxRow) []InboxFile {
 	out := make([]InboxFile, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, aInboxFile(f))
@@ -147,7 +147,7 @@ func aInboxFiles(fs []almacen.BandejaRow) []InboxFile {
 	return out
 }
 
-func aDeviceAliases(as []almacen.AliasDeSucursalRow) []DeviceAlias {
+func aDeviceAliases(as []store.BranchAliasesRow) []DeviceAlias {
 	out := make([]DeviceAlias, 0, len(as))
 	for _, a := range as {
 		out = append(out, aDeviceAlias(a))
@@ -155,7 +155,7 @@ func aDeviceAliases(as []almacen.AliasDeSucursalRow) []DeviceAlias {
 	return out
 }
 
-func aDriveSources(fs []almacen.DriveSource) []DriveSource {
+func aDriveSources(fs []store.DriveSource) []DriveSource {
 	out := make([]DriveSource, 0, len(fs))
 	for _, f := range fs {
 		out = append(out, aDriveSource(f))
@@ -163,7 +163,7 @@ func aDriveSources(fs []almacen.DriveSource) []DriveSource {
 	return out
 }
 
-func aScanLogs(ls []almacen.ImportLog) []ScanLog {
+func aScanLogs(ls []store.ImportLog) []ScanLog {
 	out := make([]ScanLog, 0, len(ls))
 	for _, l := range ls {
 		out = append(out, aScanLog(l))
