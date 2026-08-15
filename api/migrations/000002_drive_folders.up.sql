@@ -1,14 +1,19 @@
--- Alta de las carpetas de rutas de Drive, sacadas de la cuenta padre
--- tablets.procovar el 15 de agosto de 2026.
+-- The Drive route folders, taken from the tablets.procovar parent account on the
+-- 15th of August 2026.
 --
--- Cada carpeta compartida ES el perfil de GPS de un vendedor, así que su NOMBRE
--- es la pista con la que se resuelve de quién son los ficheros — que solo traen
--- la fecha (AAAAMMDD.gpx).
+-- Each shared folder IS a seller's GPS profile, so its NAME is the hint that
+-- resolves whose the files are — they only carry the date (YYYYMMDD.gpx).
 --
--- El tipo es MIXTA porque el vendedor todavía no se sabe: se casa una vez desde
--- la bandeja del panel y a partir de ahí se resuelve solo.
+-- The type is MIXTA because the seller is not known yet: it gets matched once from
+-- the panel's inbox and from then on resolves on its own.
 --
--- El número final es cuántos .gpx tenía la carpeta el día del volcado.
+-- Why this is a migration and not a script somebody runs: without these rows the
+-- ingest rejects every file n8n pushes ("the folder is not registered"), so the
+-- system does not work at all until they exist. Something the application needs in
+-- order to run is not a seed, it is part of the deployment. It is idempotent
+-- (ON CONFLICT DO NOTHING) and does not touch what has been added from the screen.
+--
+-- The trailing number is how many .gpx each folder had on the day of the dump.
 
 INSERT INTO drive_source (id, nombre, folder_id, tipo, credencial) VALUES
     (md5('1lO4WmKdE0-lyhI2oIBwD_OiDPuv0Z4y-'), 'JEAN MICHEL', '1lO4WmKdE0-lyhI2oIBwD_OiDPuv0Z4y-', 'MIXTA', 'principal'),  -- 118
