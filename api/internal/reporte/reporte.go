@@ -20,47 +20,47 @@ import (
 )
 
 type Cabecera struct {
-	Vendedor   string `json:"vendedor"`
-	VendedorID string `json:"vendedorId"`
-	Desde      string `json:"desde"`
-	Hasta      string `json:"hasta"`
-	Jornada    string `json:"jornada"`
-	Zona       string `json:"zona"`
+	Vendedor   string `json:"seller"`
+	VendedorID string `json:"sellerId"`
+	Desde      string `json:"from"`
+	Hasta      string `json:"to"`
+	Jornada    string `json:"workday"`
+	Zona       string `json:"timezone"`
 }
 
 // Movimiento es una fila de la tabla del día.
 type Movimiento struct {
 	// Tipo: "desplazamiento" o "parada".
-	Tipo        string  `json:"tipo"`
-	HoraInicio  string  `json:"horaInicio"`
-	HoraFin     string  `json:"horaFin"`
-	DuracionMin int     `json:"duracionMin"`
-	DistanciaKm float64 `json:"distanciaKm"`
-	VelMedia    float64 `json:"velMedia"`
-	VelMaxima   float64 `json:"velMaxima"`
+	Tipo        string  `json:"type"`
+	HoraInicio  string  `json:"startTime"`
+	HoraFin     string  `json:"endTime"`
+	DuracionMin int     `json:"durationMin"`
+	DistanciaKm float64 `json:"distanceKm"`
+	VelMedia    float64 `json:"avgSpeed"`
+	VelMaxima   float64 `json:"maxSpeed"`
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
 	// Lugar es el cliente más cercano si se cruzó con la geo de clientes.
-	Lugar string `json:"lugar,omitempty"`
+	Lugar string `json:"place,omitempty"`
 }
 
 type Dia struct {
-	Fecha  string `json:"fecha"`
-	Estado string `json:"estado"`
+	Fecha  string `json:"date"`
+	Estado string `json:"status"`
 	// Motivo explica en palabras por qué el día no es bueno. Un día malo lleva
 	// su sección igual que uno bueno: es el que hay que enseñar.
-	Motivo        string       `json:"motivo,omitempty"`
-	PrimerFix     string       `json:"primerFix,omitempty"`
-	UltimoFix     string       `json:"ultimoFix,omitempty"`
-	KmNetos       float64      `json:"kmNetos"`
-	Cobertura     float64      `json:"cobertura"`
-	MinParado     int          `json:"minParado"`
-	MinMovimiento int          `json:"minMovimiento"`
-	Banderas      []string     `json:"banderas"`
-	Movimientos   []Movimiento `json:"movimientos"`
+	Motivo        string       `json:"reason,omitempty"`
+	PrimerFix     string       `json:"firstFix,omitempty"`
+	UltimoFix     string       `json:"lastFix,omitempty"`
+	KmNetos       float64      `json:"netKm"`
+	Cobertura     float64      `json:"coverage"`
+	MinParado     int          `json:"minStopped"`
+	MinMovimiento int          `json:"minMovement"`
+	Banderas      []string     `json:"flags"`
+	Movimientos   []Movimiento `json:"movements"`
 	// Recorrido son los puntos para pintar el mapa de la sección.
-	Recorrido []Punto `json:"recorrido"`
-	Lugar     string  `json:"lugar,omitempty"`
+	Recorrido []Punto `json:"track"`
+	Lugar     string  `json:"place,omitempty"`
 }
 
 type Punto struct {
@@ -70,19 +70,19 @@ type Punto struct {
 }
 
 type Resumen struct {
-	DiasOK            int     `json:"diasOk"`
-	DiasSinFichero    int     `json:"diasSinFichero"`
-	DiasSinFecha      int     `json:"diasSinFecha"`
-	DiasSinMovimiento int     `json:"diasSinMovimiento"`
-	KmTotal           float64 `json:"kmTotal"`
-	Paradas           int     `json:"paradas"`
-	CoberturaMedia    float64 `json:"coberturaMedia"`
+	DiasOK            int     `json:"daysOk"`
+	DiasSinFichero    int     `json:"daysNoFile"`
+	DiasSinFecha      int     `json:"daysNoDate"`
+	DiasSinMovimiento int     `json:"daysNoMovement"`
+	KmTotal           float64 `json:"totalKm"`
+	Paradas           int     `json:"stops"`
+	CoberturaMedia    float64 `json:"avgCoverage"`
 }
 
 type Documento struct {
-	Cabecera Cabecera `json:"cabecera"`
-	Resumen  Resumen  `json:"resumen"`
-	Dias     []Dia    `json:"dias"`
+	Cabecera Cabecera `json:"header"`
+	Resumen  Resumen  `json:"summary"`
+	Dias     []Dia    `json:"days"`
 }
 
 var motivos = map[string]string{

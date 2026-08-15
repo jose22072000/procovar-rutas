@@ -286,3 +286,48 @@ table.movimientos tr.parada {
   color: var(--tenue);
   padding: 2rem 0;
 }
+
+/* La sesión va a la derecha del todo: el nombre y el botón de salir. */
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.sesion {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+}
+
+.sesion-quien {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.sesion-rol {
+  color: var(--tenue);
+  font-size: 0.76rem;
+  text-transform: lowercase;
+}
+
+.sesion-salir {
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sesion-salir:hover:not(:disabled) {
+  background: var(--fondo);
+}
+
+.sesion-salir:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

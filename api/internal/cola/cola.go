@@ -27,13 +27,13 @@ type Trabajo struct {
 	FuenteID        string    `json:"fuenteId,omitempty"`
 	FolderID        string    `json:"folderId,omitempty"`
 	DriveFileID     string    `json:"driveFileId"`
-	Nombre          string    `json:"nombre"`
+	Nombre          string    `json:"name"`
 	RutaCarpeta     []string  `json:"rutaCarpeta,omitempty"`
-	Creado          time.Time `json:"creado"`
+	Creado          time.Time `json:"createdAt"`
 	ContenidoBase64 string    `json:"contenidoBase64"`
-	Encolado        time.Time `json:"encolado"`
+	Encolado        time.Time `json:"queued"`
 	// Intentos cuenta las veces que se ha reintentado, para no reintentar sin fin.
-	Intentos int `json:"intentos"`
+	Intentos int `json:"attempts"`
 }
 
 type Cola struct {
@@ -152,9 +152,9 @@ func (c *Cola) Recuperar(ctx context.Context) (int, error) {
 
 // Estado es lo que enseña la pantalla de administración.
 type Estado struct {
-	Pendientes int64 `json:"pendientes"`
-	Procesando int64 `json:"procesando"`
-	Fallidos   int64 `json:"fallidos"`
+	Pendientes int64 `json:"pending"`
+	Procesando int64 `json:"processing"`
+	Fallidos   int64 `json:"failed"`
 }
 
 func (c *Cola) Estado(ctx context.Context) (Estado, error) {

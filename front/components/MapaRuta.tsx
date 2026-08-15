@@ -4,7 +4,7 @@
  * El mapa del visor.
  *
  * La polilínea va con degradado temporal —de claro a oscuro— para que se vea el
- * ORDEN del recorrido sin tener que reproducirlo: dónde empezó y hacia dónde
+ * ORDEN del track sin tener que reproducirlo: dónde empezó y hacia dónde
  * fue. Una línea de un solo color solo dice por dónde pasó, no en qué orden, y
  * con una ruta que se cruza consigo misma eso es justo lo que hace falta saber.
  *
@@ -17,13 +17,13 @@ import type { Parada, PuntoRuta } from "@/lib/api";
 import "leaflet/dist/leaflet.css";
 
 interface Props {
-  puntos: PuntoRuta[];
-  paradas: Parada[];
+  points: PuntoRuta[];
+  stops: Parada[];
   /** Índice hasta el que se pinta, para la línea de tiempo. -1 = todo. */
-  hasta?: number;
+  to?: number;
 }
 
-export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
+export default function MapaRuta({ points, stops, to = -1 }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<any>(null);
   const capa = useRef<any>(null);
@@ -46,7 +46,7 @@ export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
 
       capa.current.clearLayers();
 
-      const visibles = hasta >= 0 ? puntos.slice(0, hasta + 1) : puntos;
+      const visibles = to >= 0 ? points.slice(0, to + 1) : points;
       if (visibles.length === 0) {
         mapa.current.setView([21.38, -77.91], 12); // Camagüey
         return;
@@ -57,8 +57,8 @@ export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
         const t = i / Math.max(1, visibles.length - 1);
         L.polyline(
           [
-            [visibles[i - 1].Lat, visibles[i - 1].Lon],
-            [visibles[i].Lat, visibles[i].Lon],
+            [visibles[i - 1].lat, visibles[i - 1].lon],
+            [visibles[i].lat, visibles[i].lon],
           ],
           {
             color: `hsl(${210 - t * 190}, 75%, ${58 - t * 18}%)`,
@@ -68,42 +68,42 @@ export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
         ).addTo(capa.current);
       }
 
-      // Inicio y fin de la jornada.
+      // Inicio y fin de la workday.
       const primero = visibles[0];
       const ultimo = visibles[visibles.length - 1];
-      L.circleMarker([primero.Lat, primero.Lon], {
+      L.circleMarker([primero.lat, primero.lon], {
         radius: 8,
         color: "#1f6feb",
         fillColor: "#1f6feb",
         fillOpacity: 1,
       })
-        .bindPopup(`Primer fix — ${hora(primero.Ts)}`)
+        .bindPopup(`Primer fix — ${hora(primero.ts)}`)
         .addTo(capa.current);
-      L.circleMarker([ultimo.Lat, ultimo.Lon], {
+      L.circleMarker([ultimo.lat, ultimo.lon], {
         radius: 8,
         color: "#8a1f1f",
         fillColor: "#d64545",
         fillOpacity: 1,
       })
-        .bindPopup(`Último fix — ${hora(ultimo.Ts)}`)
+        .bindPopup(`Último fix — ${hora(ultimo.ts)}`)
         .addTo(capa.current);
 
-      // Las paradas, con el tamaño en proporción a lo que duraron: una visita de
+      // Las stops, con el tamaño en proporción a lo que duraron: una visita de
       // media hora tiene que saltar a la vista frente a un semáforo.
-      for (const p of paradas) {
-        L.circleMarker([p.Lat, p.Lon], {
-          radius: Math.min(28, 8 + p.DuracionMin / 3),
+      for (const p of stops) {
+        L.circleMarker([p.lat, p.lon], {
+          radius: Math.min(28, 8 + p.durationMin / 3),
           color: "#e8833a",
           fillColor: "#f6b26b",
           fillOpacity: 0.55,
           weight: 2,
         })
           .bindPopup(
-            `<b>Parada de ${p.DuracionMin} min</b><br>${hora(p.Inicio)} – ${hora(
-              p.Fin,
+            `<b>Parada de ${p.durationMin} min</b><br>${hora(p.start)} – ${hora(
+              p.end,
             )}${
-              p.ClienteNombre
-                ? `<br>a ${Math.round(p.DistanciaClienteM ?? 0)} m de ${p.ClienteNombre}`
+              p.clientName
+                ? `<br>a ${Math.round(p.clientDistM ?? 0)} m de ${p.clientName}`
                 : ""
             }`,
           )
@@ -111,7 +111,7 @@ export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
       }
 
       const limites = L.latLngBounds(
-        visibles.map((p) => [p.Lat, p.Lon] as [number, number]),
+        visibles.map((p) => [p.lat, p.lon] as [number, number]),
       );
       mapa.current.fitBounds(limites, { padding: [30, 30] });
     })();
@@ -119,7 +119,7 @@ export default function MapaRuta({ puntos, paradas, hasta = -1 }: Props) {
     return () => {
       cancelado = true;
     };
-  }, [puntos, paradas, hasta]);
+  }, [points, stops, to]);
 
   return <div className="mapa" ref={contenedor} />;
 }

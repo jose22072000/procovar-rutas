@@ -88,10 +88,10 @@ func (s *Servidor) cookie(valor string, maxEdad int) *http.Cookie {
 func (s *Servidor) yo(w http.ResponseWriter, r *http.Request) {
 	c := DeContexto(r)
 	responder(w, http.StatusOK, map[string]any{
-		"usuario":    c.Nombre,
-		"email":      c.Email,
-		"rol":        c.Rol,
-		"sucursalId": c.SucursalID,
-		"esAdmin":    c.Rol == "super_admin" || c.Rol == "admin",
+		"user":     c.Nombre,
+		"email":    c.Email,
+		"role":     c.Rol,
+		"branchId": c.SucursalID,
+		"isAdmin":  c.Rol == "super_admin" || c.Rol == "admin",
 	})
 }

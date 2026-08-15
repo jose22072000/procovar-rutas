@@ -19,79 +19,88 @@ export type EstadoDia =
   | "NO_LABORABLE";
 
 export interface DiaCalendario {
-  TrabajadorID: string;
-  Trabajador: string;
-  SucursalID: string;
-  Fecha: string;
-  Estado: EstadoDia;
-  KmNetos: number;
-  Cobertura: number;
-  PrimerFix: string | null;
-  UltimoFix: string | null;
-  Banderas: string[];
-  RadioDispersion: number | null;
-  LugarTexto: string | null;
+  sellerId: string;
+  seller: string;
+  branchId: string;
+  date: string;
+  status: EstadoDia;
+  netKm: number;
+  coverage: number;
+  firstFix: string | null;
+  lastFix: string | null;
+  flags: string[];
+  spreadM: number | null;
+  placeLabel: string | null;
 }
 
 export interface FilaResumen {
-  TrabajadorID: string;
-  Trabajador: string;
-  SinFichero: number;
-  SinFecha: number;
-  SinMovimiento: number;
-  DiasOk: number;
-  KmTotal: number;
+  sellerId: string;
+  seller: string;
+  daysNoFile: number;
+  daysNoDate: number;
+  daysNoMovement: number;
+  daysOk: number;
+  totalKm: number;
 }
 
 export interface RespuestaCalendario {
-  desde: string;
-  hasta: string;
-  dias: DiaCalendario[];
-  resumen: FilaResumen[];
-  laborables: string[];
+  from: string;
+  to: string;
+  days: DiaCalendario[];
+  summary: FilaResumen[];
+  workdays: string[];
+}
+
+export interface Vendedor {
+  id: string;
+  name: string;
+  branchId: string;
+  active: boolean;
 }
 
 export interface PuntoRuta {
-  Ts: string | null;
-  Lat: number;
-  Lon: number;
-  Speed: number | null;
-  Quality: string;
-  Seq: number;
+  ts: string | null;
+  lat: number;
+  lon: number;
+  speed: number | null;
+  quality: string;
+  seq: number;
 }
 
 export interface Parada {
-  ID: string;
-  Inicio: string;
-  Fin: string;
-  DuracionMin: number;
-  Lat: number;
-  Lon: number;
-  ClienteNombre: string | null;
-  DistanciaClienteM: number | null;
-  Seq: number;
+  id: string;
+  start: string;
+  end: string;
+  durationMin: number;
+  lat: number;
+  lon: number;
+  clientName: string | null;
+  clientDistM: number | null;
+  seq: number;
+}
+
+export interface DetalleDia {
+  id: string;
+  seller: string;
+  date: string;
+  status: EstadoDia;
+  netKm: number;
+  coverage: number;
+  minMovement: number;
+  minStopped: number;
+  gaps: number;
+  firstFix: string | null;
+  lastFix: string | null;
+  spreadM: number | null;
+  flags: string[];
+  placeLabel: string | null;
 }
 
 export interface RespuestaDia {
-  dia: {
-    ID: string;
-    Trabajador: string;
-    Fecha: string;
-    Estado: EstadoDia;
-    KmNetos: number;
-    Cobertura: number;
-    MinMovimiento: number;
-    MinParado: number;
-    Huecos: number;
-    PrimerFix: string | null;
-    UltimoFix: string | null;
-    RadioDispersion: number | null;
-    Banderas: string[];
-    LugarTexto: string | null;
-  };
-  puntos: PuntoRuta[];
-  paradas: Parada[];
-  zona: string;
+  day: DetalleDia;
+  points: PuntoRuta[];
+  stops: Parada[];
+  timezone: string;
 }
 
 export class ErrorApi extends Error {
@@ -111,7 +120,7 @@ export async function pedir<T>(ruta: string): Promise<T> {
   if (res.status === 401) {
     // Sesión caducada: al login, y que vuelva a donde estaba.
     if (typeof window !== "undefined") {
-      window.location.href = `${API}/api/auth/entrar?volverA=${encodeURIComponent(
+      window.location.href = `${API}/api/auth/login?returnTo=${encodeURIComponent(
         window.location.href,
       )}`;
     }
@@ -157,11 +166,11 @@ export const BANDERAS: Record<string, string> = {
   entrada_tardia: "Entró tarde",
   salida_temprana: "Salió temprano",
   hueco_largo: "Hueco de señal",
-  poca_cobertura: "Poca cobertura",
+  poca_cobertura: "Poca coverage",
   sin_movimiento: "No se movió del sitio",
   movimiento_escaso: "Movimiento escaso",
   sin_horas: "El fichero no trae horas",
-  sin_datos_en_jornada: "Sin datos en la jornada",
+  sin_datos_en_jornada: "Sin datos en la workday",
 };
 
 export function fechaCorta(iso: string): string {
@@ -170,11 +179,11 @@ export function fechaCorta(iso: string): string {
 }
 
 export function nombreDia(iso: string): string {
-  const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-  return dias[new Date(`${iso.slice(0, 10)}T12:00:00Z`).getUTCDay()];
+  const days = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  return days[new Date(`${iso.slice(0, 10)}T12:00:00Z`).getUTCDay()];
 }
 
-/** Lunes a viernes de la semana que contiene la fecha. La jornada es L–V. */
+/** Lunes a viernes de la semana que contiene la fecha. La workday es L–V. */
 export function semanaLaboral(iso: string): string[] {
   const d = new Date(`${iso}T12:00:00Z`);
   const isoDia = d.getUTCDay() === 0 ? 7 : d.getUTCDay();

@@ -9,39 +9,40 @@ import { useEffect, useState } from "react";
 import { enviar, pedir } from "@/lib/api";
 
 interface Fuente {
-  ID: string;
-  Nombre: string;
-  FolderID: string;
-  Tipo: string;
-  Activa: boolean;
-  UltimoBarrido: string | null;
-  UltimoError: string | null;
+  id: string;
+  name: string;
+  folderId: string;
+  type: string;
+  active: boolean;
+  hasCredential: boolean;
+  lastScan: string | null;
+  lastError: string | null;
 }
 
 interface Alias {
-  ID: string;
-  AliasOriginal: string;
-  Trabajador: string;
+  id: string;
+  originalAlias: string;
+  seller: string;
 }
 
 interface EstadoCola {
   activa: boolean;
-  pendientes?: number;
-  procesando?: number;
-  fallidos?: number;
+  pending?: number;
+  processing?: number;
+  failed?: number;
 }
 
 interface Barrido {
-  ID: string;
-  Tipo: string;
-  Inicio: string;
-  Fin: string | null;
-  FicherosVistos: number;
-  FicherosNuevos: number;
-  FicherosError: number;
-  PuntosInsertados: number;
-  Ok: boolean;
-  Detalle: string | null;
+  id: string;
+  type: string;
+  start: string;
+  end: string | null;
+  filesSeen: number;
+  filesNew: number;
+  filesFailed: number;
+  pointsInserted: number;
+  ok: boolean;
+  detail: string | null;
 }
 
 export default function Administracion() {
@@ -59,10 +60,10 @@ export default function Administracion() {
   async function cargar() {
     try {
       const [f, a, b, c] = await Promise.all([
-        pedir<Fuente[]>("/api/fuentes"),
-        pedir<Alias[]>("/api/alias"),
-        pedir<Barrido[]>("/api/barridos"),
-        pedir<EstadoCola>("/api/cola"),
+        pedir<Fuente[]>("/api/sources"),
+        pedir<Alias[]>("/api/aliases"),
+        pedir<Barrido[]>("/api/scans"),
+        pedir<EstadoCola>("/api/queue"),
       ]);
       setFuentes(f ?? []);
       setAlias(a ?? []);
@@ -80,7 +81,7 @@ export default function Administracion() {
   async function crear() {
     if (!nombre || !folderId) return;
     try {
-      await enviar("/api/fuentes", { nombre, folderId, tipo });
+      await enviar("/api/sources", { nombre, folderId, tipo });
       setNombre("");
       setFolderId("");
       await cargar();
@@ -93,7 +94,7 @@ export default function Administracion() {
     setBarriendo(true);
     setError(null);
     try {
-      await enviar(`/api/ingesta/barrer?tipo=${tipoBarrido}`, {});
+      await enviar(`/api/ingest/scan?tipo=${tipoBarrido}`, {});
       await cargar();
     } catch (e) {
       setError((e as Error).message);
@@ -119,15 +120,15 @@ export default function Administracion() {
         </p>
 
         {fuentes.map((f) => (
-          <div className="dato" key={f.ID}>
+          <div className="dato" key={f.id}>
             <span>
-              {f.Nombre} <small style={{ color: "var(--tenue)" }}>({f.Tipo})</small>
+              {f.name} <small style={{ color: "var(--tenue)" }}>({f.type})</small>
             </span>
             <span>
-              {f.UltimoError ? (
-                <span style={{ color: "var(--falta)" }}>{f.UltimoError}</span>
-              ) : f.UltimoBarrido ? (
-                new Date(f.UltimoBarrido).toLocaleString("es")
+              {f.lastError ? (
+                <span style={{ color: "var(--falta)" }}>{f.lastError}</span>
+              ) : f.lastScan ? (
+                new Date(f.lastScan).toLocaleString("es")
               ) : (
                 "sin barrer todavía"
               )}
@@ -149,7 +150,7 @@ export default function Administracion() {
           />
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="SUCURSAL">Carpeta de una sucursal</option>
-            <option value="VENDEDOR">Carpeta de un solo vendedor</option>
+            <option value="VENDEDOR">Carpeta de un solo seller</option>
             <option value="MIXTA">Mezclada</option>
           </select>
           <button className="primario" onClick={crear}>
@@ -162,25 +163,25 @@ export default function Administracion() {
         <b>Cola de n8n</b>
         <p className="sub">
           Los ficheros que empuja n8n esperan aquí y los procesa el servicio de
-          ingesta. Si «pendientes» crece y no baja, el servicio de ingesta está
+          ingesta. Si «pending» crece y no baja, el servicio de ingesta está
           parado.
         </p>
         {cola?.activa ? (
           <>
             <div className="dato">
               <span>Pendientes</span>
-              <span>{cola.pendientes}</span>
+              <span>{cola.pending}</span>
             </div>
             <div className="dato">
               <span>Procesándose</span>
-              <span>{cola.procesando}</span>
+              <span>{cola.processing}</span>
             </div>
             <div className="dato">
-              <span>Apartados tras varios intentos</span>
+              <span>Apartados tras varios attempts</span>
               <span
-                style={{ color: (cola.fallidos ?? 0) > 0 ? "var(--falta)" : undefined }}
+                style={{ color: (cola.failed ?? 0) > 0 ? "var(--falta)" : undefined }}
               >
-                {cola.fallidos}
+                {cola.failed}
               </span>
             </div>
           </>
@@ -205,7 +206,7 @@ export default function Administracion() {
           </button>
         </div>
 
-        <table className="movimientos">
+        <table className="movements">
           <thead>
             <tr>
               <th>Cuándo</th>
@@ -219,14 +220,14 @@ export default function Administracion() {
           </thead>
           <tbody>
             {barridos.slice(0, 15).map((b) => (
-              <tr key={b.ID}>
-                <td>{new Date(b.Inicio).toLocaleString("es")}</td>
-                <td>{b.Tipo}</td>
-                <td>{b.FicherosVistos}</td>
-                <td>{b.FicherosNuevos}</td>
-                <td>{b.FicherosError}</td>
-                <td>{b.PuntosInsertados}</td>
-                <td>{b.Ok ? "ok" : (b.Detalle ?? "falló")}</td>
+              <tr key={b.id}>
+                <td>{new Date(b.start).toLocaleString("es")}</td>
+                <td>{b.type}</td>
+                <td>{b.filesSeen}</td>
+                <td>{b.filesNew}</td>
+                <td>{b.filesFailed}</td>
+                <td>{b.pointsInserted}</td>
+                <td>{b.ok ? "ok" : (b.detail ?? "falló")}</td>
               </tr>
             ))}
           </tbody>
@@ -242,9 +243,9 @@ export default function Administracion() {
           <p className="sub">Todavía no hay ninguno.</p>
         ) : (
           alias.map((a) => (
-            <div className="dato" key={a.ID}>
-              <span>{a.AliasOriginal}</span>
-              <span>{a.Trabajador}</span>
+            <div className="dato" key={a.id}>
+              <span>{a.originalAlias}</span>
+              <span>{a.seller}</span>
             </div>
           ))
         )}

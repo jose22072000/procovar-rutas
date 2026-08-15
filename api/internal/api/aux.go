@@ -12,11 +12,14 @@ import (
 
 const iso = "2006-01-02"
 
-// rangoDeConsulta lee ?desde= y ?hasta=. Sin parámetros, la semana laboral en
-// curso, que es lo que se quiere ver al entrar.
+// rangoDeConsulta lee ?from= y ?to=. Sin parámetros, la semana laboral en curso,
+// que es lo que se quiere ver al entrar.
+//
+// Los nombres de los parámetros van en inglés como el resto del API; los de dentro
+// siguen en español, que es el idioma del código.
 func rangoDeConsulta(r *http.Request) (time.Time, time.Time, error) {
 	q := r.URL.Query()
-	desdeStr, hastaStr := q.Get("desde"), q.Get("hasta")
+	desdeStr, hastaStr := q.Get("from"), q.Get("to")
 
 	if desdeStr == "" && hastaStr == "" {
 		semana := calendario.SemanaLaboral(time.Now())

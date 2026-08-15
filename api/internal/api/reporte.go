@@ -15,22 +15,30 @@ import (
 // La API devuelve el reporte en JSON y el frontend lo maqueta e imprime a PDF.
 // El armado del documento no vive aquí a propósito: así el mismo JSON sirve
 // para la pantalla, para el PDF y para el Excel, sin tres verdades distintas.
+// El reporte de un vendedor en el rango que se pida.
+//
+// Nació como "reporte semanal" y solo aceptaba ?date=, del que sacaba la semana
+// laboral entera. Pero el reporte se pide para enseñárselo a alguien, y ahí lo
+// normal es acotar: tres días, un día suelto, la quincena. Ahora se le pasa
+// ?from= y ?to= como al resto del panel; sin ellos sigue saliendo la semana en
+// curso, que era el comportamiento de antes.
 func (s *Servidor) reporteSemanal(w http.ResponseWriter, r *http.Request) {
 	c := DeContexto(r)
 
-	trabajadorID := r.URL.Query().Get("vendedor")
+	trabajadorID := r.URL.Query().Get("seller")
 	if trabajadorID == "" {
 		responderError(w, http.StatusBadRequest, "falta el vendedor")
 		return
 	}
-	fecha, err := fechaDe(r.URL.Query().Get("fecha"))
+
+	desde, hasta, err := rangoDeReporte(r)
 	if err != nil {
 		responderError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	semana := calendario.SemanaLaboral(fecha)
-	desde, hasta := semana[0], semana[len(semana)-1]
+	// Los días del documento son TODOS los del rango, no solo los laborables: si
+	// alguien pide un sábado concreto, es porque quiere ver ese sábado.
+	diasDelRango := calendario.DiasEntre(desde, hasta)
 
 	filtro, err := c.Alcance(desde)
 	if err != nil {
@@ -73,8 +81,8 @@ func (s *Servidor) reporteSemanal(w http.ResponseWriter, r *http.Request) {
 		porFecha[d.Fecha.Format(iso)] = d
 	}
 
-	secciones := make([]reporte.Dia, 0, len(semana))
-	for _, f := range semana {
+	secciones := make([]reporte.Dia, 0, len(diasDelRango))
+	for _, f := range diasDelRango {
 		clave := f.Format(iso)
 		d, hay := porFecha[clave]
 		if !hay {
@@ -107,6 +115,25 @@ func (s *Servidor) reporteSemanal(w http.ResponseWriter, r *http.Request) {
 		Zona:       zona,
 	}, secciones)
 
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.reporte.semanal", trabajadorID, c.AuthUserID)
+	s.auth.RegistrarAuditoria(r.Context(), "rutas.reporte", trabajadorID, c.AuthUserID)
 	responder(w, http.StatusOK, doc)
+}
+
+// rangoDeReporte lee ?from= y ?to=. Sin nada, la semana laboral de hoy; con solo
+// ?date=, la semana de esa fecha, que es como se pedía antes de aceptar rangos.
+func rangoDeReporte(r *http.Request) (time.Time, time.Time, error) {
+	q := r.URL.Query()
+	if q.Get("from") == "" && q.Get("to") == "" {
+		base := time.Now()
+		if d := q.Get("date"); d != "" {
+			f, err := fechaDe(d)
+			if err != nil {
+				return time.Time{}, time.Time{}, err
+			}
+			base = f
+		}
+		semana := calendario.SemanaLaboral(base)
+		return semana[0], semana[len(semana)-1], nil
+	}
+	return rangoDeConsulta(r)
 }

@@ -13,22 +13,22 @@ import { useEffect, useState } from "react";
 import { enviar, pedir } from "@/lib/api";
 
 interface FicheroBandeja {
-  ID: string;
-  Nombre: string;
-  Fuente: string;
-  RutaCarpeta: string | null;
-  Estado: string;
-  Error: string | null;
-  PistaAlias: string | null;
-  Fecha: string | null;
-  OrigenFecha: string;
-  PuntosTotal: number;
-  ImportadoAt: string;
+  id: string;
+  name: string;
+  source: string;
+  folderPath: string | null;
+  status: string;
+  error: string | null;
+  aliasHint: string | null;
+  date: string | null;
+  dateSource: string;
+  points: number;
+  importedAt: string;
 }
 
 interface Vendedor {
-  ID: string;
-  Nombre: string;
+  id: string;
+  name: string;
 }
 
 const MOTIVOS: Record<string, string> = {
@@ -46,8 +46,8 @@ export default function Bandeja() {
   async function cargar() {
     try {
       const [f, v] = await Promise.all([
-        pedir<FicheroBandeja[]>("/api/bandeja"),
-        pedir<Vendedor[]>("/api/vendedores"),
+        pedir<FicheroBandeja[]>("/api/inbox"),
+        pedir<Vendedor[]>("/api/sellers"),
       ]);
       setFicheros(f ?? []);
       setVendedores(v ?? []);
@@ -60,16 +60,16 @@ export default function Bandeja() {
     cargar();
   }, []);
 
-  async function asignar(f: FicheroBandeja, vendedorId: string, fecha: string, recordar: boolean) {
-    if (!vendedorId) return;
-    setGuardando(f.ID);
+  async function asignar(f: FicheroBandeja, sellerId: string, fecha: string, recordar: boolean) {
+    if (!sellerId) return;
+    setGuardando(f.id);
     try {
-      await enviar("/api/bandeja/asignar", {
-        ficheroId: f.ID,
-        vendedorId,
+      await enviar("/api/inbox/assign", {
+        fileId: f.id,
+        sellerId,
         fecha: fecha || null,
-        recordarAlias: recordar,
-        alias: f.PistaAlias ?? "",
+        rememberAlias: recordar,
+        alias: f.aliasHint ?? "",
       });
       await cargar();
     } catch (e) {
@@ -97,10 +97,10 @@ export default function Bandeja() {
 
       {ficheros.map((f) => (
         <FilaBandeja
-          key={f.ID}
+          key={f.id}
           fichero={f}
           vendedores={vendedores}
-          guardando={guardando === f.ID}
+          guardando={guardando === f.id}
           onAsignar={asignar}
         />
       ))}
@@ -119,35 +119,35 @@ function FilaBandeja({
   guardando: boolean;
   onAsignar: (f: FicheroBandeja, v: string, fecha: string, recordar: boolean) => void;
 }) {
-  const [vendedor, setVendedor] = useState("");
-  const [fecha, setFecha] = useState(fichero.Fecha?.slice(0, 10) ?? "");
+  const [seller, setVendedor] = useState("");
+  const [fecha, setFecha] = useState(fichero.date?.slice(0, 10) ?? "");
   const [recordar, setRecordar] = useState(true);
 
   return (
     <div className="tarjeta">
-      <b>{fichero.Nombre}</b>
+      <b>{fichero.name}</b>
       <p className="sub">
-        {MOTIVOS[fichero.Estado] ?? fichero.Estado} · carpeta{" "}
-        {fichero.Fuente}
-        {fichero.RutaCarpeta ? ` / ${fichero.RutaCarpeta}` : ""} ·{" "}
-        {fichero.PuntosTotal} puntos
-        {fichero.PistaAlias ? (
+        {MOTIVOS[fichero.status] ?? fichero.status} · carpeta{" "}
+        {fichero.source}
+        {fichero.folderPath ? ` / ${fichero.folderPath}` : ""} ·{" "}
+        {fichero.points} points
+        {fichero.aliasHint ? (
           <>
             {" "}
-            · el fichero dice <b>{fichero.PistaAlias}</b>
+            · el fichero dice <b>{fichero.aliasHint}</b>
           </>
         ) : null}
       </p>
 
-      {fichero.Error && <p className="aviso">{fichero.Error}</p>}
+      {fichero.error && <p className="aviso">{fichero.error}</p>}
 
-      {fichero.Estado !== "ERROR" && (
+      {fichero.status !== "ERROR" && (
         <div className="controles">
-          <select value={vendedor} onChange={(e) => setVendedor(e.target.value)}>
+          <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
             <option value="">¿De quién es?</option>
             {vendedores.map((v) => (
-              <option key={v.ID} value={v.ID}>
-                {v.Nombre}
+              <option key={v.id} value={v.id}>
+                {v.name}
               </option>
             ))}
           </select>
@@ -164,13 +164,13 @@ function FilaBandeja({
               checked={recordar}
               onChange={(e) => setRecordar(e.target.checked)}
             />{" "}
-            Recordar «{fichero.PistaAlias ?? fichero.Nombre}» para este vendedor
+            Recordar «{fichero.aliasHint ?? fichero.name}» para este seller
           </label>
 
           <button
             className="primario"
-            disabled={!vendedor || guardando}
-            onClick={() => onAsignar(fichero, vendedor, fecha, recordar)}
+            disabled={!seller || guardando}
+            onClick={() => onAsignar(fichero, seller, fecha, recordar)}
           >
             {guardando ? "Guardando…" : "Asignar"}
           </button>

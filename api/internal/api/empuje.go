@@ -22,12 +22,12 @@ import (
 // barrido nocturno pasa después por el mismo fichero— no se duplica nada.
 
 type peticionEmpuje struct {
-	FuenteID    string   `json:"fuenteId"`
+	FuenteID    string   `json:"sourceId"`
 	FolderID    string   `json:"folderId"`
 	DriveFileID string   `json:"driveFileId"`
-	Nombre      string   `json:"nombre"`
-	RutaCarpeta []string `json:"rutaCarpeta"`
-	Creado      string   `json:"creado"`
+	Nombre      string   `json:"name"`
+	RutaCarpeta []string `json:"folderPath"`
+	Creado      string   `json:"createdAt"`
 	// ContenidoBase64 es lo que manda n8n en `{{ $binary.data.data }}`.
 	ContenidoBase64 string `json:"contenidoBase64"`
 }
@@ -84,7 +84,7 @@ func (s *Servidor) recibirFichero(w http.ResponseWriter, r *http.Request) {
 			responderError(w, http.StatusServiceUnavailable, "la cola no está disponible")
 			return
 		}
-		responder(w, http.StatusAccepted, map[string]any{"ok": true, "encolado": true})
+		responder(w, http.StatusAccepted, map[string]any{"ok": true, "queued": true})
 		return
 	}
 
@@ -107,8 +107,8 @@ func (s *Servidor) recibirFichero(w http.ResponseWriter, r *http.Request) {
 
 	responder(w, http.StatusOK, map[string]any{
 		"ok":     true,
-		"nuevo":  nuevo,
-		"puntos": puntos,
+		"added":  nuevo,
+		"points": puntos,
 	})
 }
 
@@ -127,7 +127,7 @@ func (s *Servidor) claveDeServicioValida(r *http.Request) bool {
 // esperan, cuántos se están procesando y cuántos se apartaron.
 func (s *Servidor) estadoCola(w http.ResponseWriter, r *http.Request) {
 	if s.cola == nil {
-		responder(w, http.StatusOK, map[string]any{"activa": false})
+		responder(w, http.StatusOK, map[string]any{"active": false})
 		return
 	}
 	e, err := s.cola.Estado(r.Context())
@@ -136,9 +136,9 @@ func (s *Servidor) estadoCola(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	responder(w, http.StatusOK, map[string]any{
-		"activa":     true,
-		"pendientes": e.Pendientes,
-		"procesando": e.Procesando,
-		"fallidos":   e.Fallidos,
+		"active":     true,
+		"pending":    e.Pendientes,
+		"processing": e.Procesando,
+		"failed":     e.Fallidos,
 	})
 }

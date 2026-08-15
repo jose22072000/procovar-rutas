@@ -62,3 +62,35 @@ func TestDiasLaborablesDeUnaSemana(t *testing.T) {
 		t.Errorf("= %v, se esperaban 5 días", dias)
 	}
 }
+
+func TestDiasEntre(t *testing.T) {
+	d := func(s string) time.Time {
+		f, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+
+	// Un rango corto, que es el caso que motivó esto: pedir tres días sueltos.
+	dias := DiasEntre(d("2026-08-12"), d("2026-08-14"))
+	if len(dias) != 3 {
+		t.Fatalf("esperaba 3 días, salieron %d", len(dias))
+	}
+
+	// Un solo día es un rango válido de un elemento, no vacío.
+	if got := DiasEntre(d("2026-08-12"), d("2026-08-12")); len(got) != 1 {
+		t.Fatalf("un día suelto debería dar 1, dio %d", len(got))
+	}
+
+	// Incluye el fin de semana: el reporte no filtra por laborables.
+	finde := DiasEntre(d("2026-08-14"), d("2026-08-17"))
+	if len(finde) != 4 {
+		t.Fatalf("esperaba 4 días con sábado y domingo, salieron %d", len(finde))
+	}
+
+	// Al revés no devuelve nada en vez de colgarse iterando.
+	if got := DiasEntre(d("2026-08-14"), d("2026-08-12")); got != nil {
+		t.Fatalf("rango invertido debería dar nil, dio %v", got)
+	}
+}

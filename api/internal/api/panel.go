@@ -28,7 +28,7 @@ func (s *Servidor) calendario(w http.ResponseWriter, r *http.Request) {
 	}
 	p := deFiltro(filtro)
 	if p.Vacio {
-		responder(w, http.StatusOK, map[string]any{"dias": []any{}, "resumen": []any{}})
+		responder(w, http.StatusOK, map[string]any{"days": []any{}, "summary": []any{}})
 		return
 	}
 
@@ -51,13 +51,13 @@ func (s *Servidor) calendario(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responder(w, http.StatusOK, map[string]any{
-		"desde":   desde.Format(iso),
-		"hasta":   hasta.Format(iso),
-		"dias":    dias,
-		"resumen": resumen,
+		"from":    desde.Format(iso),
+		"to":      hasta.Format(iso),
+		"days":    aSellerDays(dias),
+		"summary": aSummaryRows(resumen),
 		// Los días laborables van al cliente para que la cuadrícula no tenga que
 		// suponer cuáles son: se configuran por sucursal.
-		"laborables": calendario.DiasLaborables(desde, hasta, nil),
+		"workdays": calendario.DiasLaborables(desde, hasta, nil),
 	})
 }
 
@@ -82,19 +82,19 @@ func (s *Servidor) vendedores(w http.ResponseWriter, r *http.Request) {
 		s.fallo(w, "vendedores", err)
 		return
 	}
-	responder(w, http.StatusOK, lista)
+	responder(w, http.StatusOK, aSellers(lista))
 }
 
 // El visor: el día de un vendedor con sus puntos y sus paradas.
 func (s *Servidor) dia(w http.ResponseWriter, r *http.Request) {
 	c := DeContexto(r)
 
-	trabajadorID := r.URL.Query().Get("vendedor")
+	trabajadorID := r.URL.Query().Get("seller")
 	if trabajadorID == "" {
 		responderError(w, http.StatusBadRequest, "falta el vendedor")
 		return
 	}
-	fecha, err := fechaDe(r.URL.Query().Get("fecha"))
+	fecha, err := fechaDe(r.URL.Query().Get("date"))
 	if err != nil {
 		responderError(w, http.StatusBadRequest, err.Error())
 		return
@@ -125,7 +125,7 @@ func (s *Servidor) dia(w http.ResponseWriter, r *http.Request) {
 
 	zona := s.zonaDeSucursal(r, dia.SucursalID)
 	inicio, fin := "00:00", "23:59"
-	if r.URL.Query().Get("jornada") != "completa" {
+	if r.URL.Query().Get("workday") != "full" {
 		inicio, fin = s.jornadaDeSucursal(r, dia.SucursalID)
 	}
 
@@ -143,23 +143,31 @@ func (s *Servidor) dia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// El nombre no viene en la fila del día, y el visor enseña "Ver el día de
+	// <quién>": sin esto saldría el identificador. Si la consulta falla no se
+	// tumba la página por un rótulo; se cae al identificador.
+	nombreVendedor := trabajadorID
+	if t, err := s.q.TrabajadorPorID(r.Context(), trabajadorID); err == nil {
+		nombreVendedor = t.Nombre
+	}
+
 	responder(w, http.StatusOK, map[string]any{
-		"dia":     dia,
-		"puntos":  puntos,
-		"paradas": paradas,
-		"zona":    zona,
+		"day":      aDayDetail(dia, nombreVendedor),
+		"points":   aTrackPoints(puntos),
+		"stops":    aStops(paradas),
+		"timezone": zona,
 	})
 }
 
 func (s *Servidor) semana(w http.ResponseWriter, r *http.Request) {
 	c := DeContexto(r)
 
-	trabajadorID := r.URL.Query().Get("vendedor")
+	trabajadorID := r.URL.Query().Get("seller")
 	if trabajadorID == "" {
 		responderError(w, http.StatusBadRequest, "falta el vendedor")
 		return
 	}
-	fecha, err := fechaDe(r.URL.Query().Get("fecha"))
+	fecha, err := fechaDe(r.URL.Query().Get("date"))
 	if err != nil {
 		responderError(w, http.StatusBadRequest, err.Error())
 		return
@@ -180,6 +188,11 @@ func (s *Servidor) semana(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	nombreSemana := trabajadorID
+	if t, err := s.q.TrabajadorPorID(r.Context(), trabajadorID); err == nil {
+		nombreSemana = t.Nombre
+	}
+
 	filas, err := s.q.SemanaDeTrabajador(r.Context(), almacen.SemanaDeTrabajadorParams{
 		TrabajadorID: trabajadorID, Desde: desde, Hasta: hasta,
 		SucursalID: p.SucursalID, Trabajadores: p.Trabajadores, Excluir: p.Excluir,
@@ -190,8 +203,8 @@ func (s *Servidor) semana(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responder(w, http.StatusOK, map[string]any{
-		"desde": desde.Format(iso),
-		"hasta": hasta.Format(iso),
-		"dias":  filas,
+		"from": desde.Format(iso),
+		"to":   hasta.Format(iso),
+		"days": aSellerDaysDeTrackDay(filas, nombreSemana),
 	})
 }

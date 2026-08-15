@@ -54,37 +54,39 @@ func (s *Servidor) Rutas() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	r.Get("/salud", s.salud)
+	// Los caminos van en inglés aunque el código de dentro esté en español: es la
+	// superficie que ven n8n, el front y Traefik, y ahí no se mezclan idiomas.
+	r.Get("/health", s.salud)
 
 	// Puerta de servicio para n8n: sin sesión de usuario, con clave de máquina.
-	r.Post("/api/ingesta/fichero", s.recibirFichero)
+	r.Post("/api/ingest/file", s.recibirFichero)
 
 	// Flujo de login contra procovar-auth.
-	r.Get("/api/auth/entrar", s.entrar)
+	r.Get("/api/auth/login", s.entrar)
 	r.Get("/api/auth/callback", s.callback)
-	r.Post("/api/auth/salir", s.salir)
+	r.Post("/api/auth/logout", s.salir)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.ConSesion)
 
-		r.Get("/yo", s.yo)
-		r.Get("/calendario", s.calendario)
-		r.Get("/vendedores", s.vendedores)
-		r.Get("/dia", s.dia)
-		r.Get("/semana", s.semana)
-		r.Get("/reporte/semanal", s.reporteSemanal)
+		r.Get("/me", s.yo)
+		r.Get("/calendar", s.calendario)
+		r.Get("/sellers", s.vendedores)
+		r.Get("/day", s.dia)
+		r.Get("/week", s.semana)
+		r.Get("/report", s.reporteSemanal)
 
 		r.Group(func(r chi.Router) {
 			r.Use(SoloAdmin)
-			r.Get("/bandeja", s.bandeja)
-			r.Post("/bandeja/asignar", s.asignar)
-			r.Get("/alias", s.listarAlias)
-			r.Delete("/alias/{id}", s.borrarAlias)
-			r.Get("/fuentes", s.fuentes)
-			r.Post("/fuentes", s.crearFuente)
-			r.Post("/ingesta/barrer", s.barrer)
-			r.Get("/barridos", s.barridos)
-			r.Get("/cola", s.estadoCola)
+			r.Get("/inbox", s.bandeja)
+			r.Post("/inbox/assign", s.asignar)
+			r.Get("/aliases", s.listarAlias)
+			r.Delete("/aliases/{id}", s.borrarAlias)
+			r.Get("/sources", s.fuentes)
+			r.Post("/sources", s.crearFuente)
+			r.Post("/ingest/scan", s.barrer)
+			r.Get("/scans", s.barridos)
+			r.Get("/queue", s.estadoCola)
 		})
 	})
 

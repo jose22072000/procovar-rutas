@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * El reporte semanal por vendedor: de lunes a viernes, con cada movimiento
+ * El reporte de un vendedor: de lunes a viernes, con cada movimiento
  * detallado entre las 9:00 y las 16:00.
  *
  * Se imprime a PDF desde el propio navegador (Ctrl+P → Guardar como PDF). No hay
@@ -11,95 +11,130 @@
  */
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { pedir } from "@/lib/api";
 
 interface Movimiento {
-  tipo: string;
-  horaInicio: string;
-  horaFin: string;
-  duracionMin: number;
-  distanciaKm: number;
-  velMedia: number;
-  velMaxima: number;
-  lugar?: string;
+  type: string;
+  startTime: string;
+  endTime: string;
+  durationMin: number;
+  distanceKm: number;
+  avgSpeed: number;
+  maxSpeed: number;
+  place?: string;
 }
 
 interface DiaReporte {
-  fecha: string;
-  estado: string;
-  motivo?: string;
-  primerFix?: string;
-  ultimoFix?: string;
-  kmNetos: number;
-  cobertura: number;
-  minParado: number;
-  minMovimiento: number;
-  banderas: string[];
-  movimientos: Movimiento[];
-  lugar?: string;
+  date: string;
+  status: string;
+  reason?: string;
+  firstFix?: string;
+  lastFix?: string;
+  netKm: number;
+  coverage: number;
+  minStopped: number;
+  minMovement: number;
+  flags: string[];
+  movements: Movimiento[];
+  place?: string;
 }
 
 interface Documento {
-  cabecera: {
-    vendedor: string;
-    desde: string;
-    hasta: string;
-    jornada: string;
+  header: {
+    seller: string;
+    from: string;
+    to: string;
+    workday: string;
   };
-  resumen: {
-    diasOk: number;
-    diasSinFichero: number;
-    diasSinFecha: number;
-    diasSinMovimiento: number;
-    kmTotal: number;
-    paradas: number;
-    coberturaMedia: number;
+  summary: {
+    daysOk: number;
+    daysNoFile: number;
+    daysNoDate: number;
+    daysNoMovement: number;
+    totalKm: number;
+    stops: number;
+    avgCoverage: number;
   };
-  dias: DiaReporte[];
+  days: DiaReporte[];
 }
 
 function Reporte() {
   const params = useSearchParams();
-  const vendedor = params.get("vendedor") ?? "";
-  const fecha = params.get("fecha") ?? "";
+  const router = useRouter();
+  const seller = params.get("seller") ?? "";
+  // El rango es libre: ?from= y ?to=. Sin ellos, el API devuelve la semana en
+  // curso, que es como se pedía este reporte antes de aceptar fechas sueltas.
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
   const [doc, setDoc] = useState<Documento | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Cambiar el rango es navegar: la URL manda, y así funcionan el botón de
+  // atrás y el enlace copiado.
+  function cambiarRango(nuevoDesde: string, nuevoHasta: string) {
+    const p = new URLSearchParams({ seller });
+    if (nuevoDesde && nuevoHasta) {
+      p.set("from", nuevoDesde);
+      p.set("to", nuevoHasta);
+    }
+    router.replace(`/reporte?${p.toString()}`);
+  }
+
   useEffect(() => {
-    if (!vendedor || !fecha) return;
-    pedir<Documento>(`/api/reporte/semanal?vendedor=${vendedor}&fecha=${fecha}`)
+    if (!seller) return;
+    const rango = from && to ? `&from=${from}&to=${to}` : "";
+    pedir<Documento>(`/api/report?seller=${seller}${rango}`)
       .then(setDoc)
       .catch((e) => setError(e.message));
-  }, [vendedor, fecha]);
+  }, [seller, from, to]);
 
   if (error) return <p className="aviso">{error}</p>;
   if (!doc) return <p className="cargando">Armando el reporte…</p>;
 
   const incidencias =
-    doc.resumen.diasSinFichero +
-    doc.resumen.diasSinFecha +
-    doc.resumen.diasSinMovimiento;
+    doc.summary.daysNoFile +
+    doc.summary.daysNoDate +
+    doc.summary.daysNoMovement;
 
   return (
     <>
       <div className="controles no-imprimir">
+        {/* El rango se edita aquí mismo y se guarda en la URL: así el reporte
+            de unos días concretos se puede enviar por chat tal cual. */}
+        <label>
+          Desde{" "}
+          <input
+            type="date"
+            value={from || doc.header.from}
+            onChange={(e) => cambiarRango(e.target.value, to || doc.header.to)}
+          />
+        </label>
+        <label>
+          Hasta{" "}
+          <input
+            type="date"
+            value={to || doc.header.to}
+            onChange={(e) => cambiarRango(from || doc.header.from, e.target.value)}
+          />
+        </label>
+        <button onClick={() => cambiarRango("", "")}>Semana en curso</button>
         <button className="primario" onClick={() => window.print()}>
           Imprimir / Guardar como PDF
         </button>
       </div>
 
-      <h1>{doc.cabecera.vendedor}</h1>
+      <h1>{doc.header.seller}</h1>
       <p className="sub">
-        Semana del {doc.cabecera.desde} al {doc.cabecera.hasta} · jornada{" "}
-        {doc.cabecera.jornada}
+        Del {doc.header.from} al {doc.header.to} · jornada{" "}
+        {doc.header.workday}
       </p>
 
       <div className="tarjeta">
         <b>Resumen de la semana</b>
         <div className="dato">
           <span>Días trabajados</span>
-          <span>{doc.resumen.diasOk} de 5</span>
+          <span>{doc.summary.daysOk} de 5</span>
         </div>
         <div className="dato">
           <span>Incidencias</span>
@@ -108,40 +143,40 @@ function Reporte() {
             {incidencias > 0 && (
               <>
                 {" "}
-                ({doc.resumen.diasSinFichero} sin fichero,{" "}
-                {doc.resumen.diasSinFecha} sin fecha,{" "}
-                {doc.resumen.diasSinMovimiento} sin moverse)
+                ({doc.summary.daysNoFile} sin fichero,{" "}
+                {doc.summary.daysNoDate} sin fecha,{" "}
+                {doc.summary.daysNoMovement} sin moverse)
               </>
             )}
           </span>
         </div>
         <div className="dato">
           <span>Kilómetros</span>
-          <span>{doc.resumen.kmTotal.toFixed(2)} km</span>
+          <span>{doc.summary.totalKm.toFixed(2)} km</span>
         </div>
         <div className="dato">
           <span>Paradas</span>
-          <span>{doc.resumen.paradas}</span>
+          <span>{doc.summary.stops}</span>
         </div>
         <div className="dato">
           <span>Cobertura media</span>
-          <span>{doc.resumen.coberturaMedia.toFixed(0)} %</span>
+          <span>{doc.summary.avgCoverage.toFixed(0)} %</span>
         </div>
       </div>
 
-      {doc.dias.map((d) => (
-        <div className="tarjeta" key={d.fecha}>
-          <b>{d.fecha}</b>
-          {d.motivo && <p className="sub">{d.motivo}</p>}
+      {doc.days.map((d) => (
+        <div className="tarjeta" key={d.date}>
+          <b>{d.date}</b>
+          {d.reason && <p className="sub">{d.reason}</p>}
 
-          {d.movimientos.length > 0 ? (
+          {d.movements.length > 0 ? (
             <>
               <p className="sub">
-                {d.primerFix}–{d.ultimoFix} · {d.kmNetos.toFixed(2)} km ·{" "}
-                {d.cobertura.toFixed(0)} % de cobertura · {d.minMovimiento} min
-                en movimiento, {d.minParado} min parado
+                {d.firstFix}–{d.lastFix} · {d.netKm.toFixed(2)} km ·{" "}
+                {d.coverage.toFixed(0)} % de coverage · {d.minMovement} min
+                en movimiento, {d.minStopped} min parado
               </p>
-              <table className="movimientos">
+              <table className="movements">
                 <thead>
                   <tr>
                     <th>Inicio</th>
@@ -155,25 +190,25 @@ function Reporte() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.movimientos.map((m, i) => (
-                    <tr key={i} className={m.tipo === "parada" ? "parada" : ""}>
-                      <td>{m.horaInicio}</td>
-                      <td>{m.horaFin}</td>
-                      <td>{m.duracionMin} min</td>
+                  {d.movements.map((m, i) => (
+                    <tr key={i} className={m.type === "parada" ? "parada" : ""}>
+                      <td>{m.startTime}</td>
+                      <td>{m.endTime}</td>
+                      <td>{m.durationMin} min</td>
                       <td>
-                        {m.tipo === "parada" ? <b>Parada</b> : "Desplazamiento"}
+                        {m.type === "parada" ? <b>Parada</b> : "Desplazamiento"}
                       </td>
-                      <td>{m.tipo === "parada" ? "—" : `${m.distanciaKm} km`}</td>
-                      <td>{m.tipo === "parada" ? "—" : `${m.velMedia} km/h`}</td>
-                      <td>{m.tipo === "parada" ? "—" : `${m.velMaxima} km/h`}</td>
-                      <td>{m.lugar ?? "—"}</td>
+                      <td>{m.type === "parada" ? "—" : `${m.distanceKm} km`}</td>
+                      <td>{m.type === "parada" ? "—" : `${m.avgSpeed} km/h`}</td>
+                      <td>{m.type === "parada" ? "—" : `${m.maxSpeed} km/h`}</td>
+                      <td>{m.place ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </>
           ) : (
-            d.lugar && <p className="sub">Estuvo en {d.lugar}.</p>
+            d.place && <p className="sub">Estuvo en {d.place}.</p>
           )}
         </div>
       ))}

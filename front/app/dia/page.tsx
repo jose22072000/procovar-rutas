@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * El visor: un vendedor, un día, su recorrido en el mapa.
+ * El visor: un seller, un día, su track en el mapa.
  *
  * Es lo que sustituye a descargar el .gpx y abrirlo en una aplicación externa.
- * Por defecto se recorta a la jornada (9:00–16:00), con interruptor para ver el
- * día completo — porque el control es de la jornada, pero a veces hace falta ver
+ * Por defecto se recorta a la workday (9:00–16:00), con interruptor para ver el
+ * día completo — porque el control es de la workday, pero a veces hace falta ver
  * qué pasó fuera de ella.
  */
 
@@ -28,7 +28,7 @@ const MapaRuta = dynamic(() => import("@/components/MapaRuta"), {
 
 function Visor() {
   const params = useSearchParams();
-  const vendedor = params.get("vendedor") ?? "";
+  const seller = params.get("seller") ?? "";
   const fecha = params.get("fecha") ?? "";
 
   const [datos, setDatos] = useState<RespuestaDia | null>(null);
@@ -37,34 +37,34 @@ function Visor() {
   const [instante, setInstante] = useState(-1);
 
   useEffect(() => {
-    if (!vendedor || !fecha) return;
+    if (!seller || !fecha) return;
     setError(null);
     setDatos(null);
     setInstante(-1);
     pedir<RespuestaDia>(
-      `/api/dia?vendedor=${vendedor}&fecha=${fecha}${completa ? "&jornada=completa" : ""}`,
+      `/api/day?seller=${seller}&fecha=${fecha}${completa ? "&workday=completa" : ""}`,
     )
       .then(setDatos)
       .catch((e) => setError(e.message));
-  }, [vendedor, fecha, completa]);
+  }, [seller, fecha, completa]);
 
-  function otroDia(dias: number): string {
+  function otroDia(days: number): string {
     const d = new Date(`${fecha}T12:00:00Z`);
-    const nueva = new Date(d.getTime() + dias * 86400000)
+    const nueva = new Date(d.getTime() + days * 86400000)
       .toISOString()
       .slice(0, 10);
-    return `/dia?vendedor=${vendedor}&fecha=${nueva}`;
+    return `/dia?seller=${seller}&fecha=${nueva}`;
   }
 
-  if (!vendedor || !fecha) {
+  if (!seller || !fecha) {
     return <p className="aviso">Falta el vendedor o la fecha.</p>;
   }
 
-  const est = datos ? ESTADOS[datos.dia.Estado] : null;
+  const est = datos ? ESTADOS[datos.day.status] : null;
 
   return (
     <>
-      <h1>{datos?.dia.Trabajador ?? "Recorrido"}</h1>
+      <h1>{datos?.day.seller ?? "Recorrido"}</h1>
       <p className="sub">{fecha}</p>
 
       <div className="controles">
@@ -82,13 +82,13 @@ function Visor() {
           />{" "}
           Ver el día completo (fuera de 9:00–16:00)
         </label>
-        <Link href={`/reporte?vendedor=${vendedor}&fecha=${fecha}`}>
+        <Link href={`/reporte?seller=${seller}&from=${fecha}&to=${fecha}`}>
           <button className="primario">Reporte de la semana</button>
         </Link>
       </div>
 
       {error && <p className="aviso">{error}</p>}
-      {!datos && !error && <p className="cargando">Cargando el recorrido…</p>}
+      {!datos && !error && <p className="cargando">Cargando el track…</p>}
 
       {datos && (
         <div className="visor">
@@ -108,42 +108,42 @@ function Visor() {
 
               <div className="dato">
                 <span>Kilómetros</span>
-                <span>{datos.dia.KmNetos.toFixed(2)} km</span>
+                <span>{datos.day.netKm.toFixed(2)} km</span>
               </div>
               <div className="dato">
                 <span>Primer fix</span>
-                <span>{hora(datos.dia.PrimerFix)}</span>
+                <span>{hora(datos.day.firstFix)}</span>
               </div>
               <div className="dato">
                 <span>Último fix</span>
-                <span>{hora(datos.dia.UltimoFix)}</span>
+                <span>{hora(datos.day.lastFix)}</span>
               </div>
               <div className="dato">
                 <span>Cobertura</span>
-                <span>{datos.dia.Cobertura.toFixed(0)} %</span>
+                <span>{datos.day.coverage.toFixed(0)} %</span>
               </div>
               <div className="dato">
                 <span>En movimiento</span>
-                <span>{datos.dia.MinMovimiento} min</span>
+                <span>{datos.day.minMovement} min</span>
               </div>
               <div className="dato">
                 <span>Parado</span>
-                <span>{datos.dia.MinParado} min</span>
+                <span>{datos.day.minStopped} min</span>
               </div>
               <div className="dato">
                 <span>Paradas</span>
-                <span>{datos.paradas.length}</span>
+                <span>{datos.stops.length}</span>
               </div>
-              {datos.dia.RadioDispersion !== null && (
+              {datos.day.spreadM !== null && (
                 <div className="dato">
                   <span>Radio del día</span>
-                  <span>{datos.dia.RadioDispersion} m</span>
+                  <span>{datos.day.spreadM} m</span>
                 </div>
               )}
 
-              {datos.dia.Banderas.length > 0 && (
-                <div className="banderas">
-                  {datos.dia.Banderas.map((b) => (
+              {datos.day.flags.length > 0 && (
+                <div className="flags">
+                  {datos.day.flags.map((b) => (
                     <span key={b} className="bandera">
                       {BANDERAS[b] ?? b}
                     </span>
@@ -151,26 +151,26 @@ function Visor() {
                 </div>
               )}
 
-              {datos.dia.Estado === "SIN_MOVIMIENTO" && (
+              {datos.day.status === "SIN_MOVIMIENTO" && (
                 <p className="sub" style={{ marginTop: "0.75rem" }}>
-                  Los puntos no se alejaron del mismo lugar en toda la jornada.
-                  {datos.dia.LugarTexto ? ` Estuvo en ${datos.dia.LugarTexto}.` : ""}
+                  Los points no se alejaron del mismo lugar en toda la workday.
+                  {datos.day.placeLabel ? ` Estuvo en ${datos.day.placeLabel}.` : ""}
                 </p>
               )}
             </div>
 
-            {datos.paradas.length > 0 && (
+            {datos.stops.length > 0 && (
               <div className="tarjeta">
                 <b>Paradas</b>
-                <table className="movimientos">
+                <table className="movements">
                   <tbody>
-                    {datos.paradas.map((p) => (
-                      <tr key={p.ID} className="parada">
+                    {datos.stops.map((p) => (
+                      <tr key={p.id} className="parada">
                         <td>
-                          {hora(p.Inicio)}–{hora(p.Fin)}
+                          {hora(p.start)}–{hora(p.end)}
                         </td>
-                        <td>{p.DuracionMin} min</td>
-                        <td>{p.ClienteNombre ?? "—"}</td>
+                        <td>{p.durationMin} min</td>
+                        <td>{p.clientName ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -181,27 +181,27 @@ function Visor() {
 
           <div>
             <MapaRuta
-              puntos={datos.puntos}
-              paradas={datos.paradas}
-              hasta={instante}
+              points={datos.points}
+              stops={datos.stops}
+              to={instante}
             />
-            {datos.puntos.length > 0 && (
+            {datos.points.length > 0 && (
               <div className="controles" style={{ marginTop: "0.75rem" }}>
                 <input
                   type="range"
                   min={0}
-                  max={datos.puntos.length - 1}
-                  value={instante < 0 ? datos.puntos.length - 1 : instante}
+                  max={datos.points.length - 1}
+                  value={instante < 0 ? datos.points.length - 1 : instante}
                   onChange={(e) => setInstante(Number(e.target.value))}
                   style={{ flex: 1, padding: 0 }}
                 />
                 <span style={{ color: "var(--tenue)", minWidth: 120 }}>
                   {hora(
-                    datos.puntos[
-                      instante < 0 ? datos.puntos.length - 1 : instante
-                    ].Ts,
+                    datos.points[
+                      instante < 0 ? datos.points.length - 1 : instante
+                    ].ts,
                   )}{" "}
-                  ({datos.puntos.length} puntos)
+                  ({datos.points.length} points)
                 </span>
                 <button onClick={() => setInstante(-1)}>Todo el día</button>
               </div>

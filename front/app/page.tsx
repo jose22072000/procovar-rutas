@@ -3,7 +3,7 @@
 /**
  * El calendario de cumplimiento: la pantalla de entrada.
  *
- * Una cuadrícula de vendedores × días laborables donde cada celda lleva el color
+ * Una cuadrícula de vendedores × días workdays donde cada celda lleva el color
  * de su estado. De un vistazo se ve quién no está trabajando; se toca la celda y
  * se cae en el mapa de ese día. Es la respuesta a "cómo me entero": te enteras
  * porque el sistema lo pinta, no porque alguien abra los ficheros uno a uno.
@@ -38,7 +38,7 @@ export default function Calendario() {
     setCargando(true);
     setError(null);
     pedir<RespuestaCalendario>(
-      `/api/calendario?desde=${semana[0]}&hasta=${semana[4]}`,
+      `/api/calendar?from=${semana[0]}&to=${semana[4]}`,
     )
       .then(setDatos)
       .catch((e) => setError(e.message))
@@ -46,31 +46,31 @@ export default function Calendario() {
   }, [semana]);
 
   // La cuadrícula se arma en el cliente: la API devuelve filas sueltas, y aquí
-  // se cruzan vendedor × día para que falten celdas en vez de filas.
+  // se cruzan seller × día para que falten celdas en vez de filas.
   const porVendedor = useMemo(() => {
     const mapa = new Map<
       string,
-      { nombre: string; dias: Map<string, RespuestaCalendario["dias"][0]> }
+      { nombre: string; days: Map<string, RespuestaCalendario["days"][0]> }
     >();
-    for (const d of datos?.dias ?? []) {
-      if (!mapa.has(d.TrabajadorID)) {
-        mapa.set(d.TrabajadorID, { nombre: d.Trabajador, dias: new Map() });
+    for (const d of datos?.days ?? []) {
+      if (!mapa.has(d.sellerId)) {
+        mapa.set(d.sellerId, { nombre: d.seller, days: new Map() });
       }
-      mapa.get(d.TrabajadorID)!.dias.set(d.Fecha.slice(0, 10), d);
+      mapa.get(d.sellerId)!.days.set(d.date.slice(0, 10), d);
     }
     return mapa;
   }, [datos]);
 
-  function mover(dias: number) {
+  function mover(days: number) {
     const d = new Date(`${ancla}T12:00:00Z`);
-    setAncla(new Date(d.getTime() + dias * 86400000).toISOString().slice(0, 10));
+    setAncla(new Date(d.getTime() + days * 86400000).toISOString().slice(0, 10));
   }
 
   return (
     <>
       <h1>Calendario de cumplimiento</h1>
       <p className="sub">
-        Lunes a viernes. Cada celda es un día: tócala para ver el recorrido en el
+        Lunes a viernes. Cada celda es un día: tócala para ver el track en el
         mapa.
       </p>
 
@@ -103,7 +103,7 @@ export default function Calendario() {
           <table className="rejilla">
             <thead>
               <tr>
-                <th className="vendedor">Vendedor</th>
+                <th className="seller">Vendedor</th>
                 {semana.map((f) => (
                   <th key={f}>
                     {nombreDia(f)} {fechaCorta(f)}
@@ -114,21 +114,21 @@ export default function Calendario() {
             </thead>
             <tbody>
               {[...porVendedor.entries()].map(([id, v]) => {
-                const resumen = datos?.resumen.find(
-                  (r) => r.TrabajadorID === id,
+                const summary = datos?.summary.find(
+                  (r) => r.sellerId === id,
                 );
                 const incidencias =
-                  (resumen?.SinFichero ?? 0) +
-                  (resumen?.SinFecha ?? 0) +
-                  (resumen?.SinMovimiento ?? 0);
+                  (summary?.daysNoFile ?? 0) +
+                  (summary?.daysNoDate ?? 0) +
+                  (summary?.daysNoMovement ?? 0);
                 return (
                   <tr key={id}>
-                    <td className="vendedor">{v.nombre}</td>
+                    <td className="seller">{v.nombre}</td>
                     {semana.map((f) => {
-                      const d = v.dias.get(f);
+                      const d = v.days.get(f);
                       // Sin fila para ese día se pinta como falta: es lo que es,
                       // y así una ausencia nunca queda invisible.
-                      const estado: EstadoDia = d?.Estado ?? "SIN_FICHERO";
+                      const estado: EstadoDia = d?.status ?? "SIN_FICHERO";
                       const est = ESTADOS[estado];
                       return (
                         <td key={f}>
@@ -137,16 +137,16 @@ export default function Calendario() {
                             style={{ background: est.color, color: est.texto }}
                             title={`${v.nombre} · ${f} · ${est.etiqueta}`}
                             onClick={() =>
-                              router.push(`/dia?vendedor=${id}&fecha=${f}`)
+                              router.push(`/dia?seller=${id}&fecha=${f}`)
                             }
                           >
                             {estado === "OK" || estado === "MOVIMIENTO_ESCASO" ? (
                               <>
                                 <span className="km">
-                                  {d?.KmNetos.toFixed(1)} km
+                                  {d?.netKm.toFixed(1)} km
                                 </span>
-                                {d?.PrimerFix
-                                  ? new Date(d.PrimerFix).toLocaleTimeString(
+                                {d?.firstFix
+                                  ? new Date(d.firstFix).toLocaleTimeString(
                                       "es",
                                       { hour: "2-digit", minute: "2-digit" },
                                     )
@@ -180,7 +180,7 @@ export default function Calendario() {
                           </span>
                         )}
                         <span style={{ color: "var(--tenue)" }}>
-                          {(resumen?.KmTotal ?? 0).toFixed(0)} km
+                          {(summary?.totalKm ?? 0).toFixed(0)} km
                         </span>
                       </div>
                     </td>

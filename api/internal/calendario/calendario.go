@@ -59,3 +59,20 @@ func SemanaLaboral(fecha time.Time) []time.Time {
 	}
 	return semana
 }
+
+// DiasEntre devuelve todos los días del rango, uno por uno, sábados y domingos
+// incluidos.
+//
+// No filtra por laborables a propósito: lo usa el reporte, y quien pide un rango
+// concreto lo pide porque quiere ver esos días exactos. Filtrar aquí haría
+// desaparecer del documento justo el día que alguien fue a mirar.
+func DiasEntre(desde, hasta time.Time) []time.Time {
+	if hasta.Before(desde) {
+		return nil
+	}
+	dias := make([]time.Time, 0, int(hasta.Sub(desde).Hours()/24)+1)
+	for d := desde; !d.After(hasta); d = d.AddDate(0, 0, 1) {
+		dias = append(dias, d)
+	}
+	return dias
+}

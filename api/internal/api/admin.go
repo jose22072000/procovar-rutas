@@ -31,17 +31,17 @@ func (s *Servidor) bandeja(w http.ResponseWriter, r *http.Request) {
 		s.fallo(w, "bandeja", err)
 		return
 	}
-	responder(w, http.StatusOK, filas)
+	responder(w, http.StatusOK, aInboxFiles(filas))
 }
 
 type peticionAsignar struct {
-	FicheroID    string `json:"ficheroId"`
-	TrabajadorID string `json:"vendedorId"`
-	Fecha        string `json:"fecha"`
+	FicheroID    string `json:"fileId"`
+	TrabajadorID string `json:"sellerId"`
+	Fecha        string `json:"date"`
 	// RecordarAlias hace que la próxima vez se resuelva solo. Es lo que
 	// convierte la bandeja en trabajo de una vez por dispositivo y no de todos
 	// los días.
-	RecordarAlias bool   `json:"recordarAlias"`
+	RecordarAlias bool   `json:"rememberAlias"`
 	Alias         string `json:"alias"`
 }
 
@@ -119,7 +119,7 @@ func (s *Servidor) asignar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auth.RegistrarAuditoria(r.Context(), "rutas.fichero.asignar", fila.ID, c.AuthUserID)
-	responder(w, http.StatusOK, fila)
+	responder(w, http.StatusOK, aAssignedFile(fila))
 }
 
 func (s *Servidor) listarAlias(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +133,7 @@ func (s *Servidor) listarAlias(w http.ResponseWriter, r *http.Request) {
 		s.fallo(w, "alias", err)
 		return
 	}
-	responder(w, http.StatusOK, filas)
+	responder(w, http.StatusOK, aDeviceAliases(filas))
 }
 
 func (s *Servidor) borrarAlias(w http.ResponseWriter, r *http.Request) {
@@ -153,17 +153,17 @@ func (s *Servidor) fuentes(w http.ResponseWriter, r *http.Request) {
 		s.fallo(w, "fuentes", err)
 		return
 	}
-	responder(w, http.StatusOK, filas)
+	responder(w, http.StatusOK, aDriveSources(filas))
 }
 
 type peticionFuente struct {
-	Nombre       string `json:"nombre"`
+	Nombre       string `json:"name"`
 	FolderID     string `json:"folderId"`
-	Tipo         string `json:"tipo"`
-	SucursalID   string `json:"sucursalId"`
-	TrabajadorID string `json:"vendedorId"`
+	Tipo         string `json:"type"`
+	SucursalID   string `json:"branchId"`
+	TrabajadorID string `json:"sellerId"`
 	// Credencial es la cuenta de Google con la que se lee esta carpeta.
-	Credencial string `json:"credencial"`
+	Credencial string `json:"credential"`
 }
 
 func (s *Servidor) crearFuente(w http.ResponseWriter, r *http.Request) {
@@ -224,5 +224,5 @@ func (s *Servidor) barridos(w http.ResponseWriter, r *http.Request) {
 		s.fallo(w, "barridos", err)
 		return
 	}
-	responder(w, http.StatusOK, filas)
+	responder(w, http.StatusOK, aScanLogs(filas))
 }
