@@ -1,10 +1,10 @@
 version: "2"
 sql:
   - engine: postgresql
-    # El esquema es el de las migraciones: sqlc lee las mismas que se aplican en
-    # producción, así que si una consulta no casa con el esquema, falla al
-    # generar y no en el servidor.
-    schema: "migraciones"
+    # The schema is the migrations': sqlc reads the same ones applied in
+    # production, so a query that does not match the schema fails at generation
+    # time and not on the server.
+    schema: "migrations"
     queries: "internal/store/queries"
     gen:
       go:
@@ -13,9 +13,9 @@ sql:
         sql_package: "pgx/v5"
         emit_pointers_for_null_types: true
         emit_empty_slices: true
-        # Las columnas siguen en español porque la base NO se toca: renombrarlas
-        # exigiría migraciones sobre datos ya cargados, y a cambio de nada. La
-        # traducción ocurre aquí, al generar el Go.
+        # The columns stay in Spanish because the database is NOT being touched:
+        # renaming them would mean migrations over data already loaded, for nothing
+        # in return. The translation happens here, when the Go is generated.
         rename:
           # Tipos enumerados de Postgres
           tipo_fuente: "SourceType"

@@ -16,7 +16,7 @@ func fecha(a, m, d int) *time.Time {
 	return &t
 }
 
-// Yasmani supervisaba a Alexander en agosto; en septiembre pasó al equipo de Dania.
+// Yasmani supervised Alexander in August; in September he moved to Dania's team.
 func vigencias() []Term {
 	return []Term{
 		{ManagerID: "t-alex", SupervisorID: "t-yas", From: *fecha(2026, 1, 1), To: fecha(2026, 8, 31)},
@@ -72,7 +72,7 @@ func TestSupervisorVeASuEquipoYNuncaASiMismo(t *testing.T) {
 	}
 }
 
-// El corazón de las vigencias: el equipo se evalúa contra la fecha CONSULTADA.
+// The heart of the terms: the team is evaluated against the DATE BEING QUERIED.
 func TestElEquipoSeEvaluaContraLaFechaConsultada(t *testing.T) {
 	v := vigencias()
 
@@ -97,7 +97,7 @@ func TestElEquipoSeEvaluaContraLaFechaConsultada(t *testing.T) {
 	}
 }
 
-// Falla cerrado: ante la duda, no se ve nada.
+// Fail closed: when in doubt, nothing is visible.
 func TestSupervisorSinEquipoNoVeNada(t *testing.T) {
 	s := sesion(RoleSupervisor)
 	s.SellerID = "t-nadie"
@@ -134,8 +134,8 @@ func contiene(xs []string, s string) bool {
 	return false
 }
 
-// El gerente está por encima del supervisor y ve toda su sucursal, pero NO
-// administra: no toca carpetas de Drive, ni alias, ni umbrales.
+// The manager sits above the supervisor and sees their whole branch, but does NOT
+// administer: no Drive folders, no aliases, no thresholds.
 func TestGerenteVeLaSucursalPeroNoAdministra(t *testing.T) {
 	f, err := Compute(sesion(RoleManager), agosto, nil)
 	if err != nil {
@@ -144,10 +144,10 @@ func TestGerenteVeLaSucursalPeroNoAdministra(t *testing.T) {
 	if f.BranchID != "s-cmg" || len(f.SellersIn) != 0 {
 		t.Errorf("= %+v; el gerente ve la sucursal entera, no un equipo", f)
 	}
-	if PuedeAdministrar(RoleManager) {
+	if CanAdminister(RoleManager) {
 		t.Error("el gerente no administra")
 	}
-	if !PuedeAdministrar(RoleAdmin) || !PuedeAdministrar(RoleSuperAdmin) {
+	if !CanAdminister(RoleAdmin) || !CanAdminister(RoleSuperAdmin) {
 		t.Error("admin y super admin sí administran")
 	}
 	if !CanExport(RoleManager) {

@@ -82,7 +82,7 @@ const activeSources = `-- name: ActiveSources :many
 SELECT id, nombre, folder_id, tipo, sucursal_id, trabajador_id, credencial, activa, cursor_modificado, ultimo_barrido, ultimo_error, created_at, updated_at FROM drive_source WHERE activa ORDER BY nombre
 `
 
-// Consultas de la ingesta: leer las carpetas, registrar ficheros y volcar puntos.
+// Ingest queries: read the folders, record files and bulk-load points.
 func (q *Queries) ActiveSources(ctx context.Context) ([]DriveSource, error) {
 	rows, err := q.db.Query(ctx, activeSources)
 	if err != nil {
@@ -352,8 +352,8 @@ type CreateTestBranchParams struct {
 	AuthOrgID *string
 }
 
-// Altas mínimas, solo para las pruebas de integración: el alta real de
-// sucursales y trabajadores viene de procovar-auth, no de aquí.
+// Minimal inserts, for the integration tests only: branches and sellers are really
+// created from procovar-auth, not from here.
 func (q *Queries) CreateTestBranch(ctx context.Context, arg CreateTestBranchParams) (Branch, error) {
 	row := q.db.QueryRow(ctx, createTestBranch, arg.ID, arg.Name, arg.AuthOrgID)
 	var i Branch
@@ -429,9 +429,9 @@ const fileByDriveID = `-- name: FileByDriveID :one
 SELECT id, source_id, drive_file_id, sha256, nombre, ruta_carpeta, tamano_bytes, drive_created_at, estado, error, trabajador_id, sucursal_id, fecha, origen_fecha, puntos_total, puntos_validos, primer_fix, ultimo_fix, pista_alias, importado_at FROM gpx_file WHERE drive_file_id = $1
 `
 
-// El "ya procesé esto" del sistema. Se consulta por las dos claves porque un
-// mismo contenido puede aparecer con otro drive_file_id (copiado a otra carpeta)
-// y un mismo drive_file_id puede cambiar de contenido (re-subida corregida).
+// The system's "I already did this". It is checked on both keys because the same
+// content can turn up under another drive_file_id (copied to another folder) and
+// the same drive_file_id can change content (re-uploaded after a fix).
 func (q *Queries) FileByDriveID(ctx context.Context, driveFileID string) (GpxFile, error) {
 	row := q.db.QueryRow(ctx, fileByDriveID, driveFileID)
 	var i GpxFile
@@ -514,9 +514,9 @@ type MarkAbsencesParams struct {
 	BranchID string
 }
 
-// Marca las ausencias del día laborable: cada vendedor activo sin fila queda en
-// SIN_FICHERO. Sin esto, "no subió nada" sería la ausencia de una fila, y las
-// ausencias no se pueden listar, ni contar, ni ordenar por número de faltas.
+// Marks the working day's absences: every active seller with no row ends up as
+// SIN_FICHERO. Without this, "uploaded nothing" would be the absence of a row, and
+// absences cannot be listed, counted, or sorted by number of misses.
 func (q *Queries) MarkAbsences(ctx context.Context, arg MarkAbsencesParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAbsences, arg.Date, arg.BranchID)
 	if err != nil {
@@ -620,8 +620,8 @@ type SaveDayParams struct {
 	GpxFileID   *string
 }
 
-// El día se reemplaza entero en cada recálculo: es idempotente, así que
-// reprocesar un fichero cuantas veces haga falta no duplica nada.
+// The day is replaced whole on every recompute: it is idempotent, so reprocessing
+// a file as many times as needed duplicates nothing.
 func (q *Queries) SaveDay(ctx context.Context, arg SaveDayParams) (TrackDay, error) {
 	row := q.db.QueryRow(ctx, saveDay,
 		arg.ID,
@@ -813,10 +813,10 @@ type SellerPointsOnDateRow struct {
 	Seq      int32
 }
 
-// Todos los puntos de un vendedor en un día local, vengan del fichero que
-// vengan: el día se recalcula desde la base y no desde el fichero recién
-// llegado, porque puede haber varios ficheros para el mismo día (una sesión de
-// mañana y otra de tarde) y sumarlos por separado daría dos veredictos.
+// Every point of a seller on a local day, whichever file it came from: the day is
+// recomputed from the database and not from the file that just arrived, because
+// there can be several files for the same day (a morning session and an afternoon
+// one) and adding them separately would give two verdicts.
 func (q *Queries) SellerPointsOnDate(ctx context.Context, arg SellerPointsOnDateParams) ([]SellerPointsOnDateRow, error) {
 	rows, err := q.db.Query(ctx, sellerPointsOnDate, arg.SellerID, arg.Zone, arg.Date)
 	if err != nil {

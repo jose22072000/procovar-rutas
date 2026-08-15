@@ -8,15 +8,15 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/events"
 )
 
-// GET /api/events — el flujo de avisos que mantiene el panel al día.
+// GET /api/events — the notification stream that keeps the panel current.
 //
-// Es SSE y no WebSocket porque esto va en un solo sentido: el servidor avisa, el
-// navegador no manda nada. SSE es HTTP normal, así que atraviesa Traefik sin
-// configuración aparte y el navegador reconecta solo si se corta.
+// SSE and not WebSocket because this only goes one way: the server notifies, the
+// browser sends nothing. SSE is ordinary HTTP, so it crosses Traefik with no extra
+// configuration and the browser reconnects on its own if it drops.
 //
-// Si no hay Redis configurado se responde 503 en vez de dejar la conexión colgada
-// para siempre: así el panel sabe que aquí no hay avisos y se queda con su
-// recarga periódica.
+// With no Redis configured it answers 503 rather than leaving the connection
+// hanging for ever: that way the panel knows there are no notifications here and
+// falls back to reloading.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if s.bus == nil {
 		respondError(w, http.StatusServiceUnavailable, "sin avisos en vivo")
@@ -39,15 +39,15 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	// Sin esto, un proxy con almacenamiento intermedio se guarda los avisos y los
-	// entrega todos juntos al final, que es justo lo contrario de lo que se busca.
+	// Without this, a buffering proxy holds the notifications and delivers them all
+	// at once at the end, which is exactly the opposite of the point.
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	flush.Flush()
 
-	// Un latido de vez en cuando: si no viaja nada, algún intermediario da la
-	// conexión por muerta y la corta. El comentario `:` es un evento vacío que el
-	// navegador ignora.
+	// A heartbeat now and then: with nothing travelling, some middlebox declares the
+	// connection dead and cuts it. The `:` comment is an empty event the browser
+	// ignores.
 	latido := time.NewTicker(25 * time.Second)
 	defer latido.Stop()
 
@@ -78,8 +78,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// notify publica sin estorbar: los avisos son un extra, y si Redis no responde no
-// puede caerse lo que se estaba haciendo.
+// notify publishes without getting in the way: notifications are an extra, and if
+// Redis does not answer, whatever was being done must not fall over.
 func (s *Server) notify(r *http.Request, e events.Event) {
 	if s.bus == nil {
 		return

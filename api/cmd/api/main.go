@@ -1,4 +1,4 @@
-// Comando api: el servidor HTTP del panel de rutas.
+// Command api: the routes panel's HTTP server.
 package main
 
 import (
@@ -52,11 +52,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// El panel puede arrancar sin credencial de Google: sirve el histórico que ya
-	// está en la base. Lo que no funcionará es lanzar un barrido a mano, y el
-	// arranque lo dice en vez de fallar más tarde con un error críptico.
+	// The panel can start without a Google credential: it serves the history already
+	// in the database. What will not work is launching a scan by hand, and the
+	// startup says so instead of failing later with a cryptic error.
 	var cuentas ingest.Accounts
-	if credencial, err := cfg.Credenciales(); err == nil {
+	if credencial, err := cfg.Credentials(); err == nil {
 		if j, err := drive.LoadAccounts(credencial); err == nil {
 			cuentas = j
 			log.Info("cuentas de Google cargadas", "cuentas", j.Keys())
@@ -70,8 +70,8 @@ func main() {
 		cuentas = ingest.SingleAccount(nil)
 	}
 
-	// Sin Redis el sistema sigue funcionando: el empuje de n8n se procesa en el
-	// acto en vez de encolarse. Peor bajo carga, pero preferible a no arrancar.
+	// Without Redis the system still works: n8n's push is processed on the spot
+	// instead of being queued. Worse under load, but better than refusing to start.
 	var colaRedis *queue.Queue
 	if cfg.RedisURL != "" {
 		c, err := queue.New(cfg.RedisURL, cfg.PrefijoRedis)
@@ -90,9 +90,9 @@ func main() {
 		log.Warn("sin REDIS_URL; el empuje de n8n se procesará en el acto")
 	}
 
-	// El mismo Redis y el mismo prefijo que la cola, para los avisos en vivo del
-	// panel (SSE). Sin Redis no hay avisos y el panel recarga a mano: molesto,
-	// pero no es motivo para no arrancar.
+	// The same Redis and the same prefix as the queue, for the panel's live
+	// notifications (SSE). With no Redis there are no notifications and the panel
+	// reloads by hand: annoying, but not a reason to refuse to start.
 	var bus *events.Bus
 	if cfg.RedisURL != "" {
 		b, err := events.New(cfg.RedisURL, cfg.PrefijoRedis)

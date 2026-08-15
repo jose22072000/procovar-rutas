@@ -1,4 +1,4 @@
-// Package api es el servidor HTTP del panel.
+// Package api is the panel's HTTP server.
 package api
 
 import (
@@ -14,36 +14,36 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/scope"
 )
 
-// CookieSesion es la que pone procovar-auth y comparten todas las aplicaciones
-// bajo el mismo dominio raíz.
+// SessionCookie is the one procovar-auth sets and every application under the
+// same root domain shares.
 const CookieSesion = "qb.session_token"
 
 type ctxKey string
 
 const claveIdentidad ctxKey = "identidad"
 
-// Caller es la identidad de quien pide, ya resuelta contra la base local.
+// Caller is the identity of whoever is asking, already resolved against the local database.
 type Caller struct {
 	auth.Identity
-	// SellerID es su ficha local. Vacío si no tiene: un super admin que no
-	// es vendedor no aparece en la tabla de trabajadores.
+	// SellerID is their local record. Empty when they have none: a super admin who
+	// is not a seller does not appear in the sellers table.
 	SellerID string
 	BranchID string
-	// Terms son las supervisiones de esta persona, para calcular el alcance
-	// contra la fecha consultada.
+	// Terms are this person's supervisions, used to compute scope against the date
+	// being queried.
 	Terms []scope.Term
 }
 
-// Scope calcula el filtro para una fecha.
+// Scope computes the filter for a date.
 func (c *Caller) Scope(fecha time.Time) (scope.Filter, error) {
 	return scope.Compute(
-		c.Identity.AlcanceDe(c.SellerID, c.BranchID), fecha, c.Terms)
+		c.Identity.ScopeOf(c.SellerID, c.BranchID), fecha, c.Terms)
 }
 
-// WithSession exige una sesión válida de procovar-auth y resuelve la identidad.
+// WithSession requires a valid procovar-auth session and resolves the identity.
 //
-// El rol NO se acepta de ninguna cabecera ni parámetro: siempre sale de
-// verify-session. Un rol que llegue del cliente es un rol que el cliente elige.
+// The role is NOT taken from any header or parameter: it always comes from
+// verify-session. A role that arrives from the client is a role the client picks.
 func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(CookieSesion)
@@ -52,21 +52,21 @@ func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 			return
 		}
 
-		sesion, err := s.auth.VerificarSesion(r.Context(), cookie.Value)
+		sesion, err := s.auth.VerifySession(r.Context(), cookie.Value)
 		if err != nil {
 			s.log.Debug("sesión rechazada", "error", err)
 			respondError(w, http.StatusUnauthorized, "sesión no válida")
 			return
 		}
 
-		identidad := sesion.Traducir()
+		identidad := sesion.Translate()
 		if identidad.Role == "" {
 			respondError(w, http.StatusForbidden, "este usuario no tiene un rol con acceso al panel de rutas")
 			return
 		}
 		if identidad.Role == scope.RoleAgent {
-			// Se corta aquí y no en cada manejador: el vendedor no entra, y el
-			// mensaje explica por qué en vez de dar una pantalla vacía.
+			// Cut off here and not in every handler: the seller does not come in, and
+			// the message explains why instead of showing an empty screen.
 			respondError(w, http.StatusForbidden,
 				"el panel de rutas es para supervisión; los sellers no tienen acceso")
 			return
@@ -83,7 +83,7 @@ func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 	})
 }
 
-// resolveCaller cruza la identidad de procovar-auth con la base local.
+// resolveCaller crosses the procovar-auth identity with the local database.
 func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, error) {
 	c := &Caller{Identity: id}
 
@@ -93,12 +93,12 @@ func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, 
 		c.SellerID = trab.ID
 		c.BranchID = trab.BranchID
 	case errors.Is(err, pgx.ErrNoRows):
-		// No tiene ficha local. Normal en un super admin o en alguien de oficina.
+		// No local record. Normal for a super admin or for office staff.
 	default:
 		return nil, err
 	}
 
-	// La sucursal de la sesión manda sobre la de la ficha: es la que la persona
+	// The session's branch wins over the record's: it is the one the person
 	// eligió en procovar-auth.
 	if id.AuthOrgID != "" {
 		if suc, err := s.q.BranchByAuthOrg(ctx, &id.AuthOrgID); err == nil {
@@ -124,11 +124,11 @@ func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, 
 	return c, nil
 }
 
-// AdminOnly protege lo que solo pueden tocar super admin y administradores.
+// AdminOnly guards what only super admins and administrators may touch.
 func AdminOnly(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := FromContext(r)
-		if c == nil || !scope.PuedeAdministrar(c.Role) {
+		if c == nil || !scope.CanAdminister(c.Role) {
 			respondError(w, http.StatusForbidden, "hace falta ser administrador")
 			return
 		}
@@ -136,7 +136,7 @@ func AdminOnly(siguiente http.Handler) http.Handler {
 	})
 }
 
-// FromContext saca la identidad de la petición.
+// FromContext pulls the identity out of the request.
 func FromContext(r *http.Request) *Caller {
 	c, _ := r.Context().Value(claveIdentidad).(*Caller)
 	return c
@@ -156,8 +156,8 @@ func respondError(w http.ResponseWriter, estado int, mensaje string) {
 	respond(w, estado, map[string]string{"error": mensaje})
 }
 
-// scopeParams traduce el filtro a los tres parámetros que esperan todas las
-// consultas del panel.
+// scopeParams turns the filter into the three parameters every query expects.
+// queries in the panel.
 type scopeParams struct {
 	BranchID string
 	Sellers  []string

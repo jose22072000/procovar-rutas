@@ -59,8 +59,8 @@ func TestParseVariosTrkYTrkseg(t *testing.T) {
 	}
 }
 
-// Un fichero sin horas no se descarta: se puede pintar el recorrido, pero no
-// hay jornada que medir. Es uno de los tres casos que hay que cazar.
+// A file with no times is not discarded: the route can be drawn, but there is no
+// workday to measure. It is one of the three cases worth catching.
 func TestParseSinHoras(t *testing.T) {
 	r, err := Parse(doc(`<trk><trkseg>` + pt(21.1, -77.1, "", "") + pt(21.2, -77.2, "", "") + `</trkseg></trk>`))
 	if err != nil {

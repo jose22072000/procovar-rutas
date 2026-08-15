@@ -14,29 +14,30 @@ RUN go mod download
 
 COPY . .
 
-# CGO apagado y estático, para poder correr sobre una imagen mínima.
-# Las migraciones van dentro del binario (go:embed), así que no hay que copiar
-# los .sql aparte ni pueden desincronizarse del código.
+# CGO off and statically linked, so it can run on a minimal image.
+# The migrations live inside the binary (go:embed), so there are no .sql files to
+# copy separately and they cannot drift from the code.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/api      ./cmd/api && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/ingesta  ./cmd/ingesta && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/migrar   ./cmd/migrar
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/ingest   ./cmd/ingest && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /bin/migrate  ./cmd/migrate
 
 FROM alpine:3.21
 
-# tzdata es imprescindible, no un extra: sin la base de zonas horarias,
-# America/Havana no existe y la jornada 9:00–16:00 se calcularía en UTC. Los
-# reportes saldrían corridos cuatro horas.
+# tzdata is essential, not an extra: without the time zone database
+# America/Havana does not exist and the 9:00–16:00 workday would be computed in
+# UTC. The reports would come out four hours off.
 RUN apk add --no-cache ca-certificates tzdata && \
     adduser -D -u 10001 rutas
 
-COPY --from=construccion /bin/api /bin/ingesta /bin/migrar /usr/local/bin/
-COPY entrada.sh /usr/local/bin/entrada
-RUN chmod +x /usr/local/bin/entrada
+COPY --from=construccion /bin/api /bin/ingest /bin/migrate /usr/local/bin/
+COPY entrypoint.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/entrypoint
 
 USER rutas
 EXPOSE 3600
 
-# Todo pasa por `entrada`, que migra la base antes de ceder el paso al comando.
-# Vale igual para `ingesta`, que sobrescribe el CMD pero no el ENTRYPOINT.
-ENTRYPOINT ["/usr/local/bin/entrada"]
+# Everything goes through `entrypoint`, which migrates the database before handing
+# over to the command. It works the same for `ingest`, which overrides CMD but not
+# ENTRYPOINT.
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["/usr/local/bin/api"]

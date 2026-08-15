@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// Prueba contra un Redis de verdad: lo que importa aquí es justo lo que no se ve
-// en memoria — que un proceso publique y OTRO lo reciba, que es el caso real
-// (rutas-ingesta publica, rutas-api sirve el SSE).
+// Tested against a real Redis: what matters here is exactly what an in-memory
+// channel would hide — that one process publishes and ANOTHER receives, which is
+// the real case (rutas-ingesta publishes, rutas-api serves the SSE).
 func TestPublicarYRecibir(t *testing.T) {
 	url := os.Getenv("REDIS_URL_TEST")
 	if url == "" {
@@ -53,7 +53,7 @@ func TestPublicarYRecibir(t *testing.T) {
 	}
 }
 
-// El prefix separa de verdad: un evento de PEDIDO no puede aparecer en rutas.
+// The prefix really does separate: a PEDIDO event cannot show up in rutas.
 func TestElPrefijoSepara(t *testing.T) {
 	url := os.Getenv("REDIS_URL_TEST")
 	if url == "" {

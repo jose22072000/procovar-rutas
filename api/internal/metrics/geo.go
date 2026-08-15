@@ -57,8 +57,8 @@ func SpreadRadiusM(puntos []Coord) float64 {
 	return max
 }
 
-// VelocidadKmh entre dos puntos separados por `segundos`.
-func VelocidadKmh(a, b Coord, segundos float64) float64 {
+// SpeedKmh between two points `seconds` apart.
+func SpeedKmh(a, b Coord, segundos float64) float64 {
 	if segundos <= 0 {
 		return 0
 	}

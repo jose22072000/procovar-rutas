@@ -11,7 +11,7 @@ func dia(s string) time.Time {
 }
 
 func TestSemanaLaboralEsLunesAViernes(t *testing.T) {
-	// El 13 de agosto de 2026 es jueves.
+	// The 13th of August 2026 is a Thursday.
 	week := WorkWeek(dia("2026-08-13"))
 
 	if len(week) != 5 {
@@ -25,8 +25,8 @@ func TestSemanaLaboralEsLunesAViernes(t *testing.T) {
 	}
 }
 
-// El domingo es el caso que rompe las implementaciones ingenuas: en Go es el
-// día 0, así que sin convertirlo a ISO la week se calcularía al revés.
+// Sunday is the case that breaks naive implementations: in Go it is day 0, so
+// without converting to ISO the week would be computed backwards.
 func TestSemanaLaboralDesdeUnDomingo(t *testing.T) {
 	week := WorkWeek(dia("2026-08-16")) // domingo
 
@@ -48,7 +48,7 @@ func TestFinDeSemanaNoEsLaborable(t *testing.T) {
 	}
 }
 
-// Sin holidays, un 1 de mayo saldría como ausencia de toda la plantilla.
+// Without holidays, the 1st of May would show up as the whole workforce absent.
 func TestFeriadoNoEsAusencia(t *testing.T) {
 	holidays := map[string]bool{"2026-05-01": true}
 	if IsWorkday(dia("2026-05-01"), nil, holidays) {
@@ -72,24 +72,24 @@ func TestDiasEntre(t *testing.T) {
 		return f
 	}
 
-	// Un rango corto, que es el caso que motivó esto: pedir tres días sueltos.
+	// A short range, the case that prompted this: asking for three separate days.
 	days := DaysBetween(d("2026-08-12"), d("2026-08-14"))
 	if len(days) != 3 {
 		t.Fatalf("esperaba 3 días, salieron %d", len(days))
 	}
 
-	// Un solo día es un rango válido de un elemento, no vacío.
+	// A single day is a valid one-element range, not an empty one.
 	if got := DaysBetween(d("2026-08-12"), d("2026-08-12")); len(got) != 1 {
 		t.Fatalf("un día suelto debería dar 1, dio %d", len(got))
 	}
 
-	// Incluye el fin de week: el reporte no filtra por workdays.
+	// Includes the weekend: the report does not filter by working day.
 	finde := DaysBetween(d("2026-08-14"), d("2026-08-17"))
 	if len(finde) != 4 {
 		t.Fatalf("esperaba 4 días con sábado y domingo, salieron %d", len(finde))
 	}
 
-	// Al revés no devuelve nada en vez de colgarse iterando.
+	// Reversed it returns nothing instead of looping for ever.
 	if got := DaysBetween(d("2026-08-14"), d("2026-08-12")); got != nil {
 		t.Fatalf("rango invertido debería dar nil, dio %v", got)
 	}

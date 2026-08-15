@@ -12,11 +12,8 @@ import (
 
 const iso = "2006-01-02"
 
-// queryRange lee ?from= y ?to=. Sin parámetros, la week laboral en curso,
-// que es lo que se quiere ver al login.
-//
-// Los nombres de los parámetros van en inglés como el resto del API; los de dentro
-// siguen en español, que es el idioma del código.
+// queryRange reads ?from= and ?to=. With no parameters, the current working week,
+// which is what you want to see on arrival.
 func queryRange(r *http.Request) (time.Time, time.Time, error) {
 	q := r.URL.Query()
 	desdeStr, hastaStr := q.Get("from"), q.Get("to")
@@ -40,7 +37,7 @@ func queryRange(r *http.Request) (time.Time, time.Time, error) {
 	if hasta.Before(desde) {
 		return time.Time{}, time.Time{}, fmt.Errorf("la fecha final es anterior a la inicial")
 	}
-	// Un rango sin tope permitiría pedir diez años de golpe y tumbar el panel.
+	// An unbounded range would allow asking for ten years at once and taking the panel down.
 	if hasta.Sub(desde) > 366*24*time.Hour {
 		return time.Time{}, time.Time{}, fmt.Errorf("el rango no puede pasar de un año")
 	}
@@ -58,8 +55,8 @@ func parseDate(s string) (time.Time, error) {
 	return f, nil
 }
 
-// branchZone y branchWorkday traen la configuración de la sucursal; si
-// no tiene fila propia, los valores de fábrica.
+// branchZone and branchWorkday fetch the branch's configuration; when it has no
+// row of its own, the factory values.
 func (s *Server) branchZone(r *http.Request, sucursalID string) string {
 	if suc, err := s.q.BranchByID(r.Context(), sucursalID); err == nil && suc.Timezone != "" {
 		return suc.Timezone
@@ -74,10 +71,10 @@ func (s *Server) branchWorkday(r *http.Request, sucursalID string) (string, stri
 	return "09:00", "16:00"
 }
 
-// fail registra el error de verdad y devuelve uno genérico.
+// fail logs the real error and returns a generic one.
 //
-// El mensaje interno no sale nunca al cliente: una consulta fallida puede
-// filtrar nombres de tablas y de columnas.
+// The internal message never reaches the client: a failed query can
+// leak table and column names.
 func (s *Server) fail(w http.ResponseWriter, contexto string, err error) {
 	s.log.Error("fail en el panel", "donde", contexto, "error", err)
 	respondError(w, http.StatusInternalServerError, "error interno")

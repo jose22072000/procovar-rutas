@@ -13,8 +13,8 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// La inbox: los ficheros que la ingesta no supo assign o fechar, y los que
-// dieron error. Es lo que garantiza que ningún fichero se pierda en silencio.
+// The inbox: the files ingest could not assign or date, and the ones that
+// failed. It is what guarantees no file is ever lost in silence.
 func (s *Server) inbox(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
@@ -39,9 +39,9 @@ type assignRequest struct {
 	FileID   string `json:"fileId"`
 	SellerID string `json:"sellerId"`
 	Date     string `json:"date"`
-	// RememberAlias hace que la próxima vez se resuelva solo. Es lo que
-	// convierte la inbox en trabajo de una vez por dispositivo y no de todos
-	// los días.
+	// RememberAlias makes the next one resolve on its own. It is what turns the
+	// inbox into work done once per device instead of every single day.
+	//
 	RememberAlias bool   `json:"rememberAlias"`
 	Alias         string `json:"alias"`
 }
@@ -64,8 +64,8 @@ func (s *Server) assign(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "ese vendedor no existe")
 		return
 	}
-	// Un administrador no puede assign un fichero a un vendedor de otra
-	// sucursal: sería colar datos donde no le corresponde mirar.
+	// An administrator cannot assign a file to a seller from another branch: that
+	// would be slipping data in where they have no business looking.
 	if c.Role == "admin" && c.BranchID != "" && trab.BranchID != c.BranchID {
 		respondError(w, http.StatusForbidden, "ese vendedor es de otra sucursal")
 		return
@@ -111,17 +111,17 @@ func (s *Server) assign(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Los puntos ya están en la base desde la ingesta: assign el fichero solo
-	// exige recalcular el día, sin volver a bajar nada de Drive.
+	// The points are already in the database from ingest: assigning the file only
+	// calls for recomputing the day, without downloading anything from Drive again.
 	if fila.SellerID != nil && fila.Date != nil {
 		if err := s.ingest.RecomputeDay(r.Context(), *fila.SellerID, *fila.Date); err != nil {
 			s.log.Error("recálculo tras assign", "error", err)
 		}
 	}
 
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.fichero.assign", fila.ID, c.AuthUserID)
-	// Quien tenga la inbox abierta en otra pantalla verá que ese fichero ya no
-	// está esperando, sin recargar.
+	s.auth.RecordAudit(r.Context(), "rutas.fichero.assign", fila.ID, c.AuthUserID)
+	// Anyone with the inbox open on another screen will see that file is no longer
+	// waiting, without reloading.
 	s.notify(r, events.Event{Type: events.TypeFile, Detail: "asignado"})
 	respond(w, http.StatusOK, aAssignedFile(fila))
 }
@@ -147,7 +147,7 @@ func (s *Server) deleteAlias(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, "borrando alias", err)
 		return
 	}
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.alias.borrar", id, c.AuthUserID)
+	s.auth.RecordAudit(r.Context(), "rutas.alias.borrar", id, c.AuthUserID)
 	respond(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -166,7 +166,7 @@ type sourceRequest struct {
 	Type     string `json:"type"`
 	BranchID string `json:"branchId"`
 	SellerID string `json:"sellerId"`
-	// Credential es la cuenta de Google con la que se lee esta carpeta.
+	// Credential is the Google account this folder is read with.
 	Credential string `json:"credential"`
 }
 
@@ -200,11 +200,11 @@ func (s *Server) createSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.fuente.crear", fila.ID, c.AuthUserID)
+	s.auth.RecordAudit(r.Context(), "rutas.fuente.crear", fila.ID, c.AuthUserID)
 	respond(w, http.StatusCreated, fila)
 }
 
-// scan lanza una ingesta a mano desde la pantalla de administración.
+// scan launches an ingest by hand from the administration screen.
 func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
@@ -218,8 +218,8 @@ func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, "barrido", err)
 		return
 	}
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.ingest.scan", tipo, c.AuthUserID)
-	// Un barrido cambia la inbox y la lista de scans a la vez.
+	s.auth.RecordAudit(r.Context(), "rutas.ingest.scan", tipo, c.AuthUserID)
+	// A scan changes the inbox and the list of scans at once.
 	s.notify(r, events.Event{Type: events.TypeScan, Detail: "terminado"})
 	respond(w, http.StatusOK, res)
 }

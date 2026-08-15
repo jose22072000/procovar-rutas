@@ -34,15 +34,15 @@ func TestExaminarFicheroBueno(t *testing.T) {
 	if v.SellerID != "t-alex" || v.Via != gpx.ViaGpx {
 		t.Errorf("resolución = %s vía %s", v.SellerID, v.Via)
 	}
-	// 13:00 UTC son las 09:00 en Cuba: el día local es el 10, no el 11.
+	// 13:00 UTC is 09:00 in Cuba: the local day is the 10th, not the 11th.
 	if v.Date != "2026-08-10" || v.DateSource != DateFromPoints {
 		t.Errorf("date = %s (%s)", v.Date, v.DateSource)
 	}
 }
 
-// Un fix de la madrugada UTC pertenece al día ANTERIOR en Cuba. Es el error
-// clásico de este tipo de sistema, y el que haría que un lunes apareciera como
-// domingo en el calendar.
+// A fix from the small hours UTC belongs to the PREVIOUS day in Cuba. It is the
+// classic bug in this kind of system, and the one that would make a Monday show
+// up as a Sunday on the calendar.
 func TestExaminarFechaLocalNoUTC(t *testing.T) {
 	f := drive.File{ID: "d1", Name: "ruta.gpx"}
 	v := Examine(f, gpxCon(
@@ -65,8 +65,8 @@ func TestExaminarSinAsignar(t *testing.T) {
 	if v.AliasHint != "Redmi Note 12" {
 		t.Errorf("pista = %q; es lo que el admin tiene que casar en la bandeja", v.AliasHint)
 	}
-	// Aunque no se sepa de quién es, la date ya se conoce: cuando se asigne, el
-	// día se calcula sin volver a bajar el file.
+	// Even when the owner is unknown the date is already known: once assigned, the
+	// day is computed without downloading the file again.
 	if v.Date != "2026-08-10" {
 		t.Errorf("date = %s", v.Date)
 	}
@@ -79,8 +79,8 @@ func TestExaminarSinHorasCaeAlNombre(t *testing.T) {
 	if v.Date != "2026-08-10" || v.DateSource != DateFromName {
 		t.Errorf("date = %s (%s)", v.Date, v.DateSource)
 	}
-	// Se conoce el día, así que es procesable; el día saldrá SIN_FECHA porque no
-	// hay horas con las que medir la jornada.
+	// The day is known, so it is processable; the day will come out SIN_FECHA because
+	// there are no times to measure the workday with.
 	if v.Status != StatusProcessed {
 		t.Errorf("status = %s", v.Status)
 	}

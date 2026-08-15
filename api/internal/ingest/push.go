@@ -11,9 +11,9 @@ import (
 
 // Ficheros empujados desde fuera.
 //
-// El barrido propio baja los .gpx de Drive, pero en Procovar ya hay un n8n que
-// vigila las carpetas y funciona —es como entran los pedidos—, así que la ingesta
-// admite también el camino contrario: que n8n mande el file y aquí solo se
+// The built-in scan pulls .gpx files from Drive, but Procovar already runs an n8n
+// that watches the folders and works — it is how orders come in — so ingest also
+// accepts the opposite direction: n8n sends the file and all that happens here is
 // procese.
 //
 // Both routes end in the same place and are idempotent on `driveFileId` and on
@@ -36,7 +36,7 @@ type Pushed struct {
 	Content    []byte
 }
 
-// Receive procesa un file empujado.
+// Receive processes a pushed file.
 func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 	if e.DriveFileID == "" || e.Name == "" || len(e.Content) == 0 {
 		return false, 0, fmt.Errorf("faltan el identificador, el nombre o el contenido")

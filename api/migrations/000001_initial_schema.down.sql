@@ -1,4 +1,4 @@
--- Vuelta atrás del esquema inicial. En orden inverso a las dependencias.
+-- Rollback of the initial schema. In reverse dependency order.
 
 DROP TABLE IF EXISTS import_log;
 DROP TABLE IF EXISTS feriado;

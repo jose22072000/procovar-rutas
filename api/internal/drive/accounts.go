@@ -16,10 +16,10 @@ import (
 
 // Several Google accounts, one per branch.
 //
-// El montaje real de Procovar: cada sucursal tiene su propia cuenta de Google,
+// Procovar's real setup: each branch has its own Google account, and the routes
 // named after the branch, and the route folders live inside. It is the same model
 // n8n already uses, where there is a "parent account" credential and others
-// por sucursal ("Granma", …).
+// per branch ("Granma", …).
 //
 // That is why the system does not talk to "a Drive" but to a SET of accounts, and
 // each folder says which one reads it. If one day every folder is shared into a
@@ -44,7 +44,7 @@ type Account struct {
 
 // Set keeps one client per account and builds them on demand.
 type Set struct {
-	accounts  map[string]Account
+	accounts map[string]Account
 	clientes map[string]Client
 	mu       sync.Mutex
 }
@@ -88,8 +88,8 @@ func LoadAccounts(datos []byte) (*Set, error) {
 	return j, nil
 }
 
-// CargarCuentasDeFichero es lo mismo, leyendo de disco.
-func CargarCuentasDeFichero(ruta string) (*Set, error) {
+// LoadAccountsFromFile is the same thing, reading from disk.
+func LoadAccountsFromFile(ruta string) (*Set, error) {
 	datos, err := os.ReadFile(ruta)
 	if err != nil {
 		return nil, fmt.Errorf("leyendo %s: %w", ruta, err)
@@ -112,7 +112,7 @@ func (j *Set) Keys() []string {
 //
 // When the key does not exist it falls back to "principal" instead of failing: a
 // mislabelled folder should be read with the default account, not go unscanned in
-// silencio. Si tampoco hay principal, entonces sí es un error.
+// silence. If there is no principal either, then it really is an error.
 func (j *Set) For(ctx context.Context, clave string) (Client, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()

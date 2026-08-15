@@ -10,18 +10,18 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// Estas pruebas EJECUTAN las consultas contra un Postgres de verdad, con la base
-// vacía y los parámetros que manda el panel.
+// These tests EXECUTE the queries against a real Postgres, with an empty database
+// and the parameters the panel sends.
 //
-// Existen por un fallo concreto: el resumen de incidencias ordenaba por
-// `sin_fichero + sin_fecha + sin_movimiento`, o sea sumando alias de salida.
-// Postgres no lo permite (un alias vale suelto en el ORDER BY, no dentro de una
-// expresión), pero sqlc solo comprueba la sintaxis contra el esquema y lo dio por
-// bueno. El resultado: el calendario devolvía 500 desde el primer día, con el
-// error escondido detrás de un "error interno" genérico.
+// They exist because of one concrete bug: the incident summary ordered by
+// `sin_fichero + sin_fecha + sin_movimiento`, that is, by summing output aliases.
+// Postgres does not allow that (an alias works alone in ORDER BY, not inside an
+// expression), but sqlc only checks the syntax against the schema and passed it.
+// The result: the calendar returned 500 from day one, with the error hidden behind
+// a generic "internal error".
 //
-// De ahí la forma de estas pruebas: no comprueban resultados, comprueban que la
-// consulta CORRE. Una consulta que no se ha ejecutado nunca no está probada,
+// Hence the shape of these tests: they do not check results, they check that the
+// query RUNS. A query that has never been executed is not tested, however well it
 // aunque compile.
 func abrir(t *testing.T) *store.Queries {
 	t.Helper()
@@ -43,8 +43,8 @@ func TestConsultasDelPanelCorren(t *testing.T) {
 	desde, _ := time.Parse("2006-01-02", "2026-08-10")
 	hasta, _ := time.Parse("2006-01-02", "2026-08-14")
 
-	// Los parámetros de un super_admin sin ficha local: sucursal vacía, sin lista
-	// de vendedores y sin nadie a quien excluir. Es el caso que fallaba.
+	// A super_admin's parameters with no local record: empty branch, no seller list
+	// and nobody to exclude. That is the case that failed.
 	casos := []struct {
 		nombre string
 		correr func() error

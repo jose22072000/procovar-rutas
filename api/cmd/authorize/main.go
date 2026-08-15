@@ -1,21 +1,21 @@
-// Comando autorizar: consigue el token de refresco de una cuenta de Google.
+// Command authorize: obtains the refresh token for a Google account.
 //
-// Hay una cuenta de Google por sucursal, y para leer sus carpetas hace falta un
-// token de refresco por cuenta. n8n ya los tiene, pero los guarda cifrados y no
-// los enseña, así que este comando hace el mismo baile de OAuth y los imprime en
-// el formato que espera GOOGLE_CUENTAS.
+// There is one Google account per branch, and reading its folders needs one
+// refresh token per account. n8n already has them, but stores them encrypted and
+// does not show them, so this command performs the same OAuth dance and prints
+// them in the format GOOGLE_CUENTAS expects.
 //
-//	go run ./cmd/autorizar -clave granma \
+//	go run ./cmd/authorize -clave granma \
 //	    -client-id  319113730289-….apps.googleusercontent.com \
 //	    -client-secret GOCSPX-…
 //
-// Abre la URL que imprime, entra CON LA CUENTA DE ESA SUCURSAL, y pega de vuelta
-// el código. El permiso que pide es de SOLO LECTURA: este sistema nunca mueve ni
-// borra nada del Drive de los trabajadores.
+// Open the URL it prints, sign in WITH THAT BRANCH'S ACCOUNT, and paste the code
+// back. The scope it asks for is READ-ONLY: this system never moves or deletes
+// anything in the sellers' Drive.
 //
-// Aviso: el identificador y el secreto son los de la aplicación de Google Cloud
-// (los mismos que usa n8n). Para que el flujo termine, esa aplicación tiene que
-// admitir `http://localhost` como URL de redirección — si no, Google contesta
+// Note: the client id and secret are the Google Cloud application's (the same ones
+// n8n uses). For the flow to complete, that application has to allow
+// `http://localhost` as a redirect URL — otherwise Google answers
 // redirect_uri_mismatch.
 package main
 
@@ -54,10 +54,10 @@ func main() {
 		Scopes:       []string{drive.DriveReadonlyScope},
 	}
 
-	// AccessTypeOffline + prompt=consent es lo que hace que Google entregue el
-	// token de refresco. Sin el consentimiento forzado, en la segunda
-	// autorización de la misma cuenta devuelve solo el de acceso, que caduca en
-	// una hora y deja la ingesta muerta al día siguiente.
+	// AccessTypeOffline + prompt=consent is what makes Google hand over the refresh
+	// token. Without forcing consent, the second authorization of the same account
+	// returns only the access token, which expires in an hour and leaves ingest dead
+	// the next day.
 	url := cfg.AuthCodeURL("procovar-rutas",
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "consent"))

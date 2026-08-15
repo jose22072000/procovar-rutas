@@ -20,12 +20,12 @@ import (
 type DayStatus string
 
 const (
-	DayOK               DayStatus = "OK"
-	DayNoFile       DayStatus = "SIN_FICHERO"
-	DayNoDate         DayStatus = "SIN_FECHA"
-	DayNoMovement    DayStatus = "SIN_MOVIMIENTO"
+	DayOK          DayStatus = "OK"
+	DayNoFile      DayStatus = "SIN_FICHERO"
+	DayNoDate      DayStatus = "SIN_FECHA"
+	DayNoMovement  DayStatus = "SIN_MOVIMIENTO"
 	DayLowMovement DayStatus = "MOVIMIENTO_ESCASO"
-	DayNotWorking      DayStatus = "NO_LABORABLE"
+	DayNotWorking  DayStatus = "NO_LABORABLE"
 )
 
 // Quality says why a point does not count. It is flagged, NOT deleted: if the
@@ -35,22 +35,22 @@ type Quality string
 
 const (
 	QualityOK        Quality = "OK"
-	QualityJump     Quality = "SALTO"
+	QualityJump      Quality = "SALTO"
 	QualityImprecise Quality = "IMPRECISO"
 	QualityDuplicate Quality = "DUPLICADO"
-	QualityNoTime   Quality = "SIN_HORA"
+	QualityNoTime    Quality = "SIN_HORA"
 )
 
 // Flags attached to a day.
 const (
-	FlagLateStart    = "entrada_tardia"
-	FlagEarlyEnd   = "salida_temprana"
+	FlagLateStart     = "entrada_tardia"
+	FlagEarlyEnd      = "salida_temprana"
 	FlagLongGap       = "hueco_largo"
-	FlagLowCoverage    = "poca_cobertura"
+	FlagLowCoverage   = "poca_cobertura"
 	FlagNoMovement    = "sin_movimiento"
-	FlagLowMovement = "movimiento_escaso"
-	FlagNoTimes         = "sin_horas"
-	FlagNoWorkdayData  = "sin_datos_en_jornada"
+	FlagLowMovement   = "movimiento_escaso"
+	FlagNoTimes       = "sin_horas"
+	FlagNoWorkdayData = "sin_datos_en_jornada"
 )
 
 // InputPoint is a fix exactly as the parser produces it.
@@ -200,7 +200,7 @@ func ScorePoints(entrada []InputPoint, cfg Config) []ScoredPoint {
 			ev.Quality = QualityImprecise
 		case anterior != nil && anterior.Ts != nil:
 			seg := p.Ts.Sub(*anterior.Ts).Seconds()
-			ev.Speed = VelocidadKmh(anterior.coord(), p.coord(), seg)
+			ev.Speed = SpeedKmh(anterior.coord(), p.coord(), seg)
 			// An impossible jump is a bounced fix, not a seller on a plane. It is
 			// flagged and NOT used as a reference: chaining from it would drag the
 			// error through the rest of the route.
@@ -256,12 +256,12 @@ func DetectStops(puntos []ScoredPoint, cfg Config) []Stop {
 		//
 		// Two traps, and both cost a bug:
 		//
-		//  1. Medir contra el PRIMER punto no vale: si el GPS tiembla 22 m a cada
-		//     lado, dos fixes consecutivos distan 60 m aunque ninguno se aleje
-		//     31 m del centro real, y la parada no llegaría a formarse nunca. Al
-		//     segundo punto se le exige la mitad —el radio de una pareja es la
-		//     mitad de lo que las separa—; admitirlo sin condición fabricaba
-		//     paradas falsas entre dos fixes lejanos cuando el aparato muestrea
+		//  1. Measuring against the FIRST point does not work: if the GPS wobbles
+		//     22 m either way, two consecutive fixes sit 60 m apart even though
+		//     neither strays 31 m from the real centre, and the stop would never
+		//     form. The second point is held to half the radius — the radius of a
+		//     pair is half the distance between them; admitting it unconditionally
+		//     manufactured false stops between two distant fixes when the device
 		//     cada varios minutos.
 		//
 		//  2. Recomputing the whole group's radius at every step is O(n²). With the
@@ -455,11 +455,11 @@ func ComputeDay(entrada []InputPoint, cfg Config) DayResult {
 
 	// "No movement" is decided by the SPREAD RADIUS, not by kilometres.
 	//
-	// Los kilómetros son justo la métrica que el ruido del GPS corrompe: con fixes
-	// que bailan 20 m, un teléfono inmóvil acumula varios kilómetros en una
-	// jornada y se cuela como día trabajado. El radio no se corrompe: si en siete
-	// horas los puntos nunca se alejaron 300 m de su centro, esa persona no hizo
-	// una ruta, por muchos kilómetros de temblor que sumen.
+	// Kilometres are precisely the metric GPS noise corrupts: with fixes dancing
+	// 20 m, a phone that never moves piles up several kilometres over a workday and
+	// slips through as a day worked. The radius does not get corrupted: if in seven
+	// hours the points never strayed 300 m from their centre, that person did not
+	// make a round, however many kilometres of wobble add up.
 	//
 	// The second condition is about honesty, not detection: the workday has to be
 	// long enough to make the claim. With three fixes from nine in the morning what

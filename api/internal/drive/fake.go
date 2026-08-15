@@ -12,9 +12,9 @@ import (
 // files with no date, download failures — with no credentials, no network and
 // without waiting for the real folders to arrive.
 type Fake struct {
-	// Ficheros por ID de carpeta.
+	// Files by folder id.
 	Carpetas map[string][]File
-	// Content por ID de fichero.
+	// Content by file id.
 	Content map[string][]byte
 	// Failures forces an error when downloading that file, to prove one bad file
 	// does not bring down the whole scan.
@@ -28,7 +28,7 @@ func NewFake() *Fake {
 	return &Fake{
 		Carpetas: map[string][]File{},
 		Content:  map[string][]byte{},
-		Failures:   map[string]error{},
+		Failures: map[string]error{},
 	}
 }
 

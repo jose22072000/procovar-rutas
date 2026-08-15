@@ -23,10 +23,10 @@ type Server struct {
 	q      *store.Queries
 	auth   *auth.Client
 	ingest *ingest.Service
-	// cola puede ser nil: sin Redis, el empuje de n8n se procesa en el acto.
+	// queue may be nil: with no Redis, n8n's push is processed on the spot.
 	queue *queue.Queue
-	// bus puede ser nil por lo mismo: sin Redis no hay avisos en vivo, y el panel
-	// se queda con recargar a mano. No es motivo para no arrancar.
+	// bus may be nil for the same reason: with no Redis there are no live
+	// notifications and the panel falls back to manual reloads. Not a reason to refuse to start.
 	bus *events.Bus
 	log *slog.Logger
 }
@@ -60,17 +60,17 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// Los caminos van en inglés aunque el código de dentro esté en español: es la
-	// superficie que ven n8n, el front y Traefik, y ahí no se mezclan idiomas.
+	// The paths are in English even where the code inside is not: this is the
+	// surface n8n, the front end and Traefik see, and languages do not mix there.
 	r.Get("/health", s.health)
 
-	// Puerta de servicio para n8n: sin sesión de usuario, con clave de máquina.
+	// Service door for n8n: no user session, a machine key instead.
 	r.Post("/api/ingest/file", s.receiveFile)
 
-	// Flujo de login contra procovar-auth.
+	// Login flow against procovar-auth.
 	r.Get("/api/auth/login", s.login)
 	r.Get("/api/auth/callback", s.callback)
-	// De GET, no de POST: es una navegación con vuelta, no una llamada de fondo.
+	// GET, not POST: this is a navigation with a return trip, not a background call.
 	r.Get("/api/auth/logout", s.logout)
 	r.Get("/api/auth/logout/done", s.logoutDone)
 

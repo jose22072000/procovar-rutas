@@ -1,10 +1,10 @@
-// Package gpx lee los ficheros .gpx que los vendedores suben a las carpetas de
-// Google Drive y decide de quién y de qué día es cada uno.
+// Package gpx reads the .gpx files sellers upload to the Google Drive folders and
+// works out whose each one is and which day it belongs to.
 //
-// El parser acepta lo que exportan los loggers reales, que es bastante más
-// variado que lo que dice el esquema oficial: varios <trk> y <trkseg> por
-// fichero, puntos sueltos como <wpt>, precisión en <hdop> o en extensiones
-// propias, y —el caso que hay que cazar— ficheros sin ninguna hora.
+// The parser accepts whatever the real loggers export, which is a good deal more
+// varied than the official schema says: several <trk> and <trkseg> per file,
+// points with no time, different time formats, vendor extensions,
+// and — the case worth catching — files with no times at all.
 //
 // The parser makes no business decisions: it extracts, normalizes and counts. Who
 // the seller is gets resolved in alias.go, and whether the day was good or bad, the
@@ -45,7 +45,7 @@ type Parsed struct {
 	LastFix  *time.Time
 }
 
-// --- Estructuras de deserialización XML ------------------------------------
+// --- XML deserialization structures ----------------------------------------
 
 type xmlPunto struct {
 	Lat        float64  `xml:"lat,attr"`
@@ -122,7 +122,7 @@ func parseHora(s string) *time.Time {
 	return nil
 }
 
-// Parse lee un fichero .gpx.
+// Parse reads a .gpx file.
 //
 // It only returns an error when the whole file is unusable (broken XML, no <gpx>
 // root, not a single point). One bad point does not invalidate the file: it is

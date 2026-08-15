@@ -68,8 +68,8 @@ func TestResolverCaeAlContenidoDelGpx(t *testing.T) {
 	}
 }
 
-// Cuando ninguna regla acierta, el fichero va a la bandeja CON la pista que el
-// admin tiene que casar. Ningún fichero se pierde en silencio.
+// When no rule hits, the file goes to the inbox WITH the hint the admin has to
+// match. No file is lost in silence.
 func TestResolverMandaALaBandejaConPistaUtil(t *testing.T) {
 	r := ResolveSeller(Context{
 		SourceType: SourceBranch,
@@ -101,10 +101,10 @@ func TestFechaDelNombre(t *testing.T) {
 	}
 }
 
-// En el montaje real de Procovar cada carpeta compartida ES el perfil de GPS de
-// un vendedor ("GPS Diana Acosta", "STGGari"), y los ficheros dentro solo llevan
-// la fecha. Sin mirar el nombre de la propia carpeta, no habría de dónde sacar
-// el vendedor y TODO acabaría en la bandeja.
+// In Procovar's real setup each shared folder IS a seller's GPS profile ("GPS
+// Diana Acosta", "STGGari"), and the files inside carry only the date. Without
+// looking at the folder's own name there would be nowhere to get the seller from
+// and EVERYTHING would end up in the inbox.
 func TestResolverPorElNombreDeLaCarpetaDadaDeAlta(t *testing.T) {
 	alias := map[string]string{Normalize("GPS Diana Acosta"): "t-diana"}
 	r := ResolveSeller(Context{

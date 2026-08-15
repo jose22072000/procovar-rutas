@@ -23,7 +23,7 @@ import (
 
 const DefaultPrefix = "procovar-rutas:"
 
-// Job es un fichero esperando turno.
+// Job is a file waiting its turn.
 type Job struct {
 	SourceID      string    `json:"fuenteId,omitempty"`
 	FolderID      string    `json:"folderId,omitempty"`
@@ -105,7 +105,7 @@ func (c *Queue) Take(ctx context.Context, espera time.Duration) (*Job, string, e
 	return &t, crudo, nil
 }
 
-// Finish da por bueno un trabajo y lo quita de "processing".
+// Finish accepts a job as done and removes it from "processing".
 func (c *Queue) Finish(ctx context.Context, crudo string) error {
 	return c.rdb.LRem(ctx, c.processing(), 1, crudo).Err()
 }

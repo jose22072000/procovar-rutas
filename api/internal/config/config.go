@@ -1,7 +1,7 @@
-// Package config lee la configuración del entorno.
+// Package config reads the configuration from the environment.
 //
-// Todo por variables de entorno, nada de ficheros de configuración: es lo que
-// espera Dokploy y evita que una credencial acabe versionada por accidente.
+// Everything through environment variables, no config files: it is what Dokploy
+// expects and it keeps a credential from being committed by accident.
 package config
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 type Config struct {
-	// Base de datos.
+	// Database.
 	DatabaseURL string
 
 	// Servidor.
@@ -27,21 +27,21 @@ type Config struct {
 	AppURL         string
 	CookieDominio  string
 
-	// Google Drive: hay UNA CUENTA POR SUCURSAL, cada una con el nombre de su
-	// sucursal. GOOGLE_CUENTAS es la lista en JSON; cada carpeta dice con cuál
-	// se lee. Se consiguen con `go run ./cmd/autorizar`.
+	// Google Drive: there is ONE ACCOUNT PER BRANCH, each named after its branch.
+	// GOOGLE_CUENTAS is the JSON list; each folder says which one reads it. They
+	// are obtained with `go run ./cmd/authorize`.
 	GoogleCredencialJSON string
-	// Ruta al fichero de credenciales, alternativa a pegar el JSON entero.
+	// Path to the credentials file, an alternative to pasting the whole JSON.
 	GoogleCredencialPath string
 
-	// Redis: la cola de ficheros que empuja n8n. El prefijo mantiene las claves
-	// separadas de las de PEDIDO (procovar-pedido:*) en el mismo Redis.
+	// Redis: the queue of files n8n pushes. The prefix keeps the keys apart from
+	// PEDIDO's (procovar-pedido:*) in the same Redis.
 	RedisURL     string
 	PrefijoRedis string
 
-	// ClaveServicio autentica a n8n en POST /api/ingesta/fichero. Es de máquina,
-	// no de persona: no vale la sesión de procovar-auth.
-	ClaveServicio string
+	// ServiceKey authenticates n8n on POST /api/ingest/file. It is a machine key,
+	// not a person's: a procovar-auth session will not do.
+	ServiceKey string
 
 	// Ingesta.
 	IntervaloBarrido      time.Duration
@@ -63,7 +63,7 @@ func Cargar() (*Config, error) {
 		GoogleCredencialPath:  os.Getenv("GOOGLE_CUENTAS_FILE"),
 		RedisURL:              os.Getenv("REDIS_URL"),
 		PrefijoRedis:          porDefecto("PREFIJO_REDIS", "procovar-rutas:"),
-		ClaveServicio:         os.Getenv("SERVICE_API_KEY"),
+		ServiceKey:            os.Getenv("SERVICE_API_KEY"),
 		IntervaloBarrido:      duracion("INTERVALO_BARRIDO", 30*time.Minute),
 		HoraRepasoNocturno:    entero("HORA_REPASO_NOCTURNO", 2),
 		MaxFicherosPorBarrido: entero("MAX_FICHEROS_BARRIDO", 500),
@@ -75,8 +75,8 @@ func Cargar() (*Config, error) {
 	return c, nil
 }
 
-// Credenciales devuelve el JSON de la service account, venga de donde venga.
-func (c *Config) Credenciales() ([]byte, error) {
+// Credentials returns the service account JSON, wherever it comes from.
+func (c *Config) Credentials() ([]byte, error) {
 	if strings.TrimSpace(c.GoogleCredencialJSON) != "" {
 		return []byte(c.GoogleCredencialJSON), nil
 	}
@@ -85,7 +85,7 @@ func (c *Config) Credenciales() ([]byte, error) {
 	}
 	return nil, fmt.Errorf(
 		"faltan las cuentas de Google: pon GOOGLE_CUENTAS o GOOGLE_CUENTAS_FILE " +
-			"(se generan con `go run ./cmd/autorizar`)")
+			"(se generan con `go run ./cmd/authorize`)")
 }
 
 func porDefecto(clave, def string) string {

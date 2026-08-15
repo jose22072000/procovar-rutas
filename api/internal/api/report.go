@@ -9,19 +9,18 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// El reporte semanal por vendedor: de lunes a viernes, con cada movimiento
-// detallado entre las 9:00 y las 16:00.
+// A seller's report: every movement detailed between 9:00 and 16:00.
 //
-// La API devuelve el reporte en JSON y el frontend lo maqueta e imprime a PDF.
-// El armado del documento no vive aquí a propósito: así el mismo JSON sirve
-// para la pantalla, para el PDF y para el Excel, sin tres verdades distintas.
-// El reporte de un vendedor en el rango que se pida.
+// The API returns the report as JSON and the front end lays it out and prints to
+// PDF. Building the document deliberately does not live here: that way the same
+// JSON serves the screen, the PDF and the spreadsheet, without three separate
+// truths.
 //
-// Nació como "reporte semanal" y solo aceptaba ?date=, del que sacaba la week
-// laboral entera. Pero el reporte se pide para enseñárselo a alguien, y ahí lo
-// normal es acotar: tres días, un día suelto, la quincena. Ahora se le pasa
-// ?from= y ?to= como al resto del panel; sin ellos sigue saliendo la week en
-// curso, que era el comportamiento de antes.
+// It started as a "weekly report" and only took ?date=, from which it derived the
+// whole working week. But a report is asked for in order to show it to someone,
+// and there the normal thing is to narrow it down: three days, a single day, a
+// fortnight. Now it takes ?from= and ?to= like the rest of the panel; without them
+// it still returns the current week, which was the old behaviour.
 func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
@@ -36,8 +35,8 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Los días del documento son TODOS los del rango, no solo los laborables: si
-	// alguien pide un sábado concreto, es porque quiere ver ese sábado.
+	// The document's days are ALL of those in the range, not only the working ones:
+	// someone asking for one particular Saturday wants to see that Saturday.
 	diasDelRango := calendar.DaysBetween(desde, hasta)
 
 	filtro, err := c.Scope(desde)
@@ -73,9 +72,9 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	}
 	inicio, fin := s.branchWorkday(r, trab.BranchID)
 
-	// Un día por sección, incluidos los malos: un día sin fichero, sin fecha o
-	// sin movimiento LLEVA su sección con el motivo escrito. Es justo el que hay
-	// que enseñar, así que no puede desaparecer del documento.
+	// One day per section, bad ones included: a day with no file, no date or no
+	// movement STILL gets its section with the reason written in. It is precisely
+	// the one worth showing, so it cannot vanish from the document.
 	porFecha := map[string]store.TrackDay{}
 	for _, d := range dias {
 		porFecha[d.Date.Format(iso)] = d
@@ -115,12 +114,12 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 		Timezone: zona,
 	}, secciones)
 
-	s.auth.RegistrarAuditoria(r.Context(), "rutas.reporte", trabajadorID, c.AuthUserID)
+	s.auth.RecordAudit(r.Context(), "rutas.reporte", trabajadorID, c.AuthUserID)
 	respond(w, http.StatusOK, doc)
 }
 
-// reportRange lee ?from= y ?to=. Sin nada, la week laboral de hoy; con solo
-// ?date=, la week de esa fecha, que es como se pedía antes de aceptar rangos.
+// reportRange reads ?from= and ?to=. With neither, today's working week; with only
+// ?date=, that date's week, which is how it was asked for before ranges existed.
 func reportRange(r *http.Request) (time.Time, time.Time, error) {
 	q := r.URL.Query()
 	if q.Get("from") == "" && q.Get("to") == "" {

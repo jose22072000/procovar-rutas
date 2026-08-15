@@ -12,15 +12,15 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/queue"
 )
 
-// POST /api/ingesta/fichero — la puerta para n8n.
+// POST /api/ingest/file — the door for n8n.
 //
-// El vendedor sube su .gpx a Drive una vez al día; n8n vigila las carpetas y
-// manda aquí cada fichero nuevo. Es el mismo patrón que ya usa PEDIDO con
-// /orders/bulk, así que el flujo de n8n se parece al que ya existe.
+// The seller uploads their .gpx to Drive once a day; n8n watches the folders and
+// sends every new file here. It is the same pattern PEDIDO already uses with
+// /orders/bulk, so the n8n flow looks like the one that already exists.
 //
-// No lleva sesión de usuario sino clave de servicio: quien llama es una máquina.
-// Y es idempotente por `driveFileId`, de modo que si n8n reintenta —o si el
-// barrido nocturno pasa después por el mismo fichero— no se duplica nada.
+// It carries a service key rather than a user session: the caller is a machine.
+// And it is idempotent on `driveFileId`, so if n8n retries — or if the nightly
+// scan later passes over the same file — nothing is duplicated.
 
 type pushRequest struct {
 	SourceID    string   `json:"sourceId"`
@@ -29,7 +29,7 @@ type pushRequest struct {
 	Name        string   `json:"name"`
 	FolderPath  []string `json:"folderPath"`
 	Created     string   `json:"createdAt"`
-	// ContentBase64 es lo que manda n8n en `{{ $binary.data.data }}`.
+	// ContentBase64 is what n8n sends in `{{ $binary.data.data }}`.
 	ContentBase64 string `json:"contentBase64"`
 }
 
@@ -40,8 +40,8 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var p pushRequest
-	// 32 MiB de tope: un .gpx de una jornada no llega a 1 MiB, y sin límite una
-	// petición mal formada se come la memoria del servidor.
+	// A 32 MiB cap: a workday's .gpx does not reach 1 MiB, and with no limit a
+	// malformed request would eat the server's memory.
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<20)).Decode(&p); err != nil {
 		respondError(w, http.StatusBadRequest, "cuerpo inválido")
 		return
@@ -64,10 +64,10 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Por defecto se ENCOLA y se contesta enseguida: n8n no tiene por qué esperar
-	// a que se parseen 2 500 puntos, y una subida de toda la plantilla a la misma
-	// hora no puede tumbar el panel. Con ?sync=1 se procesa en el acto, igual que
-	// en la ingesta de PEDIDO, que es lo cómodo para depurar.
+	// By default it ENQUEUES and answers straight away: n8n has no business waiting
+	// for 2,500 points to be parsed, and the whole workforce uploading at the same
+	// hour cannot take the panel down. With ?sync=1 it is processed on the spot, as
+	// in PEDIDO's ingest, which is the convenient thing when debugging.
 	if s.queue != nil && r.URL.Query().Get("sync") != "1" {
 		err := s.queue.Enqueue(r.Context(), queue.Job{
 			SourceID:      p.SourceID,
@@ -80,12 +80,12 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			s.log.Error("no se pudo encolar", "fichero", p.Name, "error", err)
-			// 503 y no 400: el fichero está bien, el que falla somos nosotros.
-			// Con 503 n8n sabe que tiene que reintentar.
+			// 503 and not 400: the file is fine, we are the ones failing. With a 503
+			// n8n knows it has to retry.
 			respondError(w, http.StatusServiceUnavailable, "la cola no está disponible")
 			return
 		}
-		// El panel de administración enseña la queue: que se entere al momento.
+		// The administration panel shows the queue: let it know right away.
 		s.notify(r, events.Event{Type: events.TypeQueue, Detail: "encolado"})
 		respond(w, http.StatusAccepted, map[string]any{"ok": true, "queued": true})
 		return
@@ -101,8 +101,8 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 		Content:     contenido,
 	})
 	if err != nil {
-		// 400 y no 500: casi siempre es una carpeta sin dar de alta o un campo
-		// que falta, y n8n tiene que poder distinguir "corrígelo" de "reintenta".
+		// 400 and not 500: it is almost always an unregistered folder or a missing
+		// field, and n8n has to tell "fix it" apart from "retry".
 		s.log.Warn("empuje rechazado", "fichero", p.Name, "error", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -115,10 +115,10 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validServiceKey compara en tiempo constante, para no filtrar la clave
-// carácter a carácter con la duración de la respuesta.
+// validServiceKey compares in constant time, so the key is not leaked character
+// by character through the response time.
 func (s *Server) validServiceKey(r *http.Request) bool {
-	esperada := s.cfg.ClaveServicio
+	esperada := s.cfg.ServiceKey
 	if esperada == "" {
 		return false // sin clave configurada, la puerta está cerrada
 	}
@@ -126,8 +126,8 @@ func (s *Server) validServiceKey(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(recibida), []byte(esperada)) == 1
 }
 
-// queueStats es lo que enseña la pantalla de administración: cuántos ficheros
-// esperan, cuántos se están procesando y cuántos se apartaron.
+// queueStats is what the administration screen shows: how many files are waiting,
+// how many are being processed and how many were set aside.
 func (s *Server) queueStats(w http.ResponseWriter, r *http.Request) {
 	if s.queue == nil {
 		respond(w, http.StatusOK, map[string]any{"active": false})

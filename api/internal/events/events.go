@@ -1,14 +1,14 @@
-// Paquete eventos: el aviso de "ha pasado algo" que llega al panel sin recargar.
+// Package events carries the "something happened" notice that reaches the panel
+// without a reload.
+// # Why this goes through Redis instead of staying in memory
 //
-// # Por qué pasa por Redis y no se queda en memoria
+// Files are processed by `rutas-ingesta`, while the connection to the browser is
+// held open by `rutas-api`: two different containers. An in-memory channel would
+// leave the notice inside the process that produced it and the panel would never
+// find out. Redis is already there for the queue, so it is used for this too.
 //
-// Quien procesa los ficheros es `rutas-ingesta` y quien tiene abierta la conexión
-// con el navegador es `rutas-api`: son dos contenedores distintos. Un channel en
-// memoria dejaría el aviso dentro del proceso que lo genera y el panel no se
-// enteraría nunca. Redis ya está ahí para la cola, así que se usa para esto.
-//
-// Las claves y los canales llevan el MISMO prefix que la cola
-// (`procovar-rutas:`), para no mezclarse con PEDIDO en el mismo Redis.
+// The keys and channels carry the SAME prefix as the queue (`procovar-rutas:`), so
+// they never mix with PEDIDO in the same Redis.
 package events
 
 import (
@@ -23,16 +23,16 @@ import (
 
 const DefaultPrefix = "procovar-rutas:"
 
-// Tipos de evento. Son pocos a propósito: el panel no necesita saber el detalle,
-// solo que eso que está mirando cambió y conviene volver a pedirlo.
+// Event types. Deliberately few: the panel does not need the detail, only that
+// what it is looking at changed and is worth asking for again.
 const (
-	// TypeQueue: cambió el estado de la cola de n8n (pendientes/procesándose).
+	// TypeQueue: the state of n8n's queue changed (pending/processing).
 	TypeQueue = "queue"
-	// TypeFile: entró un fichero nuevo, o uno cambió de estado.
+	// TypeFile: a new file came in, or one changed state.
 	TypeFile = "file"
-	// TypeScan: terminó un barrido de Drive.
+	// TypeScan: a Drive scan finished.
 	TypeScan = "scan"
-	// TypeDay: se recalculó el día de un vendedor.
+	// TypeDay: a seller's day was recomputed.
 	TypeDay = "day"
 )
 
@@ -50,8 +50,8 @@ type Bus struct {
 	own     bool
 }
 
-// New abre su propia conexión. Se le pasa la misma REDIS_URL y el mismo prefix
-// que a la queue.
+// New opens its own connection. It takes the same REDIS_URL and the same prefix as
+// the queue.
 func New(url, prefix string) (*Bus, error) {
 	if prefix == "" {
 		prefix = DefaultPrefix
@@ -73,9 +73,9 @@ func (b *Bus) Close() error {
 	return b.rdb.Close()
 }
 
-// Publish avisa. Un fallo aquí NO puede tumbar lo que se estaba haciendo: si
-// Redis no está, el fichero se ha guardado igual y el panel se enterará cuando
-// alguien recargue. Por eso devuelve error pero quien llama solo lo registra.
+// Publish sends the notice. A failure here must NOT bring down whatever was being
+// done: if Redis is away, the file was still stored and the panel will find out
+// when someone reloads. That is why it returns an error but callers only log it.
 func (b *Bus) Publish(ctx context.Context, e Event) error {
 	if b == nil {
 		return nil
@@ -90,11 +90,11 @@ func (b *Bus) Publish(ctx context.Context, e Event) error {
 	return b.rdb.Publish(ctx, b.channel, datos).Err()
 }
 
-// Subscribe devuelve un channel con los eventos hasta que se cancele el contexto.
+// Subscribe returns a channel of events until the context is cancelled.
 //
-// El channel tiene hueco para unos cuantos: si quien lee se atasca, se tiran los
-// nuevos en vez de bloquear a todo el mundo. Perder un aviso no es grave —son
-// "vuelve a pedir los datos", no los datos—, pero atascar la publicación sí.
+// The channel has room for a handful: if the reader stalls, new ones are dropped
+// rather than blocking everybody. Losing a notice is not serious — they say "ask
+// for the data again", they are not the data — but stalling publication is.
 func (b *Bus) Subscribe(ctx context.Context) (<-chan Event, error) {
 	if b == nil {
 		return nil, fmt.Errorf("sin bus de eventos")
@@ -119,7 +119,7 @@ func (b *Bus) Subscribe(ctx context.Context) (<-chan Event, error) {
 			case <-ctx.Done():
 				return
 			default:
-				// Lector lento: se descarta este aviso.
+				// Slow reader: this notice is dropped.
 			}
 		}
 	}()

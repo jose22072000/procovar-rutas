@@ -1,9 +1,9 @@
 package ingest_test
 
-// Prueba de extremo a extremo de la ingesta contra un Postgres de verdad, con
-// un Drive falso: listar → descargar → parsear → resolver → guardar → recalcular
-// el día. Es la que demuestra que las piezas encajan; las demás pruebas solo
-// miran cada pieza por separado.
+// End-to-end test of ingest against a real Postgres, with a fake Drive: list →
+// download → parse → resolve → store → recompute the day. It is the one that
+// proves the pieces fit together; the other tests only look at each piece on its
+// own.
 //
 // Se salta sola si no hay base:
 //
@@ -42,8 +42,8 @@ func base(t *testing.T) (*pgxpool.Pool, *store.Queries) {
 	}
 	t.Cleanup(pool.Close)
 
-	// Cada prueba parte de cero. TRUNCATE ... CASCADE en vez de borrar la base:
-	// las migraciones ya están aplicadas y volver a aplicarlas en cada prueba
+	// Every test starts from zero. TRUNCATE ... CASCADE rather than dropping the
+	// database: the migrations are already applied and re-applying them per test
 	// sería mucho más lento.
 	_, err = pool.Exec(context.Background(),
 		`TRUNCATE track_point, stop, track_day, gpx_file, device_alias, import_log,
@@ -83,8 +83,8 @@ func semilla(t *testing.T, q *store.Queries) {
 	}
 }
 
-// rutaGpx genera una jornada que avanza: 09:00 a 16:00, hora de Cuba.
-func rutaGpx(pasoMin int, moverse bool) []byte {
+// gpxRoute generates a workday that advances: 09:00 to 16:00, Cuban time.
+func gpxRoute(pasoMin int, moverse bool) []byte {
 	cuerpo := ""
 	i := 0
 	for min := 9 * 60; min <= 16*60; min += pasoMin {
@@ -94,29 +94,29 @@ func rutaGpx(pasoMin int, moverse bool) []byte {
 		} else if i%2 == 0 {
 			lat += 0.00007 // temblor del GPS estando quieto
 		}
-		// +4 h para pasar de hora local de Cuba a UTC en agosto.
+		// +4 h to go from Cuban local time to UTC in August.
 		cuerpo += fmt.Sprintf(
 			`<trkpt lat="%.5f" lon="%.5f"><time>2026-08-10T%02d:%02d:00Z</time></trkpt>`,
 			lat, lon, (min/60)+4, min%60)
 		i++
 	}
-	return gpxConNombre("ALEXANDER", cuerpo)
+	return gpxWithName("ALEXANDER", cuerpo)
 }
 
-// gpxConNombre permite variar el nombre de la pista, que es una de las pistas
-// que usa la resolución: los loggers suelen meter ahí el perfil.
-func gpxConNombre(nombre, cuerpo string) []byte {
+// gpxWithName allows varying the track name, one of the hints resolution uses:
+// loggers usually put the profile in there.
+func gpxWithName(nombre, cuerpo string) []byte {
 	return []byte(`<?xml version="1.0"?><gpx version="1.1" creator="GPS Logger">
 <trk><name>` + nombre + `</name><trkseg>` + cuerpo + `</trkseg></trk></gpx>`)
 }
 
-// rutaAnonima es la misma jornada pero sin el nombre del vendedor dentro del
-// file: el caso de la tableta, donde solo la carpeta puede decir de quién es.
-func rutaAnonima(pasoMin int) []byte {
-	completo := string(rutaGpx(pasoMin, true))
+// anonymousRoute is the same workday but without the seller's name inside the
+// file: the tablet case, where only the folder can say whose it is.
+func anonymousRoute(pasoMin int) []byte {
+	completo := string(gpxRoute(pasoMin, true))
 	ini := strings.Index(completo, "<trkseg>") + len("<trkseg>")
 	fin := strings.Index(completo, "</trkseg>")
-	return gpxConNombre("TAB-CMG-04", completo[ini:fin])
+	return gpxWithName("TAB-CMG-04", completo[ini:fin])
 }
 
 func servicio(t *testing.T, pool *pgxpool.Pool, d drive.Client) *ingest.Service {
@@ -130,10 +130,10 @@ func TestIngestaCompleta(t *testing.T) {
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(5, true))
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, gpxRoute(5, true))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	res, err := svc.Scan(ctx, ingest.TypeIncremental)
 	if err != nil {
 		t.Fatalf("barrido: %v", err)
@@ -156,7 +156,7 @@ func TestIngestaCompleta(t *testing.T) {
 		t.Errorf("no se resolvió el vendedor: %v", file.SellerID)
 	}
 
-	// Y el día quedó calculado, que es lo que pinta el calendar.
+	// And the day came out computed, which is what the calendar paints.
 	dias, err := q.Calendar(ctx, store.CalendarParams{
 		FromDate: dia("2026-08-10"), ToDate: dia("2026-08-10"), Sellers: []string{},
 	})
@@ -174,21 +174,21 @@ func TestIngestaCompleta(t *testing.T) {
 	}
 }
 
-// El repaso nocturno relista carpetas enteras: si volviera a descargar lo que ya
-// tiene, cada noche bajaría miles de ficheros para nada.
+// The nightly sweep relists whole folders: if it downloaded again what it already
+// has, every night it would fetch thousands of files for nothing.
 func TestNoVuelveADescargarLoQueYaTiene(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, gpxRoute(15, true))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	if _, err := svc.Scan(ctx, ingest.TypeNightly); err != nil {
 		t.Fatal(err)
 	}
-	descargasPrimera := falso.Llamadas
+	descargasPrimera := fake.Calls
 
 	res, err := svc.Scan(ctx, ingest.TypeNightly)
 	if err != nil {
@@ -197,23 +197,23 @@ func TestNoVuelveADescargarLoQueYaTiene(t *testing.T) {
 	if res.New != 0 {
 		t.Errorf("segunda pasada: nuevos = %d, se esperaba 0", res.New)
 	}
-	if falso.Llamadas != descargasPrimera {
+	if fake.Calls != descargasPrimera {
 		t.Errorf("descargas = %d, se esperaban %d: no debe volver a bajarlo",
-			falso.Llamadas, descargasPrimera)
+			fake.Calls, descargasPrimera)
 	}
 }
 
-// Un file que no se puede leer no puede tumbar el barrido de los demás.
+// A file that cannot be read must not bring down everyone else's scan.
 func TestUnFicheroMaloNoTumbaElResto(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{ID: "d0", Name: "roto.gpx"}, []byte("no es xml"))
-	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{ID: "d0", Name: "roto.gpx"}, []byte("no es xml"))
+	fake.Add(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, gpxRoute(15, true))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	res, err := svc.Scan(ctx, ingest.TypeIncremental)
 	if err != nil {
 		t.Fatalf("barrido: %v", err)
@@ -236,16 +236,16 @@ func TestUnFicheroMaloNoTumbaElResto(t *testing.T) {
 	}
 }
 
-// El caso que da sentido al proyecto, de punta a punta.
+// The case that gives the project its point, end to end.
 func TestDiaSinMovimientoLlegaAlCalendario(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(5, false))
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, gpxRoute(5, false))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	if _, err := svc.Scan(ctx, ingest.TypeIncremental); err != nil {
 		t.Fatal(err)
 	}
@@ -264,8 +264,8 @@ func TestDiaSinMovimientoLlegaAlCalendario(t *testing.T) {
 	}
 }
 
-// Sin file, el vendedor tiene que aparecer igualmente en el calendario: una
-// ausencia que no es una fila no se puede contar ni ordenar.
+// With no file, the seller still has to appear on the calendar: an
+// absence that is not a row cannot be counted or sorted.
 func TestAusenciaApareceComoFila(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
@@ -291,15 +291,15 @@ func TestAusenciaApareceComoFila(t *testing.T) {
 	}
 }
 
-// Marcar ausencias no puede pisar un día que ya tiene datos.
+// Marking absences must not overwrite a day that already has data.
 func TestAusenciasNoPisanUnDiaConDatos(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, rutaGpx(15, true))
-	svc := servicio(t, pool, falso)
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{ID: "d1", Name: "alexander_2026-08-10.gpx"}, gpxRoute(15, true))
+	svc := servicio(t, pool, fake)
 	if _, err := svc.Scan(ctx, ingest.TypeIncremental); err != nil {
 		t.Fatal(err)
 	}
@@ -323,25 +323,25 @@ func dia(s string) time.Time {
 
 func ptr[T any](v T) *T { return &v }
 
-// La estructura real de Procovar: una cuenta de Google por sucursal, dentro una
-// carpeta por perfil de GPS —con el nombre del vendedor o de la tableta— y
-// dentro los ficheros AAAAMMDD.gpx, que NO llevan el nombre de nadie.
+// Procovar's real structure: one Google account per branch, inside it one folder
+// per GPS profile — named after the seller or the tablet — and inside that the
+// YYYYMMDD.gpx files, which carry NOBODY's name.
 //
-// El vendedor solo se puede deducir de la carpeta: si esta prueba falla, la
-// ingesta real deja todos los ficheros en la bandeja.
+// The seller can only be inferred from the folder: if this test fails, the real
+// ingest leaves every file in the inbox.
 func TestEstructuraRealCarpetaPorPerfilDeGps(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{
 		ID:         "d1",
 		Name:       "20260810.gpx",
 		FolderPath: []string{"Alexander"}, // el perfil del GPS
-	}, rutaGpx(10, true))
+	}, gpxRoute(10, true))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	if _, err := svc.Scan(ctx, ingest.TypeIncremental); err != nil {
 		t.Fatal(err)
 	}
@@ -361,19 +361,19 @@ func TestEstructuraRealCarpetaPorPerfilDeGps(t *testing.T) {
 	}
 }
 
-// Y si el perfil del GPS es el nombre de la tableta, no el del vendedor, el
-// file cae en la bandeja con la pista para casarlo UNA vez.
+// And if the GPS profile is the tablet's name rather than the seller's, the file
+// lands in the inbox with the hint to match it ONCE.
 func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)
 	ctx := context.Background()
 
-	falso := drive.NewFake()
-	falso.Agregar(carpeta, drive.File{
+	fake := drive.NewFake()
+	fake.Add(carpeta, drive.File{
 		ID: "d1", Name: "20260810.gpx", FolderPath: []string{"TAB-CMG-04"},
-	}, rutaAnonima(10))
+	}, anonymousRoute(10))
 
-	svc := servicio(t, pool, falso)
+	svc := servicio(t, pool, fake)
 	if _, err := svc.Scan(ctx, ingest.TypeIncremental); err != nil {
 		t.Fatal(err)
 	}
@@ -389,16 +389,16 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 		t.Errorf("pista = %v; es lo que el admin casa con el vendedor", f.AliasHint)
 	}
 
-	// Casado el alias, el siguiente file de esa tableta se resuelve solo.
+	// Once the alias is matched, the next file from that tablet resolves on its own.
 	if _, err := q.CreateAlias(ctx, store.CreateAliasParams{
 		ID: "a2", Alias: gpx.Normalize("TAB-CMG-04"), OriginalAlias: "TAB-CMG-04",
 		SellerID: "t-alex", BranchID: ptr("s1"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	falso.Agregar(carpeta, drive.File{
+	fake.Add(carpeta, drive.File{
 		ID: "d2", Name: "20260811.gpx", FolderPath: []string{"TAB-CMG-04"},
-	}, gpxConNombre("TAB-CMG-04", `<trkpt lat="21.38" lon="-77.91"><time>2026-08-11T13:00:00Z</time></trkpt>`))
+	}, gpxWithName("TAB-CMG-04", `<trkpt lat="21.38" lon="-77.91"><time>2026-08-11T13:00:00Z</time></trkpt>`))
 
 	if _, err := svc.Scan(ctx, ingest.TypeNightly); err != nil {
 		t.Fatal(err)
@@ -412,8 +412,8 @@ func TestPerfilConNombreDeTabletVaALaBandeja(t *testing.T) {
 	}
 }
 
-// Sin credenciales de Google el barrido no puede hacer nada, pero tampoco puede
-// tumbar el proceso: la entrada por n8n sigue funcionando.
+// Without Google credentials the scan can do nothing, but it must not bring down
+// the process either: input through n8n keeps working.
 func TestSinAccesoADriveNoRevienta(t *testing.T) {
 	pool, q := base(t)
 	semilla(t, q)

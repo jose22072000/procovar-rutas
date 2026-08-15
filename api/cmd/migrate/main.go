@@ -1,15 +1,15 @@
-// Comando migrar: aplica y revierte el esquema de la base.
+// Command migrate: applies and rolls back the database schema.
 //
-// Usa golang-migrate como biblioteca, no como binario suelto: así el despliegue
-// lleva un solo ejecutable y no hay que acordarse de instalar una herramienta
-// aparte en el servidor. Las migraciones van EMPOTRADAS en el binario con
-// go:embed, de modo que no puede desplegarse un binario sin sus migraciones ni
-// aplicarse unas migraciones que no correspondan a ese binario.
+// It uses golang-migrate as a library, not as a separate binary: that way the
+// deployment ships one executable and nobody has to remember to install a tool on
+// the server. The migrations are EMBEDDED in the binary with go:embed, so a binary
+// can never be deployed without its migrations, nor migrations applied that do not
+// belong to that binary.
 //
-//	migrar up          aplica todo lo pendiente
-//	migrar down 1      revierte la última
-//	migrar version     dice en qué versión está la base
-//	migrar force 3     desatasca una migración marcada como sucia
+//	migrate up          applies everything pending
+//	migrate down 1      rolls back the last one
+//	migrate version     says which version the database is on
+//	migrate force 3     unsticks a migration marked dirty
 package main
 
 import (
@@ -28,7 +28,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	"github.com/procovar/procovar-rutas/api/migraciones"
+	"github.com/procovar/procovar-rutas/api/migrations"
 )
 
 func main() {
@@ -44,16 +44,16 @@ func main() {
 		orden = os.Args[1]
 	}
 
-	// La base se crea sola si no existe.
+	// The database creates itself if it does not exist.
 	//
-	// Postgres no la crea al conectarse, así que sin esto el primer despliegue
-	// muere con "database does not exist" y hay que entrar por ssh al servidor a
-	// lanzar un CREATE DATABASE. Es idempotente: si ya está, no hace nada.
-	if err := crearBaseSiFalta(url); err != nil {
+	// Postgres does not create it on connect, so without this the first deploy dies
+	// with "database does not exist" and someone has to ssh into the server and run
+	// a CREATE DATABASE. It is idempotent: if it is already there, it does nothing.
+	if err := createDatabaseIfMissing(url); err != nil {
 		log.Fatalf("no se pudo preparar la base: %v", err)
 	}
 
-	fuente, err := iofs.New(migraciones.FS, ".")
+	fuente, err := iofs.New(migrations.FS, ".")
 	if err != nil {
 		log.Fatalf("no se pudieron leer las migraciones empotradas: %v", err)
 	}
@@ -75,8 +75,8 @@ func main() {
 				log.Fatalf("número de pasos inválido: %v", err)
 			}
 		}
-		// Siempre por pasos, nunca m.Down() entero: un `down` completo en el
-		// servidor equivocado borra la base sin preguntar.
+		// Always step by step, never a whole m.Down(): a full `down` on the wrong
+		// server wipes the database without asking.
 		err = m.Steps(-pasos)
 	case "version":
 		v, sucia, verr := m.Version()
@@ -117,9 +117,9 @@ func main() {
 	fmt.Println("migración aplicada")
 }
 
-// crearBaseSiFalta se conecta a la base de mantenimiento `postgres` del mismo
-// servidor y crea la del proyecto si todavía no existe.
-func crearBaseSiFalta(url string) error {
+// createDatabaseIfMissing connects to the `postgres` maintenance database on the
+// same server and creates the project's one if it does not exist yet.
+func createDatabaseIfMissing(url string) error {
 	cfg, err := pgx.ParseConfig(url)
 	if err != nil {
 		return fmt.Errorf("DATABASE_URL ilegible: %w", err)
@@ -129,8 +129,8 @@ func crearBaseSiFalta(url string) error {
 		return fmt.Errorf("DATABASE_URL no dice qué base usar")
 	}
 
-	// Misma conexión, pero a `postgres`: la base de mantenimiento que siempre
-	// existe y desde la que se puede crear otra.
+	// Same connection, but to `postgres`: the maintenance database that always
+	// exists and from which another can be created.
 	admin := *cfg
 	admin.Database = "postgres"
 
@@ -139,8 +139,8 @@ func crearBaseSiFalta(url string) error {
 
 	conn, err := pgx.ConnectConfig(ctx, &admin)
 	if err != nil {
-		// Puede que el usuario no tenga acceso a `postgres` pero sí a la suya. Se
-		// deja pasar: si la base existe, la migración funcionará igual.
+		// The user may have no access to `postgres` but plenty to their own. Let it
+		// pass: if the database exists, the migration will work anyway.
 		fmt.Printf("aviso: no se pudo comprobar si la base existe (%v); se sigue\n", err)
 		return nil
 	}
@@ -155,12 +155,12 @@ func crearBaseSiFalta(url string) error {
 		return nil
 	}
 
-	// El nombre no puede ir como parámetro en un CREATE DATABASE, así que se cita
-	// con las reglas de identificadores de Postgres en vez de concatenarlo tal cual.
+	// The name cannot be a parameter in a CREATE DATABASE, so it is quoted with
+	// Postgres identifier rules instead of being concatenated raw.
 	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{objetivo}.Sanitize()); err != nil {
-		// `api` e `ingesta` arrancan a la vez y comparten imagen: los dos pueden ver
-		// que la base falta y lanzar el CREATE. El que llega segundo recibe
-		// "duplicate_database", que es exactamente el resultado que buscaba.
+		// `api` and `ingest` start at the same time and share an image: both can see
+		// the database is missing and issue the CREATE. Whoever arrives second gets
+		// "duplicate_database", which is exactly the result it was after.
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "42P04" {
 			return nil

@@ -49,7 +49,7 @@ type clienteGoogle struct {
 
 // New builds a Google Drive client from a service account.
 //
-// El ámbito es de SOLO LECTURA a propósito: este sistema nunca mueve ni borra
+// The scope is READ-ONLY on purpose: this system never moves or deletes anything
 // files in the sellers' Drive, and it is better that it cannot even try.
 func New(ctx context.Context, credencialJSON []byte) (Client, error) {
 	svc, err := drive.NewService(ctx,
@@ -61,7 +61,7 @@ func New(ctx context.Context, credencialJSON []byte) (Client, error) {
 	return &clienteGoogle{svc: svc}, nil
 }
 
-// carpeta pendiente de recorrer.
+// folder still to be walked.
 type pendiente struct {
 	id   string
 	ruta []string

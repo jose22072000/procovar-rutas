@@ -7,14 +7,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Volcado masivo de points, escrito a mano porque sqlc no cubre COPY con las
-// columnas que aquí pueden ir nulas.
+// Bulk load of points, written by hand because sqlc does not cover COPY with the
+// nullable columns used here.
 //
-// Un día de un vendedor son ~2 500 fixes; con 8 sucursales, unos 141 000 al día.
-// Con INSERT fila a fila el barrido nocturno no terminaría nunca: COPY mete un
-// día entero en una sola operación.
+// One seller's day is ~2,500 fixes; with 8 branches, around 141,000 a day. With
+// row-by-row INSERTs the nightly sweep would never finish: COPY puts a whole day
+// in with a single operation.
 
-// NewPoint es una fila de track_point lista para insertar.
+// NewPoint is a track_point row ready to be inserted.
 type NewPoint struct {
 	GpxFileID string
 	SellerID  *string
@@ -29,10 +29,9 @@ type NewPoint struct {
 	Quality   PointQuality
 }
 
-// CopiadorPuntos es lo que hace falta de pgx para copiar: lo cumple tanto
-// *pgxpool.Pool como pgx.Tx, de modo que el volcado puede ir dentro de la misma
-// transacción que el registro del fichero.
-type CopiadorPuntos interface {
+// PointCopier is what pgx needs to copy: both *pgxpool.Pool and pgx.Tx satisfy
+// it, so the bulk load can run inside the same transaction as the file record.
+type PointCopier interface {
 	CopyFrom(ctx context.Context, tabla pgx.Identifier, columnas []string, filas pgx.CopyFromSource) (int64, error)
 }
 
@@ -41,8 +40,8 @@ var columnasPunto = []string{
 	"lat", "lon", "ele", "speed", "accuracy", "seq", "quality",
 }
 
-// InsertPoints vuelca los points y devuelve cuántos entraron.
-func InsertPoints(ctx context.Context, db CopiadorPuntos, points []NewPoint) (int64, error) {
+// InsertPoints loads the points and returns how many went in.
+func InsertPoints(ctx context.Context, db PointCopier, points []NewPoint) (int64, error) {
 	if len(points) == 0 {
 		return 0, nil
 	}
@@ -56,11 +55,11 @@ func InsertPoints(ctx context.Context, db CopiadorPuntos, points []NewPoint) (in
 	return db.CopyFrom(ctx, pgx.Identifier{"track_point"}, columnasPunto, filas)
 }
 
-// Nombres en inglés para las constantes de los enumerados.
+// English names for the enum constants.
 //
-// sqlc los bautiza a partir del nombre del tipo en Postgres (`estado_fichero` →
-// `EstadoFicheroPROCESADO`), y el tipo de la base NO se toca. Así que el resto
-// del código usa estos, y el generado se queda como está.
+// sqlc names them after the Postgres type (`estado_fichero` →
+// `EstadoFicheroPROCESADO`), and the database type is NOT being touched. So the
+// rest of the code uses these and the generated file stays as it is.
 const (
 	FileProcessed  = EstadoFicheroPROCESADO
 	FileUnassigned = EstadoFicheroSINASIGNAR

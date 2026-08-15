@@ -1,13 +1,13 @@
-// Comando ingesta: baja los .gpx de las carpetas de Drive.
+// Command ingest: pulls the .gpx files from the Drive folders.
 //
-//	ingesta                 barrido incremental, una vez
-//	ingesta --demonio       incremental cada N minutos + repaso nocturno
-//	ingesta --nocturno      repaso completo, ignorando el cursor
-//	ingesta --backfill      todo el histórico (primer arranque)
-//	ingesta --ausencias     marca los SIN_FICHERO del día indicado (--fecha)
+//	ingest                  incremental scan, once
+//	ingesta --daemon       incremental cada N minutos + repaso nightly
+//	ingest --nightly        full sweep, ignoring the cursor
+//	ingest --backfill       the entire history (first start)
+//	ingest --absences       marks the day's SIN_FICHERO rows (--date)
 //
-// Va aparte de la API a propósito: un barrido largo no puede bloquear las
-// peticiones del panel, y así se puede reiniciar o lanzar a mano sin tocar el
+// It is deliberately separate from the API: a long scan cannot block the panel's
+// requests, and this way it can be restarted or run by hand without touching the
 // servidor.
 package main
 
@@ -30,12 +30,12 @@ import (
 )
 
 func main() {
-	demonio := flag.Bool("demonio", false, "quedarse corriendo con el temporizador")
-	nocturno := flag.Bool("nocturno", false, "repaso completo, ignorando el cursor")
-	backfill := flag.Bool("backfill", false, "ingerir todo el histórico")
-	ausencias := flag.Bool("ausencias", false, "marcar los días sin fichero")
-	soloCola := flag.Bool("solo-cola", false, "solo consumir la cola de n8n, sin barrer Drive")
-	fechaStr := flag.String("fecha", "", "fecha YYYY-MM-DD para --ausencias (por defecto, ayer)")
+	daemon := flag.Bool("daemon", false, "keep running on the timer")
+	nightly := flag.Bool("nightly", false, "full sweep, ignoring the cursor")
+	backfill := flag.Bool("backfill", false, "ingest the entire history")
+	absences := flag.Bool("absences", false, "mark the days with no file")
+	queueOnly := flag.Bool("queue-only", false, "only drain n8n's queue, without scanning Drive")
+	dateStr := flag.String("date", "", "YYYY-MM-DD date for --absences (defaults to yesterday)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -56,11 +56,11 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Las credenciales de Google solo hacen falta para BARRER. Si la entrada es
-	// solo por n8n, este proceso sigue siendo útil —consume la cola y marca las
-	// ausencias— sin tener acceso a Drive, así que no se sale por eso.
+	// Google credentials are only needed for SCANNING. If files only arrive through
+	// n8n, this process is still useful — it drains the queue and marks absences —
+	// without any Drive access, so it does not quit over that.
 	var cuentas ingest.Accounts = ingest.SingleAccount(nil)
-	if credencial, err := cfg.Credenciales(); err == nil {
+	if credencial, err := cfg.Credentials(); err == nil {
 		if j, err := drive.LoadAccounts(credencial); err == nil {
 			cuentas = j
 			log.Info("cuentas de Google cargadas", "cuentas", j.Keys())
@@ -73,22 +73,22 @@ func main() {
 
 	svc := ingest.NewService(pool, cuentas, log, cfg.MaxFicherosPorBarrido)
 
-	if *ausencias {
+	if *absences {
 		fecha := yesterday()
-		if *fechaStr != "" {
-			f, err := time.Parse("2006-01-02", *fechaStr)
+		if *dateStr != "" {
+			f, err := time.Parse("2006-01-02", *dateStr)
 			if err != nil {
-				log.Error("fecha inválida", "valor", *fechaStr)
+				log.Error("fecha inválida", "valor", *dateStr)
 				os.Exit(1)
 			}
 			fecha = f
 		}
 		n, err := svc.MarkAbsences(ctx, fecha)
 		if err != nil {
-			log.Error("marcando ausencias", "error", err)
+			log.Error("marcando absences", "error", err)
 			os.Exit(1)
 		}
-		log.Info("ausencias marcadas", "fecha", fecha.Format("2006-01-02"), "cantidad", n)
+		log.Info("absences marcadas", "fecha", fecha.Format("2006-01-02"), "cantidad", n)
 		return
 	}
 
@@ -96,18 +96,18 @@ func main() {
 	switch {
 	case *backfill:
 		tipo = ingest.TipoBackfill
-	case *nocturno:
+	case *nightly:
 		tipo = ingest.TypeNightly
 	}
 
-	if !*demonio && !*soloCola {
+	if !*daemon && !*queueOnly {
 		run(ctx, svc, tipo, log)
 		return
 	}
 
-	// El consumidor de la cola de n8n corre en paralelo con el temporizador: los
-	// ficheros que empuja n8n entran en cuanto llegan, y el barrido sigue siendo
-	// la red de seguridad que se asegura de que no falte nada.
+	// The consumer of n8n's queue runs alongside the timer: the files n8n pushes go
+	// in as soon as they arrive, and the scan remains the safety net that makes sure
+	// nothing is missing.
 	if cfg.RedisURL != "" {
 		c, err := queue.New(cfg.RedisURL, cfg.PrefijoRedis)
 		if err != nil {
@@ -118,7 +118,7 @@ func main() {
 		if err := c.Ping(ctx); err != nil {
 			log.Warn("Redis no responde; no se consumirá la cola de n8n", "error", err)
 		} else {
-			// Mismo Redis y mismo prefijo para los avisos del panel.
+			// Same Redis and same prefix for the panel's notifications.
 			var bus *events.Bus
 			if b, err := events.New(cfg.RedisURL, cfg.PrefijoRedis); err != nil {
 				log.Warn("sin avisos en vivo", "error", err)
@@ -130,14 +130,14 @@ func main() {
 		}
 	}
 
-	if *soloCola {
+	if *queueOnly {
 		log.Info("solo queue: no se barrerá Drive")
 		<-ctx.Done()
 		return
 	}
 
 	log.Info("ingesta en marcha",
-		"intervalo", cfg.IntervaloBarrido, "repaso_nocturno", cfg.HoraRepasoNocturno)
+		"intervalo", cfg.IntervaloBarrido, "repaso_nightly", cfg.HoraRepasoNocturno)
 
 	run(ctx, svc, tipo, log)
 
@@ -154,14 +154,14 @@ func main() {
 			ahora := time.Now()
 			hoy := ahora.Format("2006-01-02")
 
-			// Un repaso completo al día. Es lo que garantiza que no falte nada
-			// aunque el incremental se haya saltado un fichero por llegar con la
-			// fecha de modificación cambiada, renombrado o movido de carpeta.
+			// One full sweep a day. It is what guarantees nothing is missing even
+			// if the incremental scan skipped a file because it arrived renamed,
+			// moved, or with a changed modification date.
 			if ahora.Hour() == cfg.HoraRepasoNocturno && ultimoNocturno != hoy {
 				ultimoNocturno = hoy
 				run(ctx, svc, ingest.TypeNightly, log)
 				if n, err := svc.MarkAbsences(ctx, yesterday()); err == nil {
-					log.Info("ausencias marcadas", "cantidad", n)
+					log.Info("absences marcadas", "cantidad", n)
 				}
 				continue
 			}

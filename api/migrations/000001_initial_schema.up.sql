@@ -1,32 +1,32 @@
--- procovar-rutas — esquema inicial.
+-- procovar-rutas — initial schema.
 --
--- Dos decisiones explican casi todo lo que sigue:
+-- Two decisions explain almost everything that follows:
 --
---  1. Los instantes son TIMESTAMPTZ. El recorte de la jornada 9:00–16:00 se hace
---     consultando `AT TIME ZONE 'America/Havana'`, nunca sumando horas a mano:
---     Cuba tiene horario de verano y los reportes de marzo y noviembre saldrían
---     corridos justo en las semanas en que a nadie se le ocurre revisarlos.
+--  1. Instants are TIMESTAMPTZ. Trimming to the 9:00–16:00 workday is done by
+--     querying `AT TIME ZONE 'America/Havana'`, never by adding hours by hand:
+--     Cuba observes daylight saving and the March and November reports would come
+--     out shifted during exactly the weeks nobody thinks to double-check them.
 --
---  2. track_day existe AUNQUE NO HAYA FICHERO. Un proceso nocturno crea la fila
---     de cada vendedor activo por cada día laborable; si no llegó nada, queda en
---     SIN_FICHERO. Si la ausencia fuese "no hay fila", no se podría listar, ni
---     contar, ni ordenar por número de faltas — que es justo lo que pide el
---     calendario de cumplimiento.
+--  2. track_day exists EVEN WITH NO FILE. A nightly process creates the row for
+--     every active seller on every working day; if nothing arrived, it stays as
+--     SIN_FICHERO. If an absence were "there is no row", it could not be listed,
+--     counted, or sorted by number of misses — which is precisely what the
+--     compliance calendar asks for.
 
 -- ---------------------------------------------------------------------------
--- Tipos
+-- Types
 -- ---------------------------------------------------------------------------
 
 CREATE TYPE tipo_fuente AS ENUM ('SUCURSAL', 'VENDEDOR', 'MIXTA');
 
 CREATE TYPE estado_fichero AS ENUM ('PROCESADO', 'SIN_ASIGNAR', 'SIN_FECHA', 'ERROR');
 
--- De dónde salió la fecha del día. Un día fechado por el nombre del fichero no
--- vale lo mismo que uno fechado por los propios puntos, y el panel lo dice.
+-- Where the day's date came from. A day dated from the file name is not worth the
+-- same as one dated from its own points, and the panel says so.
 CREATE TYPE origen_fecha AS ENUM ('PUNTOS', 'NOMBRE', 'DRIVE', 'NINGUNO');
 
--- Por qué un punto no cuenta. Se marca, NO se borra: si mañana el umbral resulta
--- malo, se recalcula sin volver a bajar nada de Drive.
+-- Why a point does not count. It is flagged, NOT deleted: if the threshold turns
+-- out to be wrong tomorrow, it is recomputed without downloading from Drive again.
 CREATE TYPE calidad_punto AS ENUM ('OK', 'SALTO', 'IMPRECISO', 'DUPLICADO', 'SIN_HORA');
 
 CREATE TYPE estado_dia AS ENUM (
@@ -34,11 +34,11 @@ CREATE TYPE estado_dia AS ENUM (
 );
 
 -- ---------------------------------------------------------------------------
--- Personas y estructura
+-- People and structure
 -- ---------------------------------------------------------------------------
 
--- Espejo local de la Organization de procovar-auth: aquí solo lo que hace falta
--- para consultar rápido; la identidad manda allá.
+-- Local mirror of procovar-auth's Organization: only what is needed here to query
+-- quickly; identity is owned over there.
 CREATE TABLE sucursal (
     id          TEXT PRIMARY KEY,
     auth_org_id TEXT UNIQUE,
@@ -49,8 +49,8 @@ CREATE TABLE sucursal (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- auth_user_id es NULL mientras sea alguien que solo aparece en los GPX y aún no
--- tiene cuenta: pasa al principio, cuando se están casando los alias.
+-- auth_user_id is NULL while someone only shows up in the GPX files and has no
+-- account yet: that happens early on, while the aliases are being matched.
 CREATE TABLE trabajador (
     id           TEXT PRIMARY KEY,
     auth_user_id TEXT UNIQUE,
@@ -58,7 +58,7 @@ CREATE TABLE trabajador (
     sucursal_id  TEXT NOT NULL REFERENCES sucursal (id),
     es_vendedor  BOOLEAN NOT NULL DEFAULT TRUE,
     activo       BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Alta y baja: quien entró en marzo no debe salir como ausente en enero.
+    -- Joining and leaving: someone who started in March must not come out as absent in January.
     desde        DATE NOT NULL DEFAULT CURRENT_DATE,
     hasta        DATE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -67,12 +67,12 @@ CREATE TABLE trabajador (
 
 CREATE INDEX trabajador_sucursal_idx ON trabajador (sucursal_id, activo);
 
--- Quién supervisa a quién, CON VIGENCIAS.
+-- Who supervises whom, WITH TERMS.
 --
--- No es una columna supervisor_id en trabajador a propósito: el panel consulta
--- semanas pasadas y hay que poder responder "quién supervisaba a este vendedor
--- en agosto" aunque en octubre ya haya cambiado de equipo. Con una columna, el
--- histórico se falsea solo cada vez que alguien cambia de jefe.
+-- Deliberately not a supervisor_id column on trabajador: the panel queries past
+-- weeks and has to be able to answer "who supervised this seller in August" even
+-- if by October they have changed team. With a column, the history falsifies
+-- itself every time someone changes boss.
 CREATE TABLE supervision (
     id            TEXT PRIMARY KEY,
     gestor_id     TEXT NOT NULL REFERENCES trabajador (id),
@@ -88,31 +88,31 @@ CREATE INDEX supervision_supervisor_idx ON supervision (supervisor_id, desde, ha
 CREATE INDEX supervision_gestor_idx ON supervision (gestor_id, desde, hasta);
 
 -- ---------------------------------------------------------------------------
--- Origen de los datos: carpetas de Drive
+-- Where the data comes from: Drive folders
 -- ---------------------------------------------------------------------------
 
--- Una carpeta de Drive que se barre en busca de .gpx.
+-- A Drive folder scanned for .gpx files.
 --
--- El montaje real: HAY UNA CUENTA DE GOOGLE POR SUCURSAL, y cada una se llama
--- como su sucursal. Dentro, una carpeta por perfil de GPS —con el nombre del
--- vendedor o de la tableta— y dentro de esa, los ficheros `AAAAMMDD.gpx`.
+-- The real setup: THERE IS ONE GOOGLE ACCOUNT PER BRANCH, each named after its
+-- branch. Inside, one folder per GPS profile — named after the seller or the
+-- tablet — and inside that, the `YYYYMMDD.gpx` files.
 --
--- Por eso cada fuente dice con QUÉ credencial se lee (`credencial`, la clave de
--- la cuenta en la configuración). Si mañana todas las carpetas se comparten en
--- una sola cuenta, basta con que todas las fuentes apunten a la misma.
+-- That is why each source says WHICH credential reads it (`credencial`, the
+-- account key in the configuration). If tomorrow every folder is shared into a
+-- single account, it is enough for all sources to point at the same one.
 CREATE TABLE drive_source (
     id             TEXT PRIMARY KEY,
     nombre         TEXT NOT NULL,
     folder_id      TEXT NOT NULL UNIQUE,
     tipo           tipo_fuente NOT NULL DEFAULT 'SUCURSAL',
     sucursal_id    TEXT REFERENCES sucursal (id),
-    -- Si tipo = VENDEDOR, a quién pertenece todo lo que caiga aquí.
+    -- When tipo = VENDEDOR, who everything landing here belongs to.
     trabajador_id  TEXT REFERENCES trabajador (id),
-    -- Clave de la cuenta de Google con la que se lee esta carpeta.
+    -- Key of the Google account this folder is read with.
     credencial     TEXT NOT NULL DEFAULT 'principal',
     activa         BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Cursor del barrido incremental: último modifiedTime visto. El repaso
-    -- nocturno lo ignora a propósito y recorre la carpeta entera.
+    -- Incremental scan cursor: last modifiedTime seen. The nightly sweep ignores
+    -- it on purpose and walks the whole folder.
     cursor_modificado TIMESTAMPTZ,
     ultimo_barrido TIMESTAMPTZ,
     ultimo_error   TEXT,
@@ -122,15 +122,15 @@ CREATE TABLE drive_source (
 
 CREATE INDEX drive_source_activa_idx ON drive_source (activa);
 
--- Registro de cada .gpx visto en Drive. Es el "ya procesé esto" del sistema: los
--- ficheros NO se mueven ni se borran del Drive (a diferencia de la ingesta de
--- PEDIDO), porque esas carpetas las ven los propios trabajadores.
+-- A record of every .gpx seen in Drive. It is the system's "I already did this":
+-- files are NOT moved or deleted from Drive (unlike PEDIDO's ingest), because
+-- those folders are seen by the sellers themselves.
 CREATE TABLE gpx_file (
     id               TEXT PRIMARY KEY,
     source_id        TEXT NOT NULL REFERENCES drive_source (id),
     drive_file_id    TEXT NOT NULL UNIQUE,
-    -- sha256 del contenido: si el mismo fichero aparece en dos carpetas se
-    -- ingiere una sola vez; si se re-sube corregido, cambia el hash.
+    -- sha256 of the content: if the same file appears in two folders it is ingested
+    -- once; if it is re-uploaded after a fix, the hash changes.
     sha256           TEXT NOT NULL UNIQUE,
     nombre           TEXT NOT NULL,
     ruta_carpeta     TEXT,
@@ -140,15 +140,15 @@ CREATE TABLE gpx_file (
     error            TEXT,
     trabajador_id    TEXT REFERENCES trabajador (id),
     sucursal_id      TEXT REFERENCES sucursal (id),
-    -- Día al que corresponde, en fecha local de la sucursal.
+    -- The day it belongs to, in the branch's local date.
     fecha            DATE,
     origen_fecha     origen_fecha NOT NULL DEFAULT 'NINGUNO',
     puntos_total     INTEGER NOT NULL DEFAULT 0,
     puntos_validos   INTEGER NOT NULL DEFAULT 0,
     primer_fix       TIMESTAMPTZ,
     ultimo_fix       TIMESTAMPTZ,
-    -- Texto crudo del que se intentó deducir el vendedor, para que el admin vea
-    -- en la bandeja QUÉ tiene que casar.
+    -- Raw text the seller was inferred from, so the admin can see in the inbox
+    -- WHAT has to be matched.
     pista_alias      TEXT,
     importado_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -162,20 +162,20 @@ CREATE INDEX gpx_file_source_idx ON gpx_file (source_id, importado_at);
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE track_point (
-    -- BIGSERIAL y no TEXT: es la tabla que crece de verdad (~141 k filas al día
-    -- con 8 sucursales), y a partir del año conviene particionarla por mes.
+    -- BIGSERIAL and not TEXT: this is the table that really grows (~141k rows a
+    -- day with 8 branches), and past a year it is worth partitioning by month.
     id            BIGSERIAL PRIMARY KEY,
     gpx_file_id   TEXT NOT NULL REFERENCES gpx_file (id) ON DELETE CASCADE,
     trabajador_id TEXT REFERENCES trabajador (id),
     sucursal_id   TEXT REFERENCES sucursal (id),
-    -- Instante en UTC. El filtrado por jornada se hace con AT TIME ZONE.
+    -- Instant in UTC. Filtering by workday is done with AT TIME ZONE.
     ts            TIMESTAMPTZ,
     lat           DOUBLE PRECISION NOT NULL,
     lon           DOUBLE PRECISION NOT NULL,
     ele           DOUBLE PRECISION,
     speed         DOUBLE PRECISION,
     accuracy      DOUBLE PRECISION,
-    -- Orden dentro del fichero: mantiene la secuencia aunque falten las horas.
+    -- Order within the file: keeps the sequence even when times are missing.
     seq           INTEGER NOT NULL,
     quality       calidad_punto NOT NULL DEFAULT 'OK'
 );
@@ -184,8 +184,8 @@ CREATE INDEX track_point_trabajador_ts_idx ON track_point (trabajador_id, ts);
 CREATE INDEX track_point_sucursal_ts_idx ON track_point (sucursal_id, ts);
 CREATE INDEX track_point_fichero_idx ON track_point (gpx_file_id, seq);
 
--- Un vendedor, un día. Precalculado en la ingesta: el panel y el reporte no
--- pueden depender de escanear 18 000 puntos cada vez que alguien abre una
+-- One seller, one day. Precomputed during ingest: the panel and the report cannot
+-- depend on scanning 18,000 points every time someone opens a screen.
 -- pantalla.
 CREATE TABLE track_day (
     id               TEXT PRIMARY KEY,
@@ -201,15 +201,15 @@ CREATE TABLE track_day (
     cobertura        DOUBLE PRECISION NOT NULL DEFAULT 0,
     huecos           INTEGER NOT NULL DEFAULT 0,
     puntos           INTEGER NOT NULL DEFAULT 0,
-    -- Distancia máxima al centroide, en metros: la señal que decide la
-    -- inmovilidad, porque es la única que el ruido del GPS no corrompe.
+    -- Greatest distance to the centroid, in metres: the signal that decides
+    -- stillness, because it is the only one GPS noise does not corrupt.
     radio_dispersion DOUBLE PRECISION,
     centroide_lat    DOUBLE PRECISION,
     centroide_lon    DOUBLE PRECISION,
-    -- Dónde pasó el día quieto: el dato que de verdad se quiere al abrir el caso.
+    -- Where the still day was spent: the fact you actually want when opening the case.
     lugar_texto      TEXT,
     banderas         TEXT[] NOT NULL DEFAULT '{}',
-    -- NULL cuando el estado es SIN_FICHERO: no hay fichero al que apuntar.
+    -- NULL when the status is SIN_FICHERO: there is no file to point at.
     gpx_file_id      TEXT REFERENCES gpx_file (id) ON DELETE SET NULL,
     calculado_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT track_day_unico UNIQUE (trabajador_id, fecha)
@@ -229,7 +229,7 @@ CREATE TABLE stop (
     lat                 DOUBLE PRECISION NOT NULL,
     lon                 DOUBLE PRECISION NOT NULL,
     radio               DOUBLE PRECISION,
-    -- Cliente más cercano, si se activa el cruce con la geo de clientes.
+    -- Nearest client, when the cross-reference with client geolocation is enabled.
     cliente_ref         TEXT,
     cliente_nombre      TEXT,
     distancia_cliente_m DOUBLE PRECISION,
@@ -239,12 +239,12 @@ CREATE TABLE stop (
 CREATE INDEX stop_trabajador_idx ON stop (trabajador_id, inicio);
 CREATE INDEX stop_dia_idx ON stop (track_day_id, seq);
 
--- Alias de dispositivo → vendedor. Es lo que hace robusta la resolución sin
--- saber de antemano cómo se llaman los ficheros: el admin casa un alias una vez
--- desde la bandeja y no vuelve a tocarlo.
+-- Device alias → seller. It is what makes resolution robust without knowing in
+-- advance what the files are called: the admin matches an alias once from the
+-- inbox and never touches it again.
 CREATE TABLE device_alias (
     id             TEXT PRIMARY KEY,
-    -- Normalizado (minúsculas, sin tildes, sin separadores) para casar de verdad.
+    -- Normalized (lowercase, no accents, no separators) so it really matches.
     alias          TEXT NOT NULL UNIQUE,
     alias_original TEXT NOT NULL,
     trabajador_id  TEXT NOT NULL REFERENCES trabajador (id) ON DELETE CASCADE,
@@ -257,9 +257,9 @@ CREATE TABLE device_alias (
 -- Configuración
 -- ---------------------------------------------------------------------------
 
--- Umbrales por sucursal. Todo configurable a propósito: no es lo mismo un
--- vendedor de ciudad que uno que cubre tres municipios, y los valores buenos
--- solo se sabrán cuando haya datos reales.
+-- Per-branch thresholds. Everything configurable on purpose: a seller working the
+-- city is not the same as one covering three municipalities, and the good values
+-- will only be known once there is real data.
 CREATE TABLE sucursal_config (
     id                     TEXT PRIMARY KEY,
     sucursal_id            TEXT NOT NULL UNIQUE REFERENCES sucursal (id) ON DELETE CASCADE,
@@ -269,9 +269,9 @@ CREATE TABLE sucursal_config (
     dias_laborables        INTEGER[] NOT NULL DEFAULT '{1,2,3,4,5}',
     parada_radio_m         INTEGER NOT NULL DEFAULT 60,
     parada_minutos         INTEGER NOT NULL DEFAULT 5,
-    -- Suelo de ruido: los tramos más cortos no suman kilómetros.
+    -- Noise floor: legs shorter than this add no kilometres.
     paso_minimo_m          INTEGER NOT NULL DEFAULT 25,
-    -- Inmovilidad: radio de dispersión + jornada mínima para poder afirmarlo.
+    -- Stillness: spread radius + the minimum workday needed to claim it.
     sin_mov_radio_m        INTEGER NOT NULL DEFAULT 300,
     sin_mov_span_min       INTEGER NOT NULL DEFAULT 120,
     escaso_km_netos        DOUBLE PRECISION NOT NULL DEFAULT 5,
@@ -285,19 +285,19 @@ CREATE TABLE sucursal_config (
     visita_radio_m         INTEGER NOT NULL DEFAULT 80
 );
 
--- Sin esto, un 1 de mayo saldría como ausencia de toda la plantilla.
+-- Without this, the 1st of May would show up as the whole workforce absent.
 CREATE TABLE feriado (
     id          TEXT PRIMARY KEY,
     fecha       DATE NOT NULL,
     nombre      TEXT NOT NULL,
-    -- NULL = feriado nacional, aplica a todas las sucursales.
+    -- NULL = national holiday, applies to every branch.
     sucursal_id TEXT REFERENCES sucursal (id)
 );
 
 CREATE UNIQUE INDEX feriado_unico_idx
     ON feriado (fecha, COALESCE(sucursal_id, ''));
 
--- Auditoría de cada barrido: qué se leyó, qué entró y qué falló.
+-- An audit of each scan: what was read, what went in and what failed.
 CREATE TABLE import_log (
     id                TEXT PRIMARY KEY,
     source_id         TEXT REFERENCES drive_source (id),

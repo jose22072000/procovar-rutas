@@ -18,7 +18,7 @@ func nueva(t *testing.T) *Queue {
 		t.Skip("sin REDIS_URL_TEST: se salta la prueba de la cola")
 	}
 
-	// Prefijo propio de la prueba: no se toca lo que haya en el Redis compartido.
+	// The test gets its own prefix: nothing in the shared Redis is touched.
 	c, err := New(url, "procovar-rutas-prueba:")
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestEncolarYTomarEnOrden(t *testing.T) {
 		}
 	}
 
-	// FIFO: el primero que entra es el primero que sale.
+	// FIFO: first in, first out.
 	for _, esperado := range []string{"a", "b", "c"} {
 		got, crudo, err := c.Take(ctx, time.Second)
 		if err != nil || got == nil {
@@ -69,8 +69,8 @@ func TestEncolarYTomarEnOrden(t *testing.T) {
 	}
 }
 
-// Lo importante de esta cola: un reinicio a mitad de proceso no puede perder el
-// recorrido de un día.
+// What matters about this queue: a restart mid-processing cannot lose a day's
+// route.
 func TestUnReinicioNoPierdeElTrabajo(t *testing.T) {
 	c := nueva(t)
 	ctx := context.Background()
@@ -82,7 +82,7 @@ func TestUnReinicioNoPierdeElTrabajo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Aquí el proceso "se cae": el trabajo se quedó en processing.
+	// Here the process "dies": the job was left in processing.
 	e, _ := c.Stats(ctx)
 	if e.Processing != 1 {
 		t.Fatalf("processing = %d", e.Processing)
@@ -145,7 +145,7 @@ func TestTomarDeUnaColaVaciaNoSeQuedaColgado(t *testing.T) {
 	}
 }
 
-// El prefix es lo que impide pisar las claves de PEDIDO en el Redis compartido.
+// The prefix is what keeps PEDIDO's keys safe in the shared Redis.
 func TestElPrefijoAislaLasClaves(t *testing.T) {
 	c, err := New("redis://127.0.0.1:6379/0", "procovar-rutas")
 	if err != nil {

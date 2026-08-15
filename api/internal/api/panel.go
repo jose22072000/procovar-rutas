@@ -8,8 +8,8 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// El calendar de cumplimiento: la cuadrícula de sellers × días laborables
-// que es la pantalla de entrada del panel.
+// The compliance calendar: the grid of sellers × working days that is the panel's
+// landing screen.
 func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
@@ -19,8 +19,8 @@ func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// El alcance se calcula con la fecha CONSULTADA, no con hoy: si un supervisor
-	// pide agosto en octubre, ve el equipo que tenía en agosto.
+	// Scope is computed from the DATE BEING QUERIED, not from today: if a supervisor
+	// asks in October for August, they see the team they had in August.
 	filtro, err := c.Scope(desde)
 	if err != nil {
 		respondError(w, http.StatusForbidden, err.Error())
@@ -55,8 +55,8 @@ func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
 		"to":      hasta.Format(iso),
 		"days":    aSellerDays(dias),
 		"summary": aSummaryRows(resumen),
-		// Los días laborables van al cliente para que la cuadrícula no tenga que
-		// suponer cuáles son: se configuran por sucursal.
+		// The working days go to the client so the grid does not have to guess which
+		// ones they are: they are configured per branch.
 		"workdays": calendar.Workdays(desde, hasta, nil),
 	})
 }
@@ -85,7 +85,7 @@ func (s *Server) sellers(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, aSellers(lista))
 }
 
-// El visor: el día de un vendedor con sus puntos y sus paradas.
+// The viewer: a seller's day with its points and its stops.
 func (s *Server) day(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
 
@@ -116,9 +116,10 @@ func (s *Server) day(w http.ResponseWriter, r *http.Request) {
 		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
 	})
 	if err != nil {
-		// No distinguir "no existe" de "no puedes verlo" es deliberado: si el
-		// mensaje fuera distinto, cualquiera podría averiguar qué días tiene un
-		// vendedor de otro equipo probando fechas.
+		// Not telling "does not exist" apart from "you may not see it" is
+		// deliberate: if the
+		// message differed, anyone could work out which days a seller from another
+		// team has by trying dates.
 		respondError(w, http.StatusNotFound, "sin datos para ese día")
 		return
 	}
@@ -143,9 +144,9 @@ func (s *Server) day(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// El nombre no viene en la fila del día, y el visor enseña "Ver el día de
-	// <quién>": sin esto saldría el identificador. Si la consulta falla no se
-	// tumba la página por un rótulo; se cae al identificador.
+	// The name is not in the day row, and the viewer shows "day of <whom>": without
+	// this it would print the identifier. If the lookup fails the page is not
+	// brought down over a label; it falls back to the identifier.
 	nombreVendedor := trabajadorID
 	if t, err := s.q.SellerByID(r.Context(), trabajadorID); err == nil {
 		nombreVendedor = t.Name
@@ -173,7 +174,7 @@ func (s *Server) week(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// La week del panel es LUNES A VIERNES, que es la jornada de la empresa.
+	// The panel's week is MONDAY TO FRIDAY, the company's working week.
 	dias := calendar.WorkWeek(fecha)
 	desde, hasta := dias[0], dias[len(dias)-1]
 

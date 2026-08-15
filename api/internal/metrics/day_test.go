@@ -6,7 +6,7 @@ import (
 )
 
 // Cuba is on UTC-4 in August: 13:00 UTC is 09:00 in the morning there.
-// El 10 de agosto de 2026 es lunes.
+// The 10th of August 2026 is a Monday.
 func hora(h, m int) *time.Time {
 	t := time.Date(2026, 8, 10, h+4, m, 0, 0, time.UTC)
 	return &t
@@ -16,8 +16,8 @@ func punto(lat, lon float64, t *time.Time, seq int) InputPoint {
 	return InputPoint{Lat: lat, Lon: lon, Ts: t, Seq: seq}
 }
 
-// rutaMoviendose avanza en línea recta: ~1 km por cada 0,01° de longitud aquí.
-func rutaMoviendose(desde, hasta, pasoMin int) []InputPoint {
+// movingRoute advances in a straight line: ~1 km per 0.01° of longitude here.
+func movingRoute(desde, hasta, pasoMin int) []InputPoint {
 	puntos := []InputPoint{}
 	i := 0
 	for min := desde * 60; min <= hasta*60; min += pasoMin {
@@ -54,7 +54,7 @@ func TestEvaluarMarcaSaltosSinEncadenarElError(t *testing.T) {
 	if puntos[1].Quality != QualityJump {
 		t.Errorf("el rebote debería marcarse como SALTO, es %s", puntos[1].Quality)
 	}
-	// El punto bueno posterior se compara con el bueno anterior, no con el rebote.
+	// The good point afterwards is compared with the previous good one, not the bounce.
 	if puntos[2].Quality != QualityOK {
 		t.Errorf("el punto siguiente debería seguir siendo OK, es %s", puntos[2].Quality)
 	}
@@ -82,7 +82,7 @@ func TestEvaluarMarcaDuplicadosImprecisosYSinHora(t *testing.T) {
 }
 
 func TestDiaNormalSaleOK(t *testing.T) {
-	r := ComputeDay(rutaMoviendose(9, 16, 5), DefaultConfig())
+	r := ComputeDay(movingRoute(9, 16, 5), DefaultConfig())
 
 	if r.Status != DayOK {
 		t.Errorf("estado = %s, se esperaba OK", r.Status)
@@ -101,7 +101,7 @@ func TestSinPuntosEsSinFichero(t *testing.T) {
 	}
 }
 
-// Coordenadas sin horas: ni día bueno ni ausencia. Su propio caso.
+// Coordinates with no times: neither a good day nor an absence. Its own case.
 func TestSinHorasEsSinFechaYNoAusencia(t *testing.T) {
 	r := ComputeDay([]InputPoint{
 		punto(21.38, -77.91, nil, 0),
@@ -130,9 +130,9 @@ func TestDiaEnteroSinMoverse(t *testing.T) {
 	}
 }
 
-// El caso que hundió la primera versión de la regla: con fixes que bailan 22 m
-// muestreando cada minuto, el ruido acumulado pasa de 5 km. Si la inmovilidad se
-// decidiera por kilómetros, este día se colaría como trabajado.
+// The case that sank the first version of the rule: with fixes dancing 22 m and
+// sampling once a minute, the accumulated noise passes 5 km. If stillness were
+// decided by kilometres, this day would slip through as worked.
 func TestRuidoDelGpsNoDisfrazaLaInmovilidad(t *testing.T) {
 	r := ComputeDay(stillRoute(9, 16, 1, 0.0002), DefaultConfig())
 
@@ -144,8 +144,8 @@ func TestRuidoDelGpsNoDisfrazaLaInmovilidad(t *testing.T) {
 	}
 }
 
-// Y el simétrico: una jornada corta y quieta es poca cobertura, no una
-// acusación de que se pasó el día sin moverse.
+// And the mirror image: a short, still workday is poor coverage, not an accusation
+// of having spent the day without moving.
 func TestJornadaDemasiadoCortaNoAcusaDeInmovilidad(t *testing.T) {
 	r := ComputeDay(stillRoute(9, 10, 5, 0.00007), DefaultConfig())
 
@@ -160,7 +160,7 @@ func TestJornadaDemasiadoCortaNoAcusaDeInmovilidad(t *testing.T) {
 func TestMovimientoEscaso(t *testing.T) {
 	puntos := []InputPoint{}
 	for i := 0; i <= 28; i++ {
-		// ~3 km en toda la jornada: se movió, pero poco.
+		// ~3 km over the whole workday: they moved, but not much.
 		puntos = append(puntos, punto(21.38+float64(i)*0.001, -77.91, hora(9+i/4, (i%4)*15), i))
 	}
 	r := ComputeDay(puntos, DefaultConfig())
@@ -171,7 +171,7 @@ func TestMovimientoEscaso(t *testing.T) {
 }
 
 func TestBanderasDeEntradaYSalida(t *testing.T) {
-	r := ComputeDay(rutaMoviendose(11, 14, 5), DefaultConfig())
+	r := ComputeDay(movingRoute(11, 14, 5), DefaultConfig())
 
 	for _, b := range []string{FlagLateStart, FlagEarlyEnd, FlagLowCoverage} {
 		if !tiene(r.Flags, b) {
@@ -193,7 +193,7 @@ func TestHuecosLargosDeSenal(t *testing.T) {
 	}
 }
 
-// La jornada es 9–16: un viaje de madrugada no convierte un día quieto en un día
+// The workday is 9–16: a trip in the small hours does not turn a still day into a
 // trabajado.
 func TestSoloCuentaLaJornada(t *testing.T) {
 	puntos := []InputPoint{
@@ -213,7 +213,7 @@ func TestSoloCuentaLaJornada(t *testing.T) {
 
 func TestParadaNoSePartEnVarias(t *testing.T) {
 	puntos := []InputPoint{}
-	// 09:00–09:30 quieto en un cliente, con el baile normal del GPS en ciudad.
+	// 09:00–09:30 still at a client, with the usual city GPS dance.
 	for i := 0; i <= 6; i++ {
 		ruido := 0.0002
 		if i%2 == 1 {
@@ -221,7 +221,7 @@ func TestParadaNoSePartEnVarias(t *testing.T) {
 		}
 		puntos = append(puntos, punto(21.38+ruido, -77.91+ruido, hora(9, i*5), i))
 	}
-	// Y luego se va.
+	// And then they leave.
 	for i := 1; i <= 6; i++ {
 		puntos = append(puntos, punto(21.38+float64(i)*0.01, -77.91, hora(9, 30+i*5), 6+i))
 	}

@@ -45,15 +45,15 @@ type singleAccount struct{ cli drive.Client }
 
 func (u singleAccount) For(context.Context, string) (drive.Client, error) { return u.cli, nil }
 
-// SingleAccount envuelve un cliente único.
+// SingleAccount wraps a lone client.
 func SingleAccount(cli drive.Client) Accounts { return singleAccount{cli: cli} }
 
 type Service struct {
-	pool    *pgxpool.Pool
-	q       *store.Queries
+	pool     *pgxpool.Pool
+	q        *store.Queries
 	accounts Accounts
-	log     *slog.Logger
-	max     int
+	log      *slog.Logger
+	max      int
 }
 
 func NewService(pool *pgxpool.Pool, accounts Accounts, log *slog.Logger, maxFicheros int) *Service {
@@ -63,7 +63,7 @@ func NewService(pool *pgxpool.Pool, accounts Accounts, log *slog.Logger, maxFich
 	return &Service{pool: pool, q: store.New(pool), accounts: accounts, log: log, max: maxFicheros}
 }
 
-// Summary de un barrido.
+// Summary of a scan.
 type Summary struct {
 	Seen      int
 	New       int
@@ -199,7 +199,7 @@ type claveDia struct {
 	date       time.Time
 }
 
-// processFile baja un .gpx, lo juzga y lo guarda. Devuelve si era nuevo.
+// processFile downloads a .gpx, judges it and stores it. Returns whether it was new.
 func (s *Service) processFile(
 	ctx context.Context,
 	cli drive.Client,
@@ -460,7 +460,7 @@ func (s *Service) sourceZone(ctx context.Context, f store.DriveSource) *time.Loc
 }
 
 // branchSettings fetches the thresholds; if the branch has no row of its own,
-// de fábrica.
+// the factory values.
 func (s *Service) branchSettings(ctx context.Context, sucursalID string) (metrics.Config, *time.Location) {
 	cfg := metrics.DefaultConfig()
 

@@ -6,14 +6,14 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// Los mismos DTOs que en dto.go, para la parte de administración: inbox,
-// alias, sources y scans. Mismo motivo: que el nombre de una columna no sea
-// el nombre de un campo del JSON.
+// The same DTOs as in dto.go, for the administration side: inbox, aliases,
+// sources and scans. Same reason: a column's name should not be a JSON field's
+// name.
 //
-// La credencial de Google de una fuente NO sale nunca: es el contenido de la
-// cuenta de servicio, y en el panel solo hace falta saber si la fuente tiene una.
+// A source's Google credential NEVER goes out: it is the service account's
+// contents, and the panel only needs to know whether the source has one.
 
-// InboxFile es un fichero que llegó sin dueño y espera que alguien lo asigne.
+// InboxFile is a file that arrived without an owner and waits to be assigned.
 type InboxFile struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
@@ -50,9 +50,9 @@ func aInboxFile(f store.InboxRow) InboxFile {
 	}
 }
 
-// aAssignedFile: lo que devuelve assign un fichero de la inbox. Es la misma
-// forma que InboxFile, pero viene de la tabla y no de la consulta de inbox, así
-// que no trae el nombre de la fuente.
+// aAssignedFile: what assigning a file from the inbox returns. Same shape as
+// InboxFile, but it comes from the table rather than the inbox query, so it does
+// not carry the source name.
 func aAssignedFile(f store.GpxFile) InboxFile {
 	var fecha *string
 	if f.Date != nil {
@@ -70,8 +70,8 @@ func aAssignedFile(f store.GpxFile) InboxFile {
 	}
 }
 
-// DeviceAlias recuerda que un nombre de dispositivo es de un vendedor concreto,
-// para no volver a preguntarlo en la inbox.
+// DeviceAlias remembers that a device name belongs to a particular seller, so the
+// inbox never asks again.
 type DeviceAlias struct {
 	ID            string    `json:"id"`
 	Alias         string    `json:"alias"`
@@ -90,7 +90,7 @@ func aDeviceAlias(a store.BranchAliasesRow) DeviceAlias {
 	}
 }
 
-// DriveSource es una carpeta de Drive de la que se leen los .gpx.
+// DriveSource is a Drive folder the .gpx files are read from.
 type DriveSource struct {
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
@@ -114,8 +114,8 @@ func aDriveSource(f store.DriveSource) DriveSource {
 	}
 }
 
-// ScanLog es lo que pasó en un barrido: cuántos ficheros se vieron y cuántos
-// entraron.
+// ScanLog is what happened during a scan: how many files were seen and how many
+// went in.
 type ScanLog struct {
 	ID             string     `json:"id"`
 	SourceID       *string    `json:"sourceId"`

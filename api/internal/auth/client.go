@@ -1,10 +1,10 @@
-// Package auth habla con procovar-auth.
+// Package auth talks to procovar-auth.
 //
-// Es el equivalente en Go de src/lib/sdk/qb-auth-client.ts, con el mismo
-// esquema de firma HMAC: método, ruta, marca de tiempo, nonce y hash del cuerpo,
-// unidos por saltos de línea y firmados con la clave del cliente. Si esto se
-// desincroniza del TypeScript, la autenticación deja de funcionar entera — así
-// que el orden de los campos es literalmente el de allí.
+// It is the Go counterpart of src/lib/sdk/qb-auth-client.ts, with the same HMAC
+// signing scheme: method, path, timestamp, nonce and body hash, joined by
+// newlines and signed with the client key. If this drifts from the TypeScript,
+// authentication stops working entirely — so the field order is literally the one
+// used over there.
 package auth
 
 import (
@@ -54,8 +54,8 @@ func NuevoCliente(baseURL, clientID, claveHex string, keyVersion int) (*Client, 
 	}, nil
 }
 
-// Organizacion es una sucursal, en el vocabulario de procovar-auth.
-type Organizacion struct {
+// Organization is a branch, in procovar-auth's vocabulary.
+type Organization struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Slug string `json:"slug"`
@@ -64,7 +64,7 @@ type Organizacion struct {
 type Membresia struct {
 	ID           string       `json:"id"`
 	Roles        []string     `json:"roles"`
-	Organization Organizacion `json:"organization"`
+	Organization Organization `json:"organization"`
 }
 
 type Usuario struct {
@@ -79,7 +79,7 @@ type SesionInterna struct {
 	ActiveOrganizationID string `json:"activeOrganizationId"`
 }
 
-// Session es la respuesta de /api/auth/verify-session.
+// Session is the response from /api/auth/verify-session.
 type Session struct {
 	Valid       bool          `json:"valid"`
 	User        Usuario       `json:"user"`
@@ -91,8 +91,8 @@ type Session struct {
 	} `json:"rbac"`
 }
 
-// VerificarSesion cambia la cookie de sesión por la identidad de quien la trae.
-func (c *Client) VerificarSesion(ctx context.Context, token string) (*Session, error) {
+// VerifySession exchanges the session cookie for the identity of whoever brings it.
+func (c *Client) VerifySession(ctx context.Context, token string) (*Session, error) {
 	var s Session
 	if err := c.llamar(ctx, http.MethodPost, "/api/auth/verify-session",
 		map[string]string{"sessionToken": token}, &s); err != nil {
@@ -104,8 +104,8 @@ func (c *Client) VerificarSesion(ctx context.Context, token string) (*Session, e
 	return &s, nil
 }
 
-// CrearTokenCallback arranca el flujo de login y devuelve a dónde redirigir.
-func (c *Client) CrearTokenCallback(ctx context.Context, callbackURL, returnTo string) (string, error) {
+// CreateCallbackToken starts the login flow and returns where to redirect.
+func (c *Client) CreateCallbackToken(ctx context.Context, callbackURL, returnTo string) (string, error) {
 	var res struct {
 		RedirectURL string `json:"redirectUrl"`
 	}
@@ -117,17 +117,17 @@ func (c *Client) CrearTokenCallback(ctx context.Context, callbackURL, returnTo s
 	return res.RedirectURL, err
 }
 
-// Canjear cambia el código de vuelta del login por una sesión.
-func (c *Client) Canjear(ctx context.Context, codigo string) (map[string]any, error) {
+// Exchange swaps the code returned by the login for a session.
+func (c *Client) Exchange(ctx context.Context, codigo string) (map[string]any, error) {
 	var res map[string]any
 	err := c.llamar(ctx, http.MethodPost, "/api/auth/exchange", map[string]string{"code": codigo}, &res)
 	return res, err
 }
 
-// RegistrarAuditoria deja constancia en procovar-auth de una acción sensible
-// (asignar un alias, cambiar una carpeta, exportar un reporte). Es best-effort:
-// que la auditoría falle no puede tumbar la operación del usuario.
-func (c *Client) RegistrarAuditoria(ctx context.Context, accion, recurso, usuarioID string) {
+// RecordAudit leaves a trace in procovar-auth of a sensitive action (assigning an
+// alias, changing a folder, exporting a report). It is best-effort: a failed audit
+// entry cannot bring down the user's operation.
+func (c *Client) RecordAudit(ctx context.Context, accion, recurso, usuarioID string) {
 	_ = c.llamar(ctx, http.MethodPost, "/api/audit", map[string]string{
 		"action":   accion,
 		"resource": recurso,
@@ -136,9 +136,9 @@ func (c *Client) RegistrarAuditoria(ctx context.Context, accion, recurso, usuari
 	}, nil)
 }
 
-// firmar construye las cabeceras de servicio. El orden de los campos del texto
-// a firmar tiene que ser IDÉNTICO al del SDK TypeScript.
-func (c *Client) firmar(metodo, ruta string, cuerpo []byte) map[string]string {
+// sign builds the service headers. The order of the fields in the string to sign
+// has to be IDENTICAL to the TypeScript SDK's.
+func (c *Client) sign(metodo, ruta string, cuerpo []byte) map[string]string {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 
 	nonceBytes := make([]byte, 16)
@@ -182,7 +182,7 @@ func (c *Client) llamar(ctx context.Context, metodo, ruta string, cuerpo any, de
 	if err != nil {
 		return err
 	}
-	for k, v := range c.firmar(metodo, ruta, datos) {
+	for k, v := range c.sign(metodo, ruta, datos) {
 		req.Header.Set(k, v)
 	}
 

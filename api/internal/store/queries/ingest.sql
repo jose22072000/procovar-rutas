@@ -1,4 +1,4 @@
--- Consultas de la ingesta: leer las carpetas, registrar ficheros y volcar puntos.
+-- Ingest queries: read the folders, record files and bulk-load points.
 
 -- name: ActiveSources :many
 SELECT * FROM drive_source WHERE activa ORDER BY nombre;
@@ -22,9 +22,9 @@ UPDATE drive_source
 SET ultimo_barrido = now(), ultimo_error = $2, updated_at = now()
 WHERE id = $1;
 
--- El "ya procesé esto" del sistema. Se consulta por las dos claves porque un
--- mismo contenido puede aparecer con otro drive_file_id (copiado a otra carpeta)
--- y un mismo drive_file_id puede cambiar de contenido (re-subida corregida).
+-- The system's "I already did this". It is checked on both keys because the same
+-- content can turn up under another drive_file_id (copied to another folder) and
+-- the same drive_file_id can change content (re-uploaded after a fix).
 -- name: FileByDriveID :one
 SELECT * FROM gpx_file WHERE drive_file_id = $1;
 
@@ -77,8 +77,8 @@ SELECT * FROM sucursal WHERE id = $1;
 SELECT fecha FROM feriado
 WHERE sucursal_id IS NULL OR sucursal_id = $1;
 
--- El día se reemplaza entero en cada recálculo: es idempotente, así que
--- reprocesar un fichero cuantas veces haga falta no duplica nada.
+-- The day is replaced whole on every recompute: it is idempotent, so reprocessing
+-- a file as many times as needed duplicates nothing.
 -- name: SaveDay :one
 INSERT INTO track_day (
     id, trabajador_id, sucursal_id, fecha, estado, primer_fix, ultimo_fix,
@@ -115,9 +115,9 @@ INSERT INTO stop (
     lat, lon, radio, cliente_ref, cliente_nombre, distancia_cliente_m, seq
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
--- Marca las ausencias del día laborable: cada vendedor activo sin fila queda en
--- SIN_FICHERO. Sin esto, "no subió nada" sería la ausencia de una fila, y las
--- ausencias no se pueden listar, ni contar, ni ordenar por número de faltas.
+-- Marks the working day's absences: every active seller with no row ends up as
+-- SIN_FICHERO. Without this, "uploaded nothing" would be the absence of a row, and
+-- absences cannot be listed, counted, or sorted by number of misses.
 -- name: MarkAbsences :execrows
 INSERT INTO track_day (id, trabajador_id, sucursal_id, fecha, estado)
 SELECT
@@ -143,10 +143,10 @@ SET fin = now(), ficheros_vistos = $2, ficheros_nuevos = $3, ficheros_error = $4
     puntos_insertados = $5, ok = $6, detalle = $7
 WHERE id = $1;
 
--- Todos los puntos de un vendedor en un día local, vengan del fichero que
--- vengan: el día se recalcula desde la base y no desde el fichero recién
--- llegado, porque puede haber varios ficheros para el mismo día (una sesión de
--- mañana y otra de tarde) y sumarlos por separado daría dos veredictos.
+-- Every point of a seller on a local day, whichever file it came from: the day is
+-- recomputed from the database and not from the file that just arrived, because
+-- there can be several files for the same day (a morning session and an afternoon
+-- one) and adding them separately would give two verdicts.
 -- name: SellerPointsOnDate :many
 SELECT p.ts, p.lat, p.lon, p.accuracy, p.seq
 FROM track_point p
@@ -161,8 +161,8 @@ SELECT * FROM sucursal WHERE activa ORDER BY nombre;
 -- name: SellerByID :one
 SELECT * FROM trabajador WHERE id = $1;
 
--- Altas mínimas, solo para las pruebas de integración: el alta real de
--- sucursales y trabajadores viene de procovar-auth, no de aquí.
+-- Minimal inserts, for the integration tests only: branches and sellers are really
+-- created from procovar-auth, not from here.
 -- name: CreateTestBranch :one
 INSERT INTO sucursal (id, nombre, auth_org_id) VALUES ($1, $2, $3) RETURNING *;
 

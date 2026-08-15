@@ -1,13 +1,13 @@
-// Package reporte arma el documento semanal por vendedor.
+// Package report builds the per-seller document.
 //
-// Lo que pediste: de lunes a viernes, y por cada día la tabla con CADA
-// movimiento entre las 9:00 y las 16:00, en filas que alternan desplazamiento y
+// What was asked for: Monday to Friday, and for each day the table with EVERY
+// movement between 9:00 and 16:00, in rows alternating travel and stop.
 // parada.
 //
-// El armado es una función pura sobre lo que ya está en la base — no vuelve a
-// calcular kilómetros ni a detectar paradas. Si el reporte recalculara por su
-// cuenta, acabaría enseñando números distintos de los del panel para el mismo
-// día, que es la forma más rápida de que nadie se fíe de ninguno de los dos.
+// Building it is a pure function over what is already in the database — it does
+// not recompute kilometres or re-detect stops. If the report did its own maths it
+// would end up showing different numbers from the panel for the same day, which
+// is the fastest way to make nobody trust either of them.
 package report
 
 import (
@@ -28,7 +28,7 @@ type Header struct {
 	Timezone string `json:"timezone"`
 }
 
-// Movement es una fila de la tabla del día.
+// Movement is one row of the day's table.
 type Movement struct {
 	// Type: "desplazamiento" o "parada".
 	Type        string  `json:"type"`
@@ -40,15 +40,15 @@ type Movement struct {
 	MaxSpeed    float64 `json:"maxSpeed"`
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
-	// Place es el cliente más cercano si se cruzó con la geo de clientes.
+	// Place is the nearest client, when crossed with the client geolocation data.
 	Place string `json:"place,omitempty"`
 }
 
 type Day struct {
 	Date   string `json:"date"`
 	Status string `json:"status"`
-	// Reason explica en palabras por qué el día no es bueno. Un día malo lleva
-	// su sección igual que uno bueno: es el que hay que enseñar.
+	// Reason explains in words why the day is not a good one. A bad day gets its
+	// section just like a good one: it is the one worth showing.
 	Reason      string     `json:"reason,omitempty"`
 	FirstFix    string     `json:"firstFix,omitempty"`
 	LastFix     string     `json:"lastFix,omitempty"`
@@ -58,7 +58,7 @@ type Day struct {
 	MinMovement int        `json:"minMovement"`
 	Flags       []string   `json:"flags"`
 	Movements   []Movement `json:"movements"`
-	// Track son los puntos para pintar el mapa de la sección.
+	// Track are the points used to draw the section's map.
 	Track []Point `json:"track"`
 	Place string  `json:"place,omitempty"`
 }
@@ -93,7 +93,7 @@ var motivos = map[string]string{
 	"NO_LABORABLE":      "Día no laborable.",
 }
 
-// EmptyDay es un día laborable del que no hay ni fila en la base.
+// EmptyDay is a working day with not even a row in the database.
 func EmptyDay(fecha string) Day {
 	return Day{
 		Date:      fecha,
@@ -105,8 +105,8 @@ func EmptyDay(fecha string) Day {
 	}
 }
 
-// BuildDay construye la sección de un día: la tabla de movements alternando
-// desplazamientos y paradas, más los puntos del mapa.
+// BuildDay assembles a day's section: the table of movements alternating travel
+// and stops, plus the map points.
 func BuildDay(
 	d store.TrackDay,
 	puntos []store.DayPointsRow,
@@ -149,9 +149,9 @@ func BuildDay(
 
 // movements intercala paradas y desplazamientos en orden cronológico.
 //
-// Los tramos de desplazamiento son "lo que queda entre dos paradas": se
-// calculan por diferencia y no por su cuenta, para que la suma de la tabla
-// cuadre siempre con los totales del día.
+// Travel legs are "whatever is left between two stops": they are computed by
+// difference rather than on their own, so the table's total always matches the
+// day's.
 func movements(
 	puntos []store.DayPointsRow,
 	paradas []store.Stop,
@@ -164,7 +164,7 @@ func movements(
 
 	corte := 0
 	for _, p := range paradas {
-		// Tramo antes de esta parada.
+		// The leg before this stop.
 		ini := corte
 		for corte < len(puntos) && puntos[corte].Ts != nil && puntos[corte].Ts.Before(p.Start) {
 			corte++
@@ -183,13 +183,13 @@ func movements(
 			Place:       stopPlace(p),
 		})
 
-		// Saltar los puntos que caen dentro de la parada.
+		// Skip the points that fall inside the stop.
 		for corte < len(puntos) && puntos[corte].Ts != nil && !puntos[corte].Ts.After(p.End) {
 			corte++
 		}
 	}
 
-	// Lo que quede después de la última parada.
+	// Whatever is left after the last stop.
 	if m, ok := leg(puntos[corte:], zona); ok {
 		out = append(out, m)
 	}
@@ -245,7 +245,7 @@ func stopPlace(p store.Stop) string {
 	return *p.ClientName
 }
 
-// Build cierra el documento con su resumen.
+// Build closes the document with its summary.
 func Build(cab Header, dias []Day) Document {
 	doc := Document{Header: cab, Days: dias}
 

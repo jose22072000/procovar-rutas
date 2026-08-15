@@ -6,12 +6,12 @@ import (
 	"time"
 )
 
-// Flujo de login, según docs/CONSUMER-PATTERN.md de procovar-auth:
+// Login flow, per procovar-auth's docs/CONSUMER-PATTERN.md:
 //
-//	/api/auth/login       → pide un token de callback y redirige a procovar-auth
-//	/api/auth/callback    → vuelve con ?code=…, se canjea por la sesión
-//	/api/auth/logout      → manda a procovar-auth, que pregunta y cierra
-//	/api/auth/logout/done → al volver de allí, borra la cookie de aquí
+//	/api/auth/login       → asks for a callback token and redirects to procovar-auth
+//	/api/auth/callback    → comes back with ?code=…, exchanged for the session
+//	/api/auth/logout      → sends to procovar-auth, which asks and closes
+//	/api/auth/logout/done → on the way back, clears the cookie here
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	volverA := r.URL.Query().Get("returnTo")
@@ -19,7 +19,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		volverA = s.cfg.AppURL
 	}
 
-	destino, err := s.auth.CrearTokenCallback(r.Context(), s.cfg.AppURL+"/api/auth/callback", volverA)
+	destino, err := s.auth.CreateCallbackToken(r.Context(), s.cfg.AppURL+"/api/auth/callback", volverA)
 	if err != nil {
 		s.log.Error("no se pudo arrancar el login", "error", err)
 		respondError(w, http.StatusBadGateway, "procovar-auth no responde")
@@ -35,7 +35,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.auth.Canjear(r.Context(), codigo)
+	res, err := s.auth.Exchange(r.Context(), codigo)
 	if err != nil {
 		s.log.Warn("canje fallido", "error", err)
 		respondError(w, http.StatusUnauthorized, "no se pudo canjear el código")
@@ -57,18 +57,18 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, destino, http.StatusFound)
 }
 
-// logout NO cierra nada por su cuenta: manda a procovar-auth.
+// logout closes nothing on its own: it sends to procovar-auth.
 //
-// La sesión vive allí. Si este panel se limitara a borrar su cookie —que es lo
-// que hacía—, "cerrar sesión" sería mentira: la sesión de Accesos seguiría
-// abierta y el botón de login devolvería adentro sin preguntar nada. Por eso el
-// cartel de "¿seguro?" también está allí y no aquí: una sola página, un solo
-// texto, y el único sitio que la cierra de verdad.
+// The session lives there. If this panel merely cleared its own cookie — which is
+// what it used to do — "log out" would be a lie: the Accounts session would stay
+// open and the login button would put you back in without asking a thing. That is
+// why the "are you sure?" prompt also lives there and not here: one page, one
+// wording, and the only place that really closes it.
 //
-// La cookie de aquí se borra al VOLVER (/api/auth/logout/done), no ahora. Así, si
-// en el cartel se dice que no, no queda a medias: sesión de Accesos intacta y
-// cookie de aquí intacta. Delivery, que borra antes de ir, deja al que cancela
-// sin cookie y le toca volver a login.
+// The cookie here is cleared on the way BACK (/api/auth/logout/done), not now. So
+// if you say no at the prompt, nothing is left half-done: Accounts session intact
+// and cookie here intact. Delivery, which clears before leaving, strands whoever
+// cancels without a cookie and makes them log in again.
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	v := url.Values{}
 	v.Set("returnTo", s.cfg.AppURL+"/api/auth/logout/done")
@@ -76,10 +76,10 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.cfg.AuthURL+"/logout?"+v.Encode(), http.StatusFound)
 }
 
-// logoutDone es donde aterriza la vuelta de Accesos, ya cerrada la sesión de allí.
+// logoutDone is where the return from Accounts lands, that session already closed.
 func (s *Server) logoutDone(w http.ResponseWriter, r *http.Request) {
-	// Se pone la cookie vacía con el MISMO dominio, no se borra: borrarla sin el
-	// atributo de dominio deja viva la del dominio padre y la sesión "vuelve".
+	// The cookie is set empty with the SAME domain rather than deleted: deleting it
+	// without the domain attribute leaves the parent-domain one alive and the session "comes back".
 	http.SetCookie(w, s.cookie("", -1))
 	http.Redirect(w, r, s.cfg.AppURL+"/", http.StatusFound)
 }
@@ -98,9 +98,9 @@ func (s *Server) cookie(valor string, maxEdad int) *http.Cookie {
 		Secure:   s.cfg.Entorno != "dev",
 		MaxAge:   maxEdad,
 	}
-	// Sin dominio explícito la cookie es del host, que es lo correcto cuando las
-	// aplicaciones no comparten raíz. Con QB_SESSION_COOKIE_DOMAIN se comparte
-	// entre todas las de *.procovar.cloud.
+	// With no explicit domain the cookie belongs to the host, which is right when
+	// the applications do not share a root. With QB_SESSION_COOKIE_DOMAIN it is
+	// shared across every *.procovar.cloud application.
 	if s.cfg.CookieDominio != "" {
 		c.Domain = s.cfg.CookieDominio
 	}

@@ -175,17 +175,20 @@ type CalendarRow struct {
 	PlaceLabel *string
 }
 
-// Consultas del panel. Todas llevan EL MISMO bloque de alcance:
+// Panel queries. Every one of them carries THE SAME scope block:
 //
 //	(@branch_id = ''  OR sucursal_id = @branch_id)
 //	(cardinality(@sellers) = 0 OR trabajador_id = ANY(@sellers))
 //	(@exclude = ''      OR trabajador_id <> @exclude)
 //
-// que es la traducción literal de internal/alcance.Filtro. Se repite en el SQL
-// porque no hay otra forma con sqlc, pero NINGUNA consulta lo construye por su
-// cuenta: los tres parámetros salen siempre de alcance.Calcular. El día que se
-// escriba una consulta nueva sin ellos, la revisión debería rechazarla.
-// El calendario de cumplimiento: la cuadrícula de vendedores × días laborables.
+// which is the literal translation of internal/scope.Filter. It is repeated in the
+// SQL because sqlc leaves no other way, but NO query builds it on its own: the
+// three parameters always come out of scope.Compute. The day someone writes a new
+// query without them, review should reject it.
+//
+// The columns stay in Spanish because the database is not being renamed; the
+// translation to English happens when sqlc generates the Go (see sqlc.yaml).
+// The compliance calendar: the grid of sellers × working days.
 func (q *Queries) Calendar(ctx context.Context, arg CalendarParams) ([]CalendarRow, error) {
 	rows, err := q.db.Query(ctx, calendar,
 		arg.FromDate,
@@ -293,8 +296,8 @@ type DayPointsRow struct {
 	Seq     int32
 }
 
-// Los puntos que pinta el visor. Solo la jornada por defecto; el interruptor de
-// "día completo" manda @workday_start = '00:00' y @workday_end = '23:59'.
+// The points the viewer draws. Working hours only by default; the "full day"
+// switch sends @workday_start = '00:00' and @workday_end = '23:59'.
 func (q *Queries) DayPoints(ctx context.Context, arg DayPointsParams) ([]DayPointsRow, error) {
 	rows, err := q.db.Query(ctx, dayPoints,
 		arg.Zone,
@@ -393,9 +396,8 @@ type FilePointsRow struct {
 	Seq     int32
 }
 
-// Un fichero sin horas no casa con la consulta anterior (no tiene ts), pero su
-// recorrido sí se puede pintar: para eso están estos puntos, por orden de
-// secuencia.
+// A file with no times does not match the previous query (it has no ts), but its
+// route can still be drawn: that is what these points are for, in sequence order.
 func (q *Queries) FilePoints(ctx context.Context, gpxFileID string) ([]FilePointsRow, error) {
 	rows, err := q.db.Query(ctx, filePoints, gpxFileID)
 	if err != nil {
@@ -463,8 +465,8 @@ type InboxRow struct {
 	Source         string
 }
 
-// La bandeja: lo que la ingesta no supo asignar o fechar. Es lo que evita que un
-// fichero se pierda en silencio.
+// The inbox: what ingest could not assign or date. It is what stops a file from
+// being lost in silence.
 func (q *Queries) Inbox(ctx context.Context, arg InboxParams) ([]InboxRow, error) {
 	rows, err := q.db.Query(ctx, inbox, arg.BranchID, arg.LimitRows)
 	if err != nil {
@@ -548,9 +550,9 @@ type IncidentSummaryRow struct {
 	TotalKm        float64
 }
 
-// Postgres NO admite un alias de salida dentro de una expresión del ORDER BY
-// (sí suelto, no sumado), así que los conteos se repiten aquí. Escribirlo con
-// los alias compila en sqlc y revienta en la base: "column ... does not exist".
+// Postgres does NOT accept an output alias inside an ORDER BY expression (alone
+// yes, summed no), so the counts are repeated here. Writing it with the aliases
+// compiles in sqlc and blows up in the database: "column ... does not exist".
 func (q *Queries) IncidentSummary(ctx context.Context, arg IncidentSummaryParams) ([]IncidentSummaryRow, error) {
 	rows, err := q.db.Query(ctx, incidentSummary,
 		arg.FromDate,

@@ -24,7 +24,7 @@ type SourceType string
 const (
 	SourceBranch SourceType = "SUCURSAL"
 	SourceSeller SourceType = "VENDEDOR"
-	SourceMixed    SourceType = "MIXTA"
+	SourceMixed  SourceType = "MIXTA"
 )
 
 // Via records which rule hit, so it can be explained in the inbox and debugged.
@@ -52,7 +52,7 @@ type Context struct {
 	FileName   string
 	// GpxHints are the texts pulled from the file itself.
 	GpxHints []string
-	// Alias mapea alias normalizado -> ID de trabajador.
+	// Alias maps a normalized alias -> seller id.
 	Alias map[string]string
 }
 

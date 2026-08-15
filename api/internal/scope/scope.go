@@ -130,8 +130,8 @@ func Compute(s Session, fecha time.Time, vigencias []Term) (Filter, error) {
 	}
 }
 
-// PuedeAdministrar: fuentes de Drive, alias y umbrales.
-func PuedeAdministrar(r Role) bool {
+// CanAdminister: Drive sources, aliases and thresholds.
+func CanAdminister(r Role) bool {
 	return r == RoleSuperAdmin || r == RoleAdmin
 }
 

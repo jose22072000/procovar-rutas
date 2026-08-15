@@ -6,18 +6,18 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
-// Lo que sale por el API, en inglés y con forma propia.
+// What the API sends out, in English and with a shape of its own.
 //
-// Antes los handlers serializaban directamente las structs que genera sqlc, y eso
-// tenía dos problemas. Uno: las claves salían con el nombre del campo de Go
-// (`SellerID`, `KmNetos`), o sea el esquema de la base asomando por la API en
-// dos idiomas a la vez. Y dos, más serio: cualquier `ALTER TABLE` cambiaba el JSON
-// sin que nadie lo decidiera, y el front se rompía sin tocar una línea del front.
+// The handlers used to serialize sqlc's structs directly, and that had two
+// problems. One: the keys came out with the Go field names (`SellerID`,
+// `KmNetos`) — the database schema showing through the API, in two languages at
+// once. And two, more serious: any `ALTER TABLE` changed the JSON without anyone
+// deciding to, and the front end broke without a line of the front end changing.
 //
-// Con estos tipos, el nombre de una columna es asunto de la base y el nombre de un
-// campo del JSON es asunto del API. Se traduce aquí, en un solo sitio.
+// With these types, a column's name is the database's business and a JSON field's
+// name is the API's. The translation happens here, in one place.
 
-// SellerDay es una celda del calendar: un vendedor en un día.
+// SellerDay is one calendar cell: a seller on a day.
 type SellerDay struct {
 	SellerID   string     `json:"sellerId"`
 	Seller     string     `json:"seller"`
@@ -38,8 +38,8 @@ func aSellerDay(f store.CalendarRow) SellerDay {
 		SellerID: f.SellerID,
 		Seller:   f.Seller,
 		BranchID: f.BranchID,
-		// Solo la fecha: la hora sobra en una cuadrícula por días y una marca
-		// completa arrastraría la zona horaria del servidor al cliente.
+		// Date only: the time is noise in a per-day grid, and a full timestamp would
+		// drag the server's time zone out to the client.
 		Date:       f.Date.Format(iso),
 		Status:     string(f.Status),
 		NetKm:      f.NetKm,
@@ -52,7 +52,7 @@ func aSellerDay(f store.CalendarRow) SellerDay {
 	}
 }
 
-// SummaryRow es el recuento de incidencias de un vendedor en el rango pedido.
+// SummaryRow is a seller's incident count over the requested range.
 type SummaryRow struct {
 	SellerID       string  `json:"sellerId"`
 	Seller         string  `json:"seller"`
@@ -75,7 +75,7 @@ func aSummaryRow(f store.IncidentSummaryRow) SummaryRow {
 	}
 }
 
-// Seller es un vendedor en las listas y los desplegables.
+// Seller is a seller as shown in lists and dropdowns.
 type Seller struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -87,7 +87,7 @@ func aSeller(t store.Seller) Seller {
 	return Seller{ID: t.ID, Name: t.Name, BranchID: t.BranchID, Active: t.Active}
 }
 
-// DayDetail es la ficha del día que abre el visor del mapa.
+// DayDetail is the day record the map viewer opens.
 type DayDetail struct {
 	ID          string     `json:"id"`
 	Seller      string     `json:"seller"`
@@ -124,7 +124,7 @@ func aDayDetail(d store.SellerDayRow, vendedor string) DayDetail {
 	}
 }
 
-// TrackPoint es un punto del recorrido dibujado en el mapa.
+// TrackPoint is one point of the route drawn on the map.
 type TrackPoint struct {
 	Ts      *time.Time `json:"ts"`
 	Lat     float64    `json:"lat"`
@@ -141,7 +141,7 @@ func aTrackPoint(p store.DayPointsRow) TrackPoint {
 	}
 }
 
-// Stop es una parada: donde el vendedor estuvo quieto el rato suficiente.
+// Stop is a stop: where the seller stayed put long enough.
 type Stop struct {
 	ID          string    `json:"id"`
 	Start       time.Time `json:"start"`
@@ -162,8 +162,8 @@ func aStop(p store.Stop) Stop {
 	}
 }
 
-// Los tres convierten una lista de golpe. Devuelven [] y no nil a propósito: `nil`
-// se serializa como `null` y el front tendría que comprobarlo en cada sitio.
+// These convert a whole list at once. They return [] and not nil on purpose: `nil`
+// serializes as `null` and the front end would have to check for it everywhere.
 func aSellerDays(fs []store.CalendarRow) []SellerDay {
 	out := make([]SellerDay, 0, len(fs))
 	for _, f := range fs {
@@ -172,9 +172,9 @@ func aSellerDays(fs []store.CalendarRow) []SellerDay {
 	return out
 }
 
-// La week de un vendedor sale de la tabla entera, no de la consulta del
-// calendar, así que llega con otro tipo. Se convierte a la MISMA forma: para el
-// front una celda es una celda, venga de donde venga.
+// A seller's week comes from the whole table, not from the calendar query, so it
+// arrives as a different type. It is converted to the SAME shape: to the front end
+// a cell is a cell, wherever it came from.
 func aSellerDaysFromTrackDay(ds []store.TrackDay, vendedor string) []SellerDay {
 	out := make([]SellerDay, 0, len(ds))
 	for _, d := range ds {
