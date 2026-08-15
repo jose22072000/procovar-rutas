@@ -123,3 +123,21 @@ func TestExaminarCarpetaDeVendedorManda(t *testing.T) {
 		t.Errorf("en una carpeta de vendedor manda la carpeta, no el nombre: %s", v.SellerID)
 	}
 }
+
+// El nombre de la sucursal sale de la cuenta que comparte la carpeta, y esas
+// cuentas están escritas de varias formas.
+func TestNombreDeCuenta(t *testing.T) {
+	casos := map[string]string{
+		"habanaprocovar@gmail.com":    "habana",
+		"camaguey.procovar@gmail.com": "camaguey",
+		"Holguin.Procovar@gmail.com":  "holguin",
+		"tablets.procovar@gmail.com":  "tablets",
+		"granma":                      "granma",
+		"":                            "",
+	}
+	for entra, espera := range casos {
+		if sale := nombreDeCuenta(entra); sale != espera {
+			t.Errorf("nombreDeCuenta(%q) = %q, esperaba %q", entra, sale, espera)
+		}
+	}
+}
