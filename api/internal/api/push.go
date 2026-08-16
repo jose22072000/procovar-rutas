@@ -192,3 +192,34 @@ func (s *Server) ingestFolders(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, http.StatusOK, out)
 }
+
+// GET /api/ingest/stats — cómo va la ingesta, sin abrir la base a internet.
+//
+// Existe porque no había forma de comprobar desde fuera si los ficheros estaban
+// entrando: el panel exige sesión de persona y Postgres no está expuesto (ni debe
+// estarlo). Son cuentas, no datos: cuántos ficheros hay y en qué estado.
+func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
+	if !s.validServiceKey(r) {
+		respondError(w, http.StatusUnauthorized, "clave de servicio inválida")
+		return
+	}
+
+	e, err := s.q.IngestStats(r.Context())
+	if err != nil {
+		s.fail(w, "estado de la ingesta", err)
+		return
+	}
+
+	respond(w, http.StatusOK, map[string]any{
+		"files":           e.Files,
+		"filesOk":         e.FilesOk,
+		"filesUnassigned": e.FilesUnassigned,
+		"filesNoDate":     e.FilesNoDate,
+		"filesFailed":     e.FilesFailed,
+		"points":          e.Points,
+		"days":            e.Days,
+		"sellers":         e.Sellers,
+		"branches":        e.Branches,
+		"lastFile":        e.LastFile,
+	})
+}

@@ -574,6 +574,52 @@ func (q *Queries) FileBySha(ctx context.Context, sha256 string) (GpxFile, error)
 	return i, err
 }
 
+const ingestStats = `-- name: IngestStats :one
+SELECT
+    (SELECT count(*) FROM gpx_file)                                   AS files,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'PROCESADO')        AS files_ok,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'SIN_ASIGNAR')      AS files_unassigned,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'SIN_FECHA')        AS files_no_date,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'ERROR')            AS files_failed,
+    (SELECT count(*) FROM track_point)                                AS points,
+    (SELECT count(*) FROM track_day)                                  AS days,
+    (SELECT count(*) FROM trabajador)                                 AS sellers,
+    (SELECT count(*) FROM sucursal)                                   AS branches,
+    (SELECT max(importado_at) FROM gpx_file)                          AS last_file
+`
+
+type IngestStatsRow struct {
+	Files           int64
+	FilesOk         int64
+	FilesUnassigned int64
+	FilesNoDate     int64
+	FilesFailed     int64
+	Points          int64
+	Days            int64
+	Sellers         int64
+	Branches        int64
+	LastFile        interface{}
+}
+
+// Un vistazo al estado de la ingesta, para vigilarla desde fuera sin abrir la base.
+func (q *Queries) IngestStats(ctx context.Context) (IngestStatsRow, error) {
+	row := q.db.QueryRow(ctx, ingestStats)
+	var i IngestStatsRow
+	err := row.Scan(
+		&i.Files,
+		&i.FilesOk,
+		&i.FilesUnassigned,
+		&i.FilesNoDate,
+		&i.FilesFailed,
+		&i.Points,
+		&i.Days,
+		&i.Sellers,
+		&i.Branches,
+		&i.LastFile,
+	)
+	return i, err
+}
+
 const markAbsences = `-- name: MarkAbsences :execrows
 INSERT INTO track_day (id, trabajador_id, sucursal_id, fecha, estado)
 SELECT

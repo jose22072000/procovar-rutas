@@ -193,3 +193,17 @@ SELECT * FROM trabajador WHERE nombre = @name AND sucursal_id = @branch_id LIMIT
 INSERT INTO trabajador (id, nombre, sucursal_id) VALUES (@id, @name, @branch_id)
 ON CONFLICT DO NOTHING
 RETURNING *;
+
+-- name: IngestStats :one
+-- Un vistazo al estado de la ingesta, para vigilarla desde fuera sin abrir la base.
+SELECT
+    (SELECT count(*) FROM gpx_file)                                   AS files,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'PROCESADO')        AS files_ok,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'SIN_ASIGNAR')      AS files_unassigned,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'SIN_FECHA')        AS files_no_date,
+    (SELECT count(*) FROM gpx_file WHERE estado = 'ERROR')            AS files_failed,
+    (SELECT count(*) FROM track_point)                                AS points,
+    (SELECT count(*) FROM track_day)                                  AS days,
+    (SELECT count(*) FROM trabajador)                                 AS sellers,
+    (SELECT count(*) FROM sucursal)                                   AS branches,
+    (SELECT max(importado_at) FROM gpx_file)                          AS last_file;
