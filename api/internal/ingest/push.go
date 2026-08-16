@@ -71,6 +71,23 @@ func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 		return false, 0, err
 	}
 
+	// La sucursal la manda quien empuja, y manda sobre lo que tenga la carpeta.
+	//
+	// Las 53 carpetas se dieron de alta por migración con la credencial de relleno
+	// "principal", y como la carpeta ya traía credencial, ganaba ella: TODO acabó en
+	// una sucursal llamada "principal" — 30 vendedores y 93 ficheros en el mismo
+	// saco, que es justo lo contrario de lo que hace falta para que un gerente vea
+	// lo suyo.
+	//
+	// Ahora la primera vez que llega un empuje con cuenta, la carpeta aprende de qué
+	// sucursal es, y se lleva consigo lo que ya había entrado por ella.
+	if e.Account != "" && !s.mismaCuenta(source, e.Account) {
+		if err := s.reasignarSucursal(ctx, &source, e.Account); err != nil {
+			s.log.Warn("no se pudo asignar la sucursal de la carpeta",
+				"carpeta", source.Name, "cuenta", e.Account, "error", err)
+		}
+	}
+
 	alias, err := s.aliasMap(ctx)
 	if err != nil {
 		return false, 0, err
@@ -157,4 +174,40 @@ func (s *Service) findSource(ctx context.Context, e Pushed) (store.DriveSource, 
 		ID: newID(), Name: nombre, FolderID: e.FolderID,
 		Type: store.SourceSeller, BranchID: &branchID, Credential: e.Account,
 	})
+}
+
+// mismaCuenta: si la carpeta ya está en la sucursal de esa cuenta, no hay nada que
+// hacer. Se compara por sucursal y no por el texto de la credencial, porque la
+// misma sucursal puede escribirse de varias formas ("camaguey.procovar@…" y
+// "camagueyprocovar@…").
+func (s *Service) mismaCuenta(source store.DriveSource, cuenta string) bool {
+	if source.BranchID == nil || *source.BranchID == "" {
+		return false
+	}
+	suc, err := s.q.BranchByName(context.Background(), nombreDeCuenta(cuenta))
+	return err == nil && suc.ID == *source.BranchID
+}
+
+// reasignarSucursal pone la carpeta en su sucursal y arrastra lo que ya entró por
+// ella: sus ficheros, los vendedores que salieron de su nombre y los días de esos
+// vendedores. Sin eso habría que borrar y volver a ingerir, y los ficheros ya están
+// apartados en Drive: no volverían a entrar.
+func (s *Service) reasignarSucursal(ctx context.Context, source *store.DriveSource, cuenta string) error {
+	branchID, err := s.branchOfAccount(ctx, cuenta)
+	if err != nil {
+		return err
+	}
+	if err := s.q.SetSourceBranch(ctx, store.SetSourceBranchParams{
+		ID: source.ID, BranchID: &branchID, Credential: cuenta,
+	}); err != nil {
+		return err
+	}
+	if err := s.q.MoveSourceDataToBranch(ctx, store.MoveSourceDataToBranchParams{
+		SourceID: source.ID, BranchID: branchID,
+	}); err != nil {
+		return err
+	}
+	source.BranchID = &branchID
+	source.Credential = cuenta
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -60,6 +61,12 @@ type Service struct {
 func NewService(pool *pgxpool.Pool, accounts Accounts, log *slog.Logger, maxFicheros int) *Service {
 	if maxFicheros <= 0 {
 		maxFicheros = 500
+	}
+	// Sin registro de sucesos se descarta, en vez de dejar un puntero nulo esperando
+	// a la primera línea que quiera avisar de algo. Pasa en las pruebas, y reventar
+	// ahí esconde el fallo que se estaba probando.
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &Service{pool: pool, q: store.New(pool), accounts: accounts, log: log, max: maxFicheros}
 }
@@ -246,7 +253,7 @@ func (s *Service) branchOfSource(ctx context.Context, source store.DriveSource) 
 // la primera vez. Hay una cuenta por sucursal —Camagüey, Holguín, Santiago…— así que
 // el nombre de la cuenta ES el de la sucursal.
 func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, error) {
-	nombre := cuenta
+	nombre := nombreDeCuenta(cuenta)
 	if nombre == "" {
 		nombre = "principal"
 	}
