@@ -19,6 +19,22 @@ interface Fuente {
   hasCredential: boolean;
   lastScan: string | null;
   lastError: string | null;
+  files: number;
+  lastFile: string;
+  // Días desde la última ruta. -1 = por esa carpeta no ha entrado nunca ninguna.
+  daysSilent: number;
+}
+
+// A partir de aquí se considera que el GPS de ese vendedor está fallando. Tres días
+// cubre el fin de semana: la jornada es de lunes a viernes, así que un lunes por la
+// mañana lo último es del viernes y eso es normal.
+const DIAS_MALO = 3;
+
+function comoVa(f: Fuente): { texto: string; mal: boolean } {
+  if (f.daysSilent < 0) return { texto: "nunca ha subido nada", mal: true };
+  if (f.daysSilent === 0) return { texto: "subió hoy", mal: false };
+  if (f.daysSilent === 1) return { texto: "subió ayer", mal: false };
+  return { texto: `${f.daysSilent} días sin subir`, mal: f.daysSilent > DIAS_MALO };
 }
 
 interface Alias {
@@ -142,13 +158,19 @@ export default function Administracion() {
     }
   }
 
-  // Las carpetas, agrupadas por sucursal. Setenta seguidas son una lista que no se
-  // lee; por sucursal se ve de un vistazo quién tiene cuántas y a quién le falta.
+  // Las carpetas, agrupadas por sucursal y dentro de cada una el que lleva más
+  // tiempo callado primero: a esta pantalla se entra a buscar el que falla, no a
+  // leerla entera.
   const porSucursal = fuentes.reduce<Record<string, Fuente[]>>((acc, f) => {
     const s = f.branch || "sin sucursal";
     (acc[s] ??= []).push(f);
     return acc;
   }, {});
+  for (const lista of Object.values(porSucursal)) {
+    lista.sort((a, b) => (b.daysSilent < 0 ? 1e9 : b.daysSilent) - (a.daysSilent < 0 ? 1e9 : a.daysSilent));
+  }
+
+  const fallando = fuentes.filter((f) => comoVa(f).mal);
 
   return (
     <>
@@ -160,12 +182,18 @@ export default function Administracion() {
       <div className="tarjeta">
         <b>Carpetas de Drive</b>
         <p className="sub">
-          El identificador sale de la URL de la carpeta:
-          drive.google.com/drive/folders/<b>ESTE_TROZO</b>. Los ficheros los trae
-          n8n con la cuenta padre, y al entrar los aparta a la subcarpeta «GPS
-          Procesados» de cada vendedor: por eso una carpeta que lleva días sin
-          barrerse no significa nada raro.
+          Una carpeta por vendedor, con lo que lleva subido y cuánto hace de su
+          última ruta. Más de {DIAS_MALO} días callado es un GPS que hay que mirar:
+          o no lo lleva encendido, o dejó de subir.
         </p>
+
+        {fuentes.length > 0 && (
+          <p className={fallando.length ? "aviso" : "sub"}>
+            {fallando.length === 0
+              ? `Los ${fuentes.length} están subiendo.`
+              : `${fallando.length} de ${fuentes.length} llevan más de ${DIAS_MALO} días sin subir.`}
+          </p>
+        )}
 
         {Object.keys(porSucursal)
           .sort()
@@ -174,27 +202,39 @@ export default function Administracion() {
               <div className="pv-rotulo">
                 {sucursal} · {porSucursal[sucursal].length}
               </div>
-              {porSucursal[sucursal].map((f) => (
-                <div className="dato" key={f.id}>
-                  <span>{f.name}</span>
-                  <span>
-                    {f.lastError ? (
-                      <span style={{ color: "var(--falta)" }}>{f.lastError}</span>
-                    ) : f.lastScan ? (
-                      new Date(f.lastScan).toLocaleString("es")
-                    ) : (
-                      "entra por n8n"
-                    )}
-                    <button
-                      className="pv-boton"
-                      style={{ marginLeft: "0.75rem" }}
-                      onClick={() => quitar(f)}
-                    >
-                      Quitar
-                    </button>
-                  </span>
-                </div>
-              ))}
+              {porSucursal[sucursal].map((f) => {
+                const estado = comoVa(f);
+                return (
+                  <div className="dato" key={f.id}>
+                    <span>
+                      {f.name}{" "}
+                      <span className="pv-codigo" style={{ color: "var(--pv-tinta-suave)" }}>
+                        {f.files} rutas
+                        {f.lastFile ? ` · última ${f.lastFile}` : ""}
+                      </span>
+                    </span>
+                    <span>
+                      <span
+                        className={estado.mal ? "pv-etiqueta pv-etiqueta-cuno" : "pv-etiqueta pv-etiqueta-visto"}
+                      >
+                        {estado.texto}
+                      </span>
+                      {f.lastError && (
+                        <span style={{ color: "var(--falta)", marginLeft: "0.5rem" }}>
+                          {f.lastError}
+                        </span>
+                      )}
+                      <button
+                        className="pv-boton"
+                        style={{ marginLeft: "0.75rem" }}
+                        onClick={() => quitar(f)}
+                      >
+                        Quitar
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           ))}
 

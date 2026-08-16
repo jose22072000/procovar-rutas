@@ -4,11 +4,31 @@
 SELECT * FROM drive_source WHERE activa ORDER BY nombre;
 
 -- name: ActiveSourcesWithBranch :many
--- Igual, pero con el nombre de la sucursal: es lo que hay que poder ver en
--- Administración para saber si la ingesta repartió cada carpeta donde tocaba.
-SELECT f.*, coalesce(s.nombre, '') AS branch
+-- Igual, pero con lo que hay que ver en Administración: de qué sucursal es la
+-- carpeta, cuántas rutas han entrado por ella y cuántos días lleva sin entrar
+-- ninguna.
+--
+-- Es la pregunta que se le hace a esa pantalla: a qué vendedor le está fallando el
+-- GPS y desde cuándo. Sin esas cifras, una carpeta en silencio desde hace tres
+-- semanas se ve exactamente igual que una que subió esta mañana.
+--
+-- La fecha sale como texto y vacía cuando no hay ninguna, en vez de nula: una fecha
+-- que puede faltar obliga a decidir su tipo en cuatro sitios, y aquí lo único que se
+-- hace con ella es escribirla en la pantalla.
+SELECT f.*,
+       coalesce(s.nombre, '') AS branch,
+       coalesce(g.ficheros, 0)::bigint AS ficheros,
+       coalesce(to_char(g.ultima, 'YYYY-MM-DD'), '')::text AS ultima,
+       -- Días desde la última ruta, que es la pregunta de verdad: no "cuándo subió"
+       -- sino "cuánto lleva callado". -1 = no ha subido nunca.
+       coalesce(CURRENT_DATE - g.ultima, -1)::int AS dias_callado
 FROM drive_source f
 LEFT JOIN sucursal s ON s.id = f.sucursal_id
+LEFT JOIN (
+    SELECT source_id, count(*) AS ficheros, max(fecha) AS ultima
+    FROM gpx_file
+    GROUP BY source_id
+) g ON g.source_id = f.id
 WHERE f.activa
 ORDER BY coalesce(s.nombre, 'zzz'), f.nombre;
 

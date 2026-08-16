@@ -104,6 +104,12 @@ type DriveSource struct {
 	LastScan      *time.Time `json:"lastScan"`
 	LastError     *string    `json:"lastError"`
 	CreatedAt     time.Time  `json:"createdAt"`
+	// Files, LastFile y DaysSilent contestan la pregunta que se le hace a esta
+	// pantalla: a qué vendedor le falla el GPS y desde cuándo. LastFile va vacía y
+	// DaysSilent en -1 cuando por esa carpeta no ha entrado nunca una ruta.
+	Files      int64  `json:"files"`
+	LastFile   string `json:"lastFile"`
+	DaysSilent int32  `json:"daysSilent"`
 }
 
 func aDriveSourceConSucursal(f store.ActiveSourcesWithBranchRow) DriveSource {
@@ -114,6 +120,9 @@ func aDriveSourceConSucursal(f store.ActiveSourcesWithBranchRow) DriveSource {
 		CreatedAt: f.CreatedAt,
 	})
 	d.Branch = f.Branch
+	d.Files = f.Ficheros
+	d.LastFile = f.Ultima
+	d.DaysSilent = f.DiasCallado
 	return d
 }
 
