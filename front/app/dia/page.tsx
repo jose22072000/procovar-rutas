@@ -23,7 +23,7 @@ import {
 // Leaflet touches `window`: kept out of server rendering.
 const MapaRuta = dynamic(() => import("@/components/RouteMap"), {
   ssr: false,
-  loading: () => <div className="mapa" />,
+  loading: () => <div className="mapa-caja"><div className="mapa" /></div>,
 });
 
 function Visor() {
@@ -35,6 +35,8 @@ function Visor() {
   const [error, setError] = useState<string | null>(null);
   const [completa, setCompleta] = useState(false);
   const [instante, setInstante] = useState(-1);
+  // La parada que se está mirando: se toca en la lista y el mapa la centra.
+  const [paradaVista, setParadaVista] = useState<string | null>(null);
 
   useEffect(() => {
     if (!seller || !fecha) return;
@@ -63,27 +65,32 @@ function Visor() {
 
   return (
     <>
-      <h1>{datos?.day.seller ?? "Recorrido"}</h1>
-      <p className="sub">{fecha}</p>
+      {/* Cabecera y controles en una sola franja: lo que hay que ver aquí es el
+          mapa, y cada línea de texto de arriba es un trozo de mapa menos. */}
+      <div className="visor-cabecera no-imprimir">
+        <div>
+          <h1>{datos?.day.seller ?? "Recorrido"}</h1>
+          <p className="sub">{fecha}</p>
+        </div>
 
-      <div className="controles">
-        <Link href={otroDia(-1)}>
-          <button>← Día anterior</button>
-        </Link>
-        <Link href={otroDia(1)}>
-          <button>Día siguiente →</button>
-        </Link>
-        <label>
-          <input
-            type="checkbox"
-            checked={completa}
-            onChange={(e) => setCompleta(e.target.checked)}
-          />{" "}
-          Ver el día completo (fuera de 9:00–16:00)
-        </label>
-        <Link href={`/reporte?seller=${seller}&from=${fecha}&to=${fecha}`}>
-          <button className="pv-boton pv-boton-primario">Reporte de la semana</button>
-        </Link>
+        <div className="visor-acciones">
+          <Link href={otroDia(-1)} className="pv-boton">← Día anterior</Link>
+          <Link href={otroDia(1)} className="pv-boton">Día siguiente →</Link>
+          <label className="pv-boton">
+            <input
+              type="checkbox"
+              checked={completa}
+              onChange={(e) => setCompleta(e.target.checked)}
+            />{" "}
+            Día completo
+          </label>
+          <Link
+            href={`/reporte?seller=${seller}&from=${fecha}&to=${fecha}`}
+            className="pv-boton pv-boton-primario"
+          >
+            Reporte
+          </Link>
+        </div>
       </div>
 
       {error && <p className="aviso">{error}</p>}
@@ -91,118 +98,113 @@ function Visor() {
 
       {datos && (
         <div className="visor">
-          <div>
-            <div className="tarjeta">
-              {/* The status pill takes its colour from the stylesheet through
-                  data-status, like the calendar cells. */}
-              <div className="celda" data-status={datos.day.status} style={{ marginBottom: "0.75rem" }}>
-                {STATUS_LABEL[datos.day.status]}
-              </div>
-
-              <div className="dato">
-                <span>Kilómetros</span>
-                <span>{datos.day.netKm.toFixed(2)} km</span>
-              </div>
-              <div className="dato">
-                <span>Primer fix</span>
-                <span>{hora(datos.day.firstFix)}</span>
-              </div>
-              <div className="dato">
-                <span>Último fix</span>
-                <span>{hora(datos.day.lastFix)}</span>
-              </div>
-              <div className="dato">
-                <span>Cobertura</span>
-                <span>{datos.day.coverage.toFixed(0)} %</span>
-              </div>
-              <div className="dato">
-                <span>En movimiento</span>
-                <span>{datos.day.minMovement} min</span>
-              </div>
-              <div className="dato">
-                <span>Parado</span>
-                <span>{datos.day.minStopped} min</span>
-              </div>
-              <div className="dato">
-                <span>Paradas</span>
-                <span>{datos.stops.length}</span>
-              </div>
-              {datos.day.spreadM !== null && (
-                <div className="dato">
-                  <span>Radio del día</span>
-                  <span>{datos.day.spreadM} m</span>
-                </div>
-              )}
-
-              {datos.day.flags.length > 0 && (
-                <div className="flags">
-                  {datos.day.flags.map((b) => (
-                    <span key={b} className="bandera">
-                      {FLAG_LABEL[b] ?? b}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {datos.day.status === "SIN_MOVIMIENTO" && (
-                <p className="sub" style={{ marginTop: "0.75rem" }}>
-                  Los puntos no se alejaron del mismo lugar en toda la jornada.
-                  {datos.day.placeLabel ? ` Estuvo en ${datos.day.placeLabel}.` : ""}
-                </p>
-              )}
-            </div>
-
-            {datos.stops.length > 0 && (
-              <div className="tarjeta">
-                <b>Paradas</b>
-                <table className="movements">
-                  <tbody>
-                    {datos.stops.map((p) => (
-                      <tr key={p.id} className="parada">
-                        <td>
-                          {hora(p.start)}–{hora(p.end)}
-                        </td>
-                        <td>{p.durationMin} min</td>
-                        <td>{p.clientName ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div>
+          {/* El mapa primero y grande: es lo que se viene a ver. Los datos van al
+              lado, apretados, no encima ni ocupando dos tercios como antes. */}
+          <div className="visor-mapa">
             <MapaRuta
               points={datos.points}
               stops={datos.stops}
               to={instante}
+              focusStopId={paradaVista}
             />
+
             {datos.points.length > 0 && (
-              <div className="controles" style={{ marginTop: "0.75rem" }}>
+              <div className="linea-tiempo no-imprimir">
                 <input
                   type="range"
                   min={0}
                   max={datos.points.length - 1}
                   value={instante < 0 ? datos.points.length - 1 : instante}
                   onChange={(e) => setInstante(Number(e.target.value))}
-                  style={{ flex: 1, padding: 0 }}
                 />
-                <span style={{ color: "var(--tenue)", minWidth: 120 }}>
+                <span className="pv-codigo">
                   {hora(
-                    datos.points[
-                      instante < 0 ? datos.points.length - 1 : instante
-                    ].ts,
-                  )}{" "}
-                  ({datos.points.length} points)
+                    datos.points[instante < 0 ? datos.points.length - 1 : instante].ts,
+                  )}
                 </span>
-                <button className="pv-boton" onClick={() => setInstante(-1)}>Todo el día</button>
+                <button className="pv-boton" onClick={() => setInstante(-1)}>
+                  Todo el día
+                </button>
               </div>
             )}
           </div>
+
+          <aside className="visor-datos">
+            <div className="celda" data-status={datos.day.status}>
+              {STATUS_LABEL[datos.day.status]}
+            </div>
+
+            {/* Fichas pequeñas en rejilla: los mismos ocho datos que antes ocupaban
+                ocho renglones, en tres líneas. */}
+            <div className="cifras">
+              <Cifra rotulo="Kilómetros" valor={`${datos.day.netKm.toFixed(1)} km`} />
+              <Cifra rotulo="Cobertura" valor={`${datos.day.coverage.toFixed(0)} %`} />
+              <Cifra rotulo="Primer fix" valor={hora(datos.day.firstFix)} />
+              <Cifra rotulo="Último fix" valor={hora(datos.day.lastFix)} />
+              <Cifra rotulo="En marcha" valor={`${datos.day.minMovement} min`} />
+              <Cifra rotulo="Parado" valor={`${datos.day.minStopped} min`} />
+              <Cifra rotulo="Paradas" valor={String(datos.stops.length)} />
+              {datos.day.spreadM !== null && (
+                <Cifra rotulo="Radio del día" valor={`${datos.day.spreadM} m`} />
+              )}
+            </div>
+
+            {datos.day.flags.length > 0 && (
+              <div className="flags">
+                {datos.day.flags.map((b) => (
+                  <span key={b} className="bandera">
+                    {FLAG_LABEL[b] ?? b}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {datos.day.status === "SIN_MOVIMIENTO" && (
+              <p className="sub">
+                Los puntos no se alejaron del mismo lugar en toda la jornada.
+                {datos.day.placeLabel ? ` Estuvo en ${datos.day.placeLabel}.` : ""}
+              </p>
+            )}
+
+            {datos.stops.length > 0 && (
+              <div className="paradas">
+                <div className="pv-rotulo">Paradas</div>
+                <ul>
+                  {datos.stops.map((p) => (
+                    <li key={p.id}>
+                      {/* Tocar la parada la centra en el mapa: la lista y el dibujo
+                          son la misma cosa mirada de dos maneras. */}
+                      <button
+                        className="parada-fila"
+                        data-vista={paradaVista === p.id}
+                        onClick={() => setParadaVista(p.id)}
+                      >
+                        <span className="pv-codigo">
+                          {hora(p.start)}–{hora(p.end)}
+                        </span>
+                        <span className="parada-min">{p.durationMin} min</span>
+                        <span className="parada-donde">{p.clientName ?? "—"}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </aside>
         </div>
       )}
     </>
+  );
+}
+
+// Una cifra suelta: rótulo pequeño arriba, número grande abajo. Se lee de un
+// vistazo, que es de lo que se trata en una pantalla que se mira todo el día.
+function Cifra({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="cifra">
+      <span className="pv-rotulo">{rotulo}</span>
+      <b>{valor}</b>
+    </div>
   );
 }
 

@@ -2,8 +2,11 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/procovar/procovar-rutas/api/internal/drive"
 	"github.com/procovar/procovar-rutas/api/internal/store"
@@ -47,6 +50,20 @@ type Pushed struct {
 func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 	if e.DriveFileID == "" || e.Name == "" {
 		return false, 0, fmt.Errorf("faltan el identificador o el nombre")
+	}
+
+	// Lo ya visto se corta AQUÍ, antes de mirar de qué carpeta viene.
+	//
+	// Los ficheros se archivan en Drive moviéndolos a una subcarpeta ("Procesados",
+	// "Errores"), y una búsqueda posterior los encuentra allí: su carpeta padre ya
+	// no es el perfil del vendedor sino la de archivo. Si eso llegara a la
+	// resolución de carpeta, se daría de alta una fuente —y con ella un "vendedor"—
+	// llamada Procesados. Salir antes por el identificador de Drive lo evita, y de
+	// paso ahorra el trabajo de volver a parsear lo que ya está.
+	if _, err := s.q.FileByDriveID(ctx, e.DriveFileID); err == nil {
+		return false, 0, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, fmt.Errorf("consultando el fichero: %w", err)
 	}
 
 	source, err := s.findSource(ctx, e)

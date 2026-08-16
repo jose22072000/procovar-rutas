@@ -44,3 +44,48 @@ func TestFicheroVacioQuedaRegistrado(t *testing.T) {
 	}
 	t.Logf("registrado con estado %s", f.Status)
 }
+
+// Un fichero ya visto no vuelve a entrar, y —lo que importa— NO se resuelve su
+// carpeta: al archivarlo en Drive queda dentro de "Procesados", y si eso llegara a
+// la resolución se daría de alta una fuente, y un "vendedor", con ese nombre.
+func TestFicheroYaVistoNoCreaCarpetaDeArchivo(t *testing.T) {
+	url := os.Getenv("DATABASE_URL_TEST")
+	if url == "" {
+		t.Skip("sin DATABASE_URL_TEST")
+	}
+	pool, err := pgxpool.New(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	ctx := context.Background()
+	q := store.New(pool)
+	svc := ingest.NewService(pool, ingest.SingleAccount(nil), nil, 100)
+
+	entra := ingest.Pushed{
+		Account: "camaguey.procovar@gmail.com", FolderID: "carpeta-perfil",
+		DriveFileID: "f-repe", Name: "20260812.gpx",
+		FolderPath: []string{"GPS Prueba"}, Content: []byte("<gpx></gpx>"),
+	}
+	if _, _, err := svc.Receive(ctx, entra); err != nil {
+		t.Fatalf("primera entrada: %v", err)
+	}
+
+	// El mismo fichero, ya archivado: llega con la carpeta de archivo como padre.
+	otra := entra
+	otra.FolderID = "carpeta-procesados"
+	otra.FolderPath = []string{"Procesados"}
+	if _, _, err := svc.Receive(ctx, otra); err != nil {
+		t.Fatalf("el reenvío de un fichero archivado no debe fallar: %v", err)
+	}
+
+	fuentes, err := q.ActiveSources(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fuentes {
+		if f.Name == "Procesados" || f.FolderID == "carpeta-procesados" {
+			t.Fatalf("se dio de alta la carpeta de archivo como fuente: %+v", f.Name)
+		}
+	}
+}

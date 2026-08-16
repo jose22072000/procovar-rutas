@@ -8,25 +8,35 @@
  * single-colour line only says where someone passed, not in what order, and with a
  * route that crosses itself that is exactly what you need to know.
  *
- * Leaflet touches `window`, so this component is loaded without SSR from the
- * página.
+ * It carries a legend because the drawing was making claims nobody could read: a
+ * fat orange circle means "stopped here for half an hour" and a thin one means "a
+ * traffic light", and without saying so out loud that is just decoration.
+ *
+ * Leaflet touches `window`, so this component is loaded without SSR from the page.
  */
 
 import { useEffect, useRef } from "react";
 import type { Stop, TrackPoint } from "@/lib/api";
-import "leaflet/dist/leaflet.css";
 
 interface Props {
   points: TrackPoint[];
   stops: Stop[];
   /** Index up to which it is drawn, for the timeline. -1 = everything. */
   to?: number;
+  /** Stop to centre on and open. Set from the list beside the map. */
+  focusStopId?: string | null;
 }
 
-export default function MapaRuta({ points, stops, to = -1 }: Props) {
+// The gradient's ends, so the legend and the line cannot drift apart.
+const INICIO = "hsl(210, 75%, 58%)";
+const FIN = "hsl(20, 75%, 40%)";
+
+export default function RouteMap({ points, stops, to = -1, focusStopId }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<any>(null);
   const capa = useRef<any>(null);
+  // Las paradas por id, para poder centrarlas desde la lista de al lado.
+  const marcas = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
     let cancelado = false;
@@ -45,6 +55,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
       }
 
       capa.current.clearLayers();
+      marcas.current.clear();
 
       const visibles = to >= 0 ? points.slice(0, to + 1) : points;
       if (visibles.length === 0) {
@@ -91,7 +102,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
       // The stops, sized in proportion to how long they lasted: a half-hour visit
       // has to stand out against a traffic light.
       for (const p of stops) {
-        L.circleMarker([p.lat, p.lon], {
+        const m = L.circleMarker([p.lat, p.lon], {
           radius: Math.min(28, 8 + p.durationMin / 3),
           color: "#e8833a",
           fillColor: "#f6b26b",
@@ -99,7 +110,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
           weight: 2,
         })
           .bindPopup(
-            `<b>Stop de ${p.durationMin} min</b><br>${hora(p.start)} – ${hora(
+            `<b>Parada de ${p.durationMin} min</b><br>${hora(p.start)} – ${hora(
               p.end,
             )}${
               p.clientName
@@ -108,6 +119,7 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
             }`,
           )
           .addTo(capa.current);
+        marcas.current.set(p.id, m);
       }
 
       const limites = L.latLngBounds(
@@ -121,7 +133,47 @@ export default function MapaRuta({ points, stops, to = -1 }: Props) {
     };
   }, [points, stops, to]);
 
-  return <div className="mapa" ref={contenedor} />;
+  // Tocar una parada en la lista la centra y la abre en el mapa. Va en su propio
+  // efecto para no volver a dibujarlo todo por mirar una parada.
+  useEffect(() => {
+    if (!focusStopId || !mapa.current) return;
+    const m = marcas.current.get(focusStopId);
+    if (!m) return;
+    mapa.current.setView(m.getLatLng(), Math.max(mapa.current.getZoom(), 16), {
+      animate: true,
+    });
+    m.openPopup();
+  }, [focusStopId]);
+
+  return (
+    <div className="mapa-caja">
+      <div className="mapa" ref={contenedor} />
+
+      {/* La leyenda, encima del mapa. Antes el dibujo afirmaba cosas que nadie
+          podía leer: el grosor de un círculo naranja significa media hora parado,
+          y sin decirlo es un adorno. */}
+      <div className="leyenda-mapa">
+        <div className="leyenda-fila">
+          <span
+            className="leyenda-linea"
+            style={{ background: `linear-gradient(90deg, ${INICIO}, ${FIN})` }}
+          />
+          <span>Recorrido, del inicio al final del día</span>
+        </div>
+        <div className="leyenda-fila">
+          <span className="leyenda-punto" style={{ background: "#1f6feb" }} />
+          <span>Primer fix</span>
+          <span className="leyenda-punto" style={{ background: "#d64545" }} />
+          <span>Último fix</span>
+        </div>
+        <div className="leyenda-fila">
+          <span className="leyenda-parada leyenda-parada-chica" />
+          <span className="leyenda-parada" />
+          <span>Parada: el tamaño es lo que duró</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function hora(iso: string | null): string {
