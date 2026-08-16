@@ -16,6 +16,9 @@
  */
 
 import { useEffect, useRef } from "react";
+// La hoja de Leaflet, sin la cual los tiles se colocan sueltos por la caja: se
+// perdió al reescribir este componente y el mapa salía a cuadros con huecos negros.
+import "leaflet/dist/leaflet.css";
 import type { Stop, TrackPoint } from "@/lib/api";
 
 interface Props {
