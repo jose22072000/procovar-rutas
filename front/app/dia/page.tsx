@@ -138,14 +138,14 @@ function Visor() {
                 ocho renglones, en tres líneas. */}
             <div className="cifras">
               <Cifra rotulo="Kilómetros" valor={`${datos.day.netKm.toFixed(1)} km`} />
-              <Cifra rotulo="Cobertura" valor={`${datos.day.coverage.toFixed(0)} %`} />
-              <Cifra rotulo="Primer fix" valor={hora(datos.day.firstFix)} />
-              <Cifra rotulo="Último fix" valor={hora(datos.day.lastFix)} />
+              <Cifra rotulo="Con señal" valor={`${datos.day.coverage.toFixed(0)} %`} />
+              <Cifra rotulo="Empezó" valor={hora(datos.day.firstFix)} />
+              <Cifra rotulo="Terminó" valor={hora(datos.day.lastFix)} />
               <Cifra rotulo="En marcha" valor={`${datos.day.minMovement} min`} />
               <Cifra rotulo="Parado" valor={`${datos.day.minStopped} min`} />
               <Cifra rotulo="Paradas" valor={String(datos.stops.length)} />
               {datos.day.spreadM !== null && (
-                <Cifra rotulo="Radio del día" valor={`${datos.day.spreadM} m`} />
+                <Cifra rotulo="Se alejó" valor={`${datos.day.spreadM} m`} />
               )}
             </div>
 

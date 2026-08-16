@@ -164,14 +164,14 @@ export const STATUS_LABEL: Record<DayStatus, string> = {
 };
 
 export const FLAG_LABEL: Record<string, string> = {
-  entrada_tardia: "Entró tarde",
-  salida_temprana: "Salió temprano",
-  hueco_largo: "Hueco de señal",
-  poca_cobertura: "Poca cobertura",
-  sin_movimiento: "No se movió del sitio",
-  movimiento_escaso: "Movimiento escaso",
-  sin_horas: "El fichero no trae horas",
-  sin_datos_en_jornada: "Sin datos en la jornada",
+  entrada_tardia: "Empezó tarde",
+  salida_temprana: "Terminó temprano",
+  hueco_largo: "Se cortó la señal un rato",
+  poca_cobertura: "Estuvo poco tiempo con señal",
+  sin_movimiento: "No se movió del sitio en todo el día",
+  movimiento_escaso: "Se movió muy poco",
+  sin_horas: "El fichero no trae horas: se ve por dónde anduvo, pero no cuándo",
+  sin_datos_en_jornada: "No hay nada entre las 9:00 y las 16:00",
 };
 
 export function shortDate(iso: string): string {

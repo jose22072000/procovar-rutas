@@ -706,6 +706,46 @@ func (q *Queries) MarkSourceError(ctx context.Context, arg MarkSourceErrorParams
 	return err
 }
 
+const moveSourceDataToBranch = `-- name: MoveSourceDataToBranch :exec
+WITH afectados AS (
+    SELECT DISTINCT f.trabajador_id
+    FROM gpx_file f
+    WHERE f.source_id = $2 AND f.trabajador_id IS NOT NULL
+),
+mueve_ficheros AS (
+    UPDATE gpx_file SET sucursal_id = $1 WHERE source_id = $2
+    RETURNING 1
+),
+mueve_dias AS (
+    UPDATE track_day SET sucursal_id = $1
+    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
+    RETURNING 1
+),
+mueve_puntos AS (
+    UPDATE track_point SET sucursal_id = $1
+    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
+    RETURNING 1
+)
+UPDATE trabajador SET sucursal_id = $1, updated_at = now()
+WHERE id IN (SELECT trabajador_id FROM afectados)
+`
+
+type MoveSourceDataToBranchParams struct {
+	BranchID string
+	SourceID string
+}
+
+// Lleva a su sucursal lo que ya entró por una carpeta: sus ficheros, los vendedores
+// que salieron de ella y los días de esos vendedores.
+//
+// Hace falta porque las carpetas se dieron de alta con una credencial de relleno y
+// todo cayó en una sucursal llamada "principal". Sin esto habría que borrar y volver
+// a ingerir, y los ficheros ya están apartados en Drive: no volverían a entrar.
+func (q *Queries) MoveSourceDataToBranch(ctx context.Context, arg MoveSourceDataToBranchParams) error {
+	_, err := q.db.Exec(ctx, moveSourceDataToBranch, arg.BranchID, arg.SourceID)
+	return err
+}
+
 const openImportLog = `-- name: OpenImportLog :one
 INSERT INTO import_log (id, source_id, tipo) VALUES ($1, $2, $3) RETURNING id, source_id, tipo, inicio, fin, ficheros_vistos, ficheros_nuevos, ficheros_error, puntos_insertados, ok, detalle
 `
@@ -1033,6 +1073,22 @@ func (q *Queries) SellerPointsOnDate(ctx context.Context, arg SellerPointsOnDate
 		return nil, err
 	}
 	return items, nil
+}
+
+const setSourceBranch = `-- name: SetSourceBranch :exec
+UPDATE drive_source SET sucursal_id = $1, credencial = $2, updated_at = now()
+WHERE id = $3
+`
+
+type SetSourceBranchParams struct {
+	BranchID   *string
+	Credential string
+	ID         string
+}
+
+func (q *Queries) SetSourceBranch(ctx context.Context, arg SetSourceBranchParams) error {
+	_, err := q.db.Exec(ctx, setSourceBranch, arg.BranchID, arg.Credential, arg.ID)
+	return err
 }
 
 const sourceByID = `-- name: SourceByID :one

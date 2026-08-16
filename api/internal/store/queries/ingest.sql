@@ -217,3 +217,36 @@ SELECT
     (SELECT count(*) FROM gpx_file f WHERE f.sucursal_id = s.id)   AS files
 FROM sucursal s
 ORDER BY s.nombre;
+
+-- name: SetSourceBranch :exec
+UPDATE drive_source SET sucursal_id = @branch_id, credencial = @credential, updated_at = now()
+WHERE id = @id;
+
+-- name: MoveSourceDataToBranch :exec
+-- Lleva a su sucursal lo que ya entró por una carpeta: sus ficheros, los vendedores
+-- que salieron de ella y los días de esos vendedores.
+--
+-- Hace falta porque las carpetas se dieron de alta con una credencial de relleno y
+-- todo cayó en una sucursal llamada "principal". Sin esto habría que borrar y volver
+-- a ingerir, y los ficheros ya están apartados en Drive: no volverían a entrar.
+WITH afectados AS (
+    SELECT DISTINCT f.trabajador_id
+    FROM gpx_file f
+    WHERE f.source_id = @source_id AND f.trabajador_id IS NOT NULL
+),
+mueve_ficheros AS (
+    UPDATE gpx_file SET sucursal_id = @branch_id WHERE source_id = @source_id
+    RETURNING 1
+),
+mueve_dias AS (
+    UPDATE track_day SET sucursal_id = @branch_id
+    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
+    RETURNING 1
+),
+mueve_puntos AS (
+    UPDATE track_point SET sucursal_id = @branch_id
+    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
+    RETURNING 1
+)
+UPDATE trabajador SET sucursal_id = @branch_id, updated_at = now()
+WHERE id IN (SELECT trabajador_id FROM afectados);

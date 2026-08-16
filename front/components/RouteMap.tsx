@@ -88,7 +88,7 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
         fillColor: "#1f6feb",
         fillOpacity: 1,
       })
-        .bindPopup(`Primer fix — ${hora(primero.ts)}`)
+        .bindPopup(`Empezó el día — ${hora(primero.ts)}`)
         .addTo(capa.current);
       L.circleMarker([ultimo.lat, ultimo.lon], {
         radius: 8,
@@ -96,7 +96,7 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
         fillColor: "#d64545",
         fillOpacity: 1,
       })
-        .bindPopup(`Último fix — ${hora(ultimo.ts)}`)
+        .bindPopup(`Terminó el día — ${hora(ultimo.ts)}`)
         .addTo(capa.current);
 
       // The stops, sized in proportion to how long they lasted: a half-hour visit
@@ -122,6 +122,12 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
         marcas.current.set(p.id, m);
       }
 
+      // invalidateSize ANTES de encuadrar: Leaflet mide su caja al crearse, y aquí
+      // se crea mientras la página todavía está colocando la rejilla. Si no se le
+      // dice que vuelva a medir, calcula los tiles para un tamaño que ya no es el
+      // suyo y el mapa sale a cuadros, con media caja en blanco.
+      mapa.current.invalidateSize(false);
+
       const limites = L.latLngBounds(
         visibles.map((p) => [p.lat, p.lon] as [number, number]),
       );
@@ -132,6 +138,15 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
       cancelado = true;
     };
   }, [points, stops, to]);
+
+  // Y cada vez que la caja cambie de tamaño: al abrir el panel lateral, al girar
+  // el móvil o al cambiar de zoom del navegador.
+  useEffect(() => {
+    if (!contenedor.current || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => mapa.current?.invalidateSize(false));
+    ro.observe(contenedor.current);
+    return () => ro.disconnect();
+  }, []);
 
   // Tocar una parada en la lista la centra y la abre en el mapa. Va en su propio
   // efecto para no volver a dibujarlo todo por mirar una parada.
@@ -162,9 +177,9 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
         </div>
         <div className="leyenda-fila">
           <span className="leyenda-punto" style={{ background: "#1f6feb" }} />
-          <span>Primer fix</span>
+          <span>Empezó</span>
           <span className="leyenda-punto" style={{ background: "#d64545" }} />
-          <span>Último fix</span>
+          <span>Terminó</span>
         </div>
         <div className="leyenda-fila">
           <span className="leyenda-parada leyenda-parada-chica" />
