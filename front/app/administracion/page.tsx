@@ -28,7 +28,7 @@ interface Alias {
 }
 
 interface EstadoCola {
-  activa: boolean;
+  active: boolean;
   pending?: number;
   processing?: number;
   failed?: number;
@@ -178,7 +178,7 @@ export default function Administracion() {
           ingesta. Si «pending» crece y no baja, el servicio de ingesta está
           parado.
         </p>
-        {cola?.activa ? (
+        {cola?.active ? (
           <>
             <div className="dato">
               <span>Pendientes</span>

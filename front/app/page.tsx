@@ -35,9 +35,13 @@ export default function Calendar() {
   // Desde/hasta, no un día suelto: el control lo pediste así y además es lo mismo
   // que ya acepta el API. La semana laboral de hoy es el punto de partida, que es
   // lo que se quiere ver al entrar.
-  const semanaDeHoy = workWeek(todayISO());
-  const [desde, setDesde] = useState(semanaDeHoy[0]);
-  const [hasta, setHasta] = useState(semanaDeHoy[4]);
+  // Un solo calendario: se elige un día y al lado cuánto se quiere ver desde él.
+  // Dos campos de fecha eran dos cosas que cuadrar a mano para lo que casi siempre
+  // es "la semana de este día".
+  const [dia, setDia] = useState(todayISO());
+  const [tramo, setTramo] = useState<"semana" | "dia" | "quincena" | "mes">("semana");
+
+  const [desde, hasta] = useMemo(() => rango(dia, tramo), [dia, tramo]);
   const [data, setData] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,15 +77,26 @@ export default function Calendar() {
     return map;
   }, [data]);
 
-  // Mover el rango entero, manteniendo su longitud: si estás mirando tres días,
-  // "semana anterior" te lleva a los tres días de antes, no a una semana.
   function mover(days: number) {
-    const corre = (iso: string) =>
-      new Date(new Date(`${iso}T12:00:00Z`).getTime() + days * 86400000)
+    setDia(
+      new Date(new Date(`${dia}T12:00:00Z`).getTime() + days * 86400000)
         .toISOString()
-        .slice(0, 10);
-    setDesde(corre(desde));
-    setHasta(corre(hasta));
+        .slice(0, 10),
+    );
+  }
+
+  // De un día y un tramo, el rango. La semana es de lunes a viernes, que es la
+  // jornada de la empresa; los demás tramos van desde el día elegido.
+  function rango(d: string, t: string): [string, string] {
+    if (t === "semana") {
+      const s = workWeek(d);
+      return [s[0], s[4]];
+    }
+    const dias = t === "dia" ? 0 : t === "quincena" ? 14 : 29;
+    const fin = new Date(new Date(`${d}T12:00:00Z`).getTime() + dias * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    return [d, fin];
   }
 
   return (
@@ -93,33 +108,28 @@ export default function Calendar() {
 
       <div className="controles">
         <button className="pv-boton" onClick={() => mover(-7)}>← Semana anterior</button>
-        <label>
-          Desde{" "}
-          <input
-            className="pv-campo"
-            type="date"
-            value={desde}
-            max={hasta}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-        </label>
-        <label>
-          Hasta{" "}
-          <input
-            className="pv-campo"
-            type="date"
-            value={hasta}
-            min={desde}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-        </label>
+        <input
+          className="pv-campo"
+          type="date"
+          value={dia}
+          onChange={(e) => setDia(e.target.value)}
+        />
+        <select
+          className="pv-campo"
+          value={tramo}
+          onChange={(e) => setTramo(e.target.value as typeof tramo)}
+        >
+          <option value="semana">Su semana (L–V)</option>
+          <option value="dia">Solo ese día</option>
+          <option value="quincena">15 días desde ahí</option>
+          <option value="mes">30 días desde ahí</option>
+        </select>
         <button className="pv-boton" onClick={() => mover(7)}>Semana siguiente →</button>
         <button
           className="pv-boton"
           onClick={() => {
-            const s = workWeek(todayISO());
-            setDesde(s[0]);
-            setHasta(s[4]);
+            setDia(todayISO());
+            setTramo("semana");
           }}
         >
           Esta semana
