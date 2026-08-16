@@ -210,7 +210,23 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reparto, err := s.q.BranchBreakdown(r.Context())
+	if err != nil {
+		s.fail(w, "reparto por sucursal", err)
+		return
+	}
+	type porSucursal struct {
+		Branch  string `json:"branch"`
+		Sellers int64  `json:"sellers"`
+		Files   int64  `json:"files"`
+	}
+	sucursales := make([]porSucursal, 0, len(reparto))
+	for _, r := range reparto {
+		sucursales = append(sucursales, porSucursal{Branch: r.Branch, Sellers: r.Sellers, Files: r.Files})
+	}
+
 	respond(w, http.StatusOK, map[string]any{
+		"byBranch":        sucursales,
 		"files":           e.Files,
 		"filesOk":         e.FilesOk,
 		"filesUnassigned": e.FilesUnassigned,

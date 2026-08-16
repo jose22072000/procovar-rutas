@@ -207,3 +207,13 @@ SELECT
     (SELECT count(*) FROM trabajador)                                 AS sellers,
     (SELECT count(*) FROM sucursal)                                   AS branches,
     (SELECT max(importado_at) FROM gpx_file)                          AS last_file;
+
+-- name: BranchBreakdown :many
+-- Qué sucursales se crearon y cuánto tiene cada una. Es lo que dice si el reparto
+-- por sucursal está funcionando o si todo cayó en el mismo saco.
+SELECT
+    s.nombre AS branch,
+    (SELECT count(*) FROM trabajador t WHERE t.sucursal_id = s.id) AS sellers,
+    (SELECT count(*) FROM gpx_file f WHERE f.sucursal_id = s.id)   AS files
+FROM sucursal s
+ORDER BY s.nombre;

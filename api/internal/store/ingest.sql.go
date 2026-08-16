@@ -147,6 +147,43 @@ func (q *Queries) AllAliases(ctx context.Context) ([]AllAliasesRow, error) {
 	return items, nil
 }
 
+const branchBreakdown = `-- name: BranchBreakdown :many
+SELECT
+    s.nombre AS branch,
+    (SELECT count(*) FROM trabajador t WHERE t.sucursal_id = s.id) AS sellers,
+    (SELECT count(*) FROM gpx_file f WHERE f.sucursal_id = s.id)   AS files
+FROM sucursal s
+ORDER BY s.nombre
+`
+
+type BranchBreakdownRow struct {
+	Branch  string
+	Sellers int64
+	Files   int64
+}
+
+// Qué sucursales se crearon y cuánto tiene cada una. Es lo que dice si el reparto
+// por sucursal está funcionando o si todo cayó en el mismo saco.
+func (q *Queries) BranchBreakdown(ctx context.Context) ([]BranchBreakdownRow, error) {
+	rows, err := q.db.Query(ctx, branchBreakdown)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BranchBreakdownRow{}
+	for rows.Next() {
+		var i BranchBreakdownRow
+		if err := rows.Scan(&i.Branch, &i.Sellers, &i.Files); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const branchByID = `-- name: BranchByID :one
 SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE id = $1
 `
