@@ -79,7 +79,14 @@ return mias
 
 nodos = [
     {"name": "Empezar", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1,
-     "position": [-620, 0], "parameters": {}},
+     "position": [-620, -120], "parameters": {}},
+    # Disparable desde fuera: hay que volver a correrlo cada vez que se da de alta
+    # una carpeta, y esperar a que alguien se acuerde de pulsar el botón es la forma
+    # de que unas carpetas aparten y otras no.
+    {"name": "Disparar desde fuera", "type": "n8n-nodes-base.webhook", "typeVersion": 2,
+     "position": [-620, 60], "webhookId": "crear-gps-procesados",
+     "parameters": {"path": "crear-gps-procesados", "httpMethod": "POST",
+                    "responseMode": "onReceived", "options": {}}},
     http("Carpetas de Rutas", -400, 0, {
         "url": f"{RUTAS}/api/ingest/folders", "sendHeaders": True,
         "headerParameters": {"parameters": [{"name": "x-api-key", "value": CLAVE}]}}),
@@ -89,6 +96,7 @@ nodos = [
 
 conexiones = {
     "Empezar": {"main": [[{"node": "Carpetas de Rutas", "type": "main", "index": 0}]]},
+    "Disparar desde fuera": {"main": [[{"node": "Carpetas de Rutas", "type": "main", "index": 0}]]},
     "Carpetas de Rutas": {"main": [[{"node": "Las de Rutas", "type": "main", "index": 0}]]},
 }
 

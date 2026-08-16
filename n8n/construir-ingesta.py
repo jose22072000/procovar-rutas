@@ -179,8 +179,20 @@ nodos = [
         "name": "Cada 12 horas",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
-        "position": [-620, 0],
+        "position": [-620, -120],
         "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 12}]}},
+    },
+    # La misma pasada, disparable desde fuera. Sirve para no esperar doce horas
+    # cuando se acaba de dar de alta una carpeta. Contesta al recibir y sigue por su
+    # cuenta: una pasada dura minutos y nadie va a tener la petición abierta.
+    {
+        "name": "Disparar desde fuera",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [-620, 60],
+        "webhookId": "ingesta-rutas-gpx",
+        "parameters": {"path": "ingesta-rutas-gpx", "httpMethod": "POST",
+                       "responseMode": "onReceived", "options": {}},
     },
     http("Carpetas de Rutas", -400, 0, {"url": f"{RUTAS}/api/ingest/folders", **cabecera_servicio()}),
     http("Dueño de la carpeta", -180, 0, {
@@ -317,6 +329,7 @@ nodos = [
 
 conexiones = {
     "Cada 12 horas": {"main": [[{"node": "Carpetas de Rutas", "type": "main", "index": 0}]]},
+    "Disparar desde fuera": {"main": [[{"node": "Carpetas de Rutas", "type": "main", "index": 0}]]},
     "Carpetas de Rutas": {"main": [[{"node": "Dueño de la carpeta", "type": "main", "index": 0}]]},
     "Dueño de la carpeta": {"main": [[
         {"node": "Decir de quién es", "type": "main", "index": 0},
