@@ -223,3 +223,20 @@ func (s *Service) sourcePorCarpeta(ctx context.Context, folderID string) (store.
 	}
 	return store.DriveSource{}, false
 }
+
+// AssignFolderBranch pone una carpeta en la sucursal de la cuenta que la comparte,
+// y arrastra consigo lo que ya había entrado por ella. Devuelve el nombre de la
+// sucursal, o vacío si la carpeta no está dada de alta.
+func (s *Service) AssignFolderBranch(ctx context.Context, folderID, cuenta string) (string, error) {
+	fuente, ok := s.sourcePorCarpeta(ctx, folderID)
+	if !ok {
+		return "", nil
+	}
+	if s.mismaCuenta(fuente, cuenta) {
+		return nombreDeCuenta(cuenta), nil
+	}
+	if err := s.reasignarSucursal(ctx, &fuente, cuenta); err != nil {
+		return "", err
+	}
+	return nombreDeCuenta(cuenta), nil
+}

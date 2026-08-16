@@ -163,3 +163,33 @@ func TestElPrefijoAislaLasClaves(t *testing.T) {
 		t.Errorf("key por defecto = %q", porDefecto.pending())
 	}
 }
+
+// La cuenta dueña de la carpeta tiene que sobrevivir el viaje por Redis.
+//
+// Si no, se pierde justo entre el API y quien procesa: la ingesta identifica bien la
+// sucursal, la manda, y el consumidor reconstruye el empuje sin ella. Pasó, y el
+// síntoma era mudo — todo terminaba en una sucursal de relleno sin un solo error.
+func TestLaCuentaSobreviveLaCola(t *testing.T) {
+	c := nueva(t)
+	ctx := context.Background()
+
+	if err := c.Enqueue(ctx, Job{
+		DriveFileID: "f-cuenta", Name: "20260812.gpx",
+		Account: "Camagüey Procovar", FolderID: "carpeta-1",
+		ContentBase64: "PGdweD48L2dweD4=",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job, crudo, err := c.Take(ctx, 2*time.Second)
+	if err != nil || job == nil {
+		t.Fatalf("no salió de la cola: %v", err)
+	}
+	if job.Account != "Camagüey Procovar" {
+		t.Fatalf("la cuenta se perdió en la cola: %q", job.Account)
+	}
+	if job.FolderID != "carpeta-1" {
+		t.Fatalf("la carpeta se perdió: %q", job.FolderID)
+	}
+	_ = c.Finish(ctx, crudo)
+}

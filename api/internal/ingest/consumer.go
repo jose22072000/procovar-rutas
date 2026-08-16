@@ -99,6 +99,7 @@ func (c *Consumer) process(ctx context.Context, t queue.Job) error {
 	}
 
 	nuevo, points, err := c.svc.Receive(ctx, Pushed{
+		Account:     t.Account,
 		SourceID:    t.SourceID,
 		FolderID:    t.FolderID,
 		DriveFileID: t.DriveFileID,

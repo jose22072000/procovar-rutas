@@ -85,6 +85,7 @@ func (s *Server) receiveFile(w http.ResponseWriter, r *http.Request) {
 	// in PEDIDO's ingest, which is the convenient thing when debugging.
 	if s.queue != nil && r.URL.Query().Get("sync") != "1" {
 		err := s.queue.Enqueue(r.Context(), queue.Job{
+			Account:       p.Account,
 			SourceID:      p.SourceID,
 			FolderID:      p.FolderID,
 			DriveFileID:   p.DriveFileID,
@@ -203,7 +204,16 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusUnauthorized, "clave de servicio inválida")
 		return
 	}
+	s.escribirEstadoIngesta(w, r)
+}
 
+// El mismo vistazo desde el panel. Va por sesión y no por clave de máquina: la
+// clave no puede viajar al navegador, que es donde la vería cualquiera.
+func (s *Server) adminIngestStats(w http.ResponseWriter, r *http.Request) {
+	s.escribirEstadoIngesta(w, r)
+}
+
+func (s *Server) escribirEstadoIngesta(w http.ResponseWriter, r *http.Request) {
 	e, err := s.q.IngestStats(r.Context())
 	if err != nil {
 		s.fail(w, "estado de la ingesta", err)
@@ -250,4 +260,45 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 		"branches":        e.Branches,
 		"lastFile":        e.LastFile,
 	})
+}
+
+// POST /api/ingest/folder-owner — de qué cuenta es una carpeta.
+//
+// Existe porque hacer viajar la cuenta pegada a cada fichero resultó frágil: en n8n
+// el enlace entre un fichero y la carpeta de la que salió se pierde al pasar por el
+// troceado y el bucle, y la cuenta llegaba vacía sin que nadie se enterara. Aquí el
+// dato va solo, una vez por carpeta, en el momento en que n8n acaba de leerlo de
+// Drive: no hay nada que se pueda desemparejar.
+//
+// Con la cuenta llega la sucursal, y la carpeta se lleva consigo lo que ya había
+// entrado por ella.
+func (s *Server) ingestFolderOwner(w http.ResponseWriter, r *http.Request) {
+	if !s.validServiceKey(r) {
+		respondError(w, http.StatusUnauthorized, "clave de servicio inválida")
+		return
+	}
+
+	var p struct {
+		FolderID string `json:"folderId"`
+		Account  string `json:"account"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		respondError(w, http.StatusBadRequest, "cuerpo ilegible")
+		return
+	}
+	if p.FolderID == "" || p.Account == "" {
+		respondError(w, http.StatusBadRequest, "hacen falta folderId y account")
+		return
+	}
+
+	branch, err := s.ingest.AssignFolderBranch(r.Context(), p.FolderID, p.Account)
+	if err != nil {
+		s.fail(w, "dueño de la carpeta", err)
+		return
+	}
+	if branch == "" {
+		respondError(w, http.StatusNotFound, "esa carpeta no está dada de alta")
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"branch": branch})
 }

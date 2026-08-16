@@ -67,6 +67,7 @@ func (s *Server) Routes() http.Handler {
 	// Service door for n8n: no user session, a machine key instead.
 	r.Post("/api/ingest/file", s.receiveFile)
 	r.Get("/api/ingest/folders", s.ingestFolders)
+	r.Post("/api/ingest/folder-owner", s.ingestFolderOwner)
 	r.Get("/api/ingest/stats", s.ingestStats)
 
 	// Login flow against procovar-auth.
@@ -98,6 +99,7 @@ func (s *Server) Routes() http.Handler {
 			r.Post("/ingest/scan", s.scan)
 			r.Get("/scans", s.scans)
 			r.Get("/queue", s.queueStats)
+			r.Get("/ingest/status", s.adminIngestStats)
 		})
 	})
 

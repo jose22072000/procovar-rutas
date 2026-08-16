@@ -25,11 +25,18 @@ const DefaultPrefix = "procovar-rutas:"
 
 // Job is a file waiting its turn.
 type Job struct {
-	SourceID      string    `json:"fuenteId,omitempty"`
+	// Account es la cuenta de Google dueña de la carpeta, o sea la sucursal.
+	//
+	// Faltaba, y eso hacía inútil todo el trabajo de identificar el origen: con
+	// Redis en marcha los ficheros NO se procesan en el acto, se encolan, y el
+	// consumidor reconstruía el empuje sin este campo. La cuenta llegaba bien al
+	// API y se perdía aquí, en silencio, un paso antes de usarse.
+	Account       string    `json:"account,omitempty"`
+	SourceID      string    `json:"sourceId,omitempty"`
 	FolderID      string    `json:"folderId,omitempty"`
 	DriveFileID   string    `json:"driveFileId"`
 	Name          string    `json:"name"`
-	FolderPath    []string  `json:"rutaCarpeta,omitempty"`
+	FolderPath    []string  `json:"folderPath,omitempty"`
 	Created       time.Time `json:"createdAt"`
 	ContentBase64 string    `json:"contentBase64"`
 	Queued        time.Time `json:"queued"`
