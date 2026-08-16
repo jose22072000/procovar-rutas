@@ -275,17 +275,25 @@ func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, e
 // "camaguey.procovar@gmail.com" -> "camaguey". Si no parece un correo, se usa tal
 // cual, que es lo que pasa cuando la cuenta se dio de alta por su nombre.
 func nombreDeCuenta(cuenta string) string {
-	c := strings.ToLower(strings.TrimSpace(cuenta))
-	if i := strings.IndexByte(c, '@'); i > 0 {
-		c = c[:i]
+	c := strings.TrimSpace(cuenta)
+
+	// Si no es un correo, es el nombre de la sucursal escrito tal cual —lo manda la
+	// ingesta de esa provincia— y se respeta con sus tildes y sus mayúsculas. Eso
+	// importa: así el nombre coincide con el de la sucursal en Accesos ("Camagüey",
+	// "Sancti Spíritus") y las dos se pueden emparejar.
+	if !strings.Contains(c, "@") {
+		return c
 	}
+
+	// Si es un correo, se saca la parte útil: las cuentas se llaman de las dos
+	// formas, "camaguey.procovar@…" y "habanaprocovar@…", y sobra el apellido en
+	// los dos casos.
+	c = strings.ToLower(c)
+	c = c[:strings.IndexByte(c, '@')]
 	if i := strings.IndexByte(c, '.'); i > 0 {
 		c = c[:i]
 	}
-	// Las cuentas se llaman de las dos formas: "camaguey.procovar@…" y
-	// "habanaprocovar@…". Sobra el apellido en los dos casos.
-	c = strings.TrimSuffix(c, "procovar")
-	return strings.TrimSpace(c)
+	return strings.TrimSpace(strings.TrimSuffix(c, "procovar"))
 }
 
 // processFile downloads a .gpx, judges it and stores it. Returns whether it was new.
