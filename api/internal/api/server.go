@@ -97,6 +97,7 @@ func (s *Server) Routes() http.Handler {
 			r.Delete("/aliases/{id}", s.deleteAlias)
 			r.Get("/sources", s.sources)
 			r.Post("/sources", s.createSource)
+			r.Delete("/sources/{id}", s.deleteSource)
 			r.Post("/ingest/scan", s.scan)
 			r.Get("/scans", s.scans)
 			r.Get("/queue", s.queueStats)

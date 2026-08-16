@@ -78,7 +78,19 @@ type Summary struct {
 	Failed    int
 	Points    int64
 	Ausencias int64
+	// Saltadas son las carpetas que no se pudieron barrer por no haber credencial
+	// de Google. No son fallos: sus ficheros entran por n8n.
+	Saltadas int
 }
+
+// ErrSinDrive: esta instalación no lee Drive por su cuenta.
+//
+// Los ficheros los empuja n8n con la cuenta padre, así que el barrido propio no
+// tiene credenciales y no puede mirar ni una carpeta. Eso NO es un fallo de la
+// carpeta, y llamarlo así llenaba Administración de cincuenta y tres líneas en rojo
+// describiendo el funcionamiento normal —con lo que un error de verdad, el día que
+// lo hubiera, no lo veía nadie.
+var ErrSinDrive = errors.New("esta instalación no lee Drive por su cuenta; los ficheros entran por n8n")
 
 // Scan walks every active source.
 //
@@ -98,7 +110,11 @@ func (s *Service) Scan(ctx context.Context, tipo string) (Summary, error) {
 		total.New += r.New
 		total.Failed += r.Failed
 		total.Points += r.Points
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrSinDrive):
+			// No se marca en la carpeta: no le pasa nada a la carpeta.
+			total.Saltadas++
+		case err != nil:
 			s.log.Error("source fallida", "source", f.Name, "error", err)
 			_ = s.q.MarkSourceError(ctx, store.MarkSourceErrorParams{
 				ID: f.ID, LastError: puntero(err.Error()),
@@ -135,7 +151,7 @@ func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo
 	// fall over: as long as files arrive through n8n's push, the system works just
 	// the same. This used to blow up with a nil pointer mid-scan.
 	if cli == nil {
-		return res, fmt.Errorf("no hay acceso a Drive para la carpeta %q; solo entrará lo que empuje n8n", source.Name)
+		return res, fmt.Errorf("%w: la carpeta %q", ErrSinDrive, source.Name)
 	}
 
 	ficheros, errListar := cli.List(ctx, source.FolderID, desde, s.max)

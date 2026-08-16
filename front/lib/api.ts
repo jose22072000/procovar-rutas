@@ -137,6 +137,18 @@ export async function ask<T>(path: string): Promise<T> {
   return body as T;
 }
 
+export async function borrar<T>(ruta: string): Promise<T> {
+  const res = await fetch(`${API}${ruta}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(res.status, body.error ?? `error ${res.status}`);
+  }
+  return body as T;
+}
+
 export async function enviar<T>(ruta: string, datos: unknown): Promise<T> {
   const res = await fetch(`${API}${ruta}`, {
     method: "POST",

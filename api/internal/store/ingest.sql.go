@@ -612,6 +612,19 @@ func (q *Queries) CreateTestSeller(ctx context.Context, arg CreateTestSellerPara
 	return i, err
 }
 
+const deactivateSource = `-- name: DeactivateSource :exec
+UPDATE drive_source SET activa = FALSE, updated_at = now() WHERE id = $1
+`
+
+// Dar de baja una carpeta. No se borra la fila: de ella cuelgan los ficheros que ya
+// entraron, y borrarla se los llevaría por delante. Deja de barrerse, deja de salir
+// en Administración y n8n deja de pedirla, que es lo que se quiere decir con
+// "quítamela de ahí".
+func (q *Queries) DeactivateSource(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deactivateSource, id)
+	return err
+}
+
 const deleteDayStops = `-- name: DeleteDayStops :exec
 DELETE FROM stop WHERE track_day_id = $1
 `

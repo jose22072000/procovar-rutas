@@ -652,3 +652,76 @@ h1 {
     color: var(--pv-tinta-suave);
     font-weight: 400;
 }
+
+/* ── El selector de rango ────────────────────────────────────────────────────
+   Un calendario del mes con el rango pintado encima. Los colores salen de las
+   mismas variables que el resto: si la paleta cambia, esto cambia con ella. */
+
+.calendario {
+    display: inline-block;
+    padding: 0.75rem;
+    background: var(--pv-blanco);
+    border: 1px solid var(--pv-trazo-tenue);
+    border-radius: var(--pv-radio);
+}
+
+.calendario-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.calendario-rejilla {
+    display: grid;
+    grid-template-columns: repeat(7, 2.2rem);
+    gap: 2px;
+}
+
+.calendario-dia {
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pv-tinta-suave);
+    text-align: center;
+    padding-bottom: 2px;
+}
+
+.calendario-casilla {
+    height: 2.1rem;
+    border: 1px solid transparent;
+    border-radius: var(--pv-radio);
+    background: transparent;
+    color: var(--pv-tinta);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.calendario-casilla:hover { border-color: var(--pv-azul); }
+
+/* Los días que asoman del mes de al lado siguen siendo elegibles: un rango que
+   cruza el cambio de mes es lo normal, no una excepción. */
+.calendario-casilla[data-fuera] { color: var(--pv-tinta-suave); opacity: .5; }
+
+.calendario-casilla[data-dentro] { background: var(--pv-azul-tinte); }
+
+.calendario-casilla[data-extremo] {
+    background: var(--pv-azul);
+    border-color: var(--pv-azul);
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+/* Hoy se marca por debajo, para que no compita con los extremos del rango. */
+.calendario-casilla[data-hoy]:not([data-extremo]) {
+    box-shadow: inset 0 -2px 0 var(--pv-azul);
+}
+
+.calendario-pie {
+    margin: 0.6rem 0 0;
+    font-size: 12px;
+    color: var(--pv-tinta-suave);
+}

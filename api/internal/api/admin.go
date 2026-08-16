@@ -204,6 +204,22 @@ func (s *Server) createSource(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusCreated, fila)
 }
 
+// DELETE /api/sources/{id} — quitar una carpeta de la lista.
+//
+// Da de baja, no borra: de la carpeta cuelgan los ficheros que ya entraron por ella,
+// y una carpeta que se quita suele ser una que se dio de alta por error o un
+// vendedor que se fue, no un motivo para tirar su histórico.
+func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
+	id := chi.URLParam(r, "id")
+	if err := s.q.DeactivateSource(r.Context(), id); err != nil {
+		s.fail(w, "dando de baja la carpeta", err)
+		return
+	}
+	s.auth.RecordAudit(r.Context(), "rutas.fuente.baja", id, c.AuthUserID)
+	respond(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // scan launches an ingest by hand from the administration screen.
 func (s *Server) scan(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)

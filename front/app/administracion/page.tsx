@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { useEvents } from "@/lib/events";
-import { enviar, ask } from "@/lib/api";
+import { enviar, ask, borrar } from "@/lib/api";
 
 interface Fuente {
   id: string;
@@ -97,6 +97,20 @@ export default function Administracion() {
     }
   }
 
+  // Quitar una carpeta de la lista. Se pregunta porque es de las cosas que se hacen
+  // sin querer al ir a tocar la de al lado.
+  async function quitar(f: Fuente) {
+    if (!confirm(`¿Quitar la carpeta «${f.name}»?\n\nDeja de barrerse y de salir aquí. Las rutas que ya entraron por ella se quedan.`)) {
+      return;
+    }
+    try {
+      await borrar(`/api/sources/${f.id}`);
+      await cargar();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function barrer(tipoBarrido: string) {
     setBarriendo(true);
     setError(null);
@@ -121,9 +135,10 @@ export default function Administracion() {
         <b>Carpetas de Drive</b>
         <p className="sub">
           El identificador sale de la URL de la carpeta:
-          drive.google.com/drive/folders/<b>ESTE_TROZO</b>. Todas se leen con la
-          misma cuenta de servicio, y siempre en modo lectura: este sistema nunca
-          mueve ni borra nada del Drive.
+          drive.google.com/drive/folders/<b>ESTE_TROZO</b>. Los ficheros los trae
+          n8n con la cuenta padre, y al entrar los aparta a la subcarpeta «GPS
+          Procesados» de cada vendedor: por eso una carpeta que lleva días sin
+          barrerse no significa nada raro.
         </p>
 
         {fuentes.map((f) => (
@@ -142,8 +157,15 @@ export default function Administracion() {
               ) : f.lastScan ? (
                 new Date(f.lastScan).toLocaleString("es")
               ) : (
-                "sin barrer todavía"
+                "entra por n8n"
               )}
+              <button
+                className="pv-boton"
+                style={{ marginLeft: "0.75rem" }}
+                onClick={() => quitar(f)}
+              >
+                Quitar
+              </button>
             </span>
           </div>
         ))}

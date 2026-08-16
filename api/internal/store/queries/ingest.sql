@@ -21,6 +21,13 @@ VALUES (@id, @name, @folder_id, @type::tipo_fuente, @branch_id, @seller_id,
         COALESCE(NULLIF(@credential::text, ''), 'principal'))
 RETURNING *;
 
+-- name: DeactivateSource :exec
+-- Dar de baja una carpeta. No se borra la fila: de ella cuelgan los ficheros que ya
+-- entraron, y borrarla se los llevaría por delante. Deja de barrerse, deja de salir
+-- en Administración y n8n deja de pedirla, que es lo que se quiere decir con
+-- "quítamela de ahí".
+UPDATE drive_source SET activa = FALSE, updated_at = now() WHERE id = $1;
+
 -- name: UpdateSourceCursor :exec
 UPDATE drive_source
 SET cursor_modificado = $2, ultimo_barrido = now(), ultimo_error = NULL, updated_at = now()

@@ -15,6 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import RangoFechas from "@/components/RangoFechas";
 import {
   STATUS_LABEL,
   shortDate,
@@ -32,16 +33,15 @@ function todayISO(): string {
 
 export default function Calendar() {
   const router = useRouter();
-  // Desde/hasta, no un día suelto: el control lo pediste así y además es lo mismo
-  // que ya acepta el API. La semana laboral de hoy es el punto de partida, que es
-  // lo que se quiere ver al entrar.
-  // Un solo calendario: se elige un día y al lado cuánto se quiere ver desde él.
-  // Dos campos de fecha eran dos cosas que cuadrar a mano para lo que casi siempre
-  // es "la semana de este día".
-  const [dia, setDia] = useState(todayISO());
-  const [tramo, setTramo] = useState<"semana" | "dia" | "quincena" | "mes">("semana");
+  // Un solo calendario, y sobre él se marca desde dónde hasta dónde. Antes eran un
+  // campo de fecha y una lista de tramos ("su semana", "15 días desde ahí"): para
+  // ver del 3 al 11 había que elegir el tramo que menos se pasara.
+  //
+  // Se entra viendo la semana laboral de hoy, que es lo que se quiere ver al entrar.
+  const semana = useMemo(() => workWeek(todayISO()), []);
+  const [desde, setDesde] = useState(semana[0]);
+  const [hasta, setHasta] = useState(semana[4]);
 
-  const [desde, hasta] = useMemo(() => rango(dia, tramo), [dia, tramo]);
   const [data, setData] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,26 +77,21 @@ export default function Calendar() {
     return map;
   }, [data]);
 
+  // Correr el rango entero tantos días, manteniendo su ancho. Es lo que se quiere
+  // al mirar "la semana pasada" sin volver a marcar dos días.
   function mover(days: number) {
-    setDia(
-      new Date(new Date(`${dia}T12:00:00Z`).getTime() + days * 86400000)
+    const corre = (f: string) =>
+      new Date(new Date(`${f}T12:00:00Z`).getTime() + days * 86400000)
         .toISOString()
-        .slice(0, 10),
-    );
+        .slice(0, 10);
+    setDesde(corre(desde));
+    setHasta(corre(hasta));
   }
 
-  // De un día y un tramo, el rango. La semana es de lunes a viernes, que es la
-  // jornada de la empresa; los demás tramos van desde el día elegido.
-  function rango(d: string, t: string): [string, string] {
-    if (t === "semana") {
-      const s = workWeek(d);
-      return [s[0], s[4]];
-    }
-    const dias = t === "dia" ? 0 : t === "quincena" ? 14 : 29;
-    const fin = new Date(new Date(`${d}T12:00:00Z`).getTime() + dias * 86400000)
-      .toISOString()
-      .slice(0, 10);
-    return [d, fin];
+  function estaSemana() {
+    const s = workWeek(todayISO());
+    setDesde(s[0]);
+    setHasta(s[4]);
   }
 
   return (
@@ -106,34 +101,20 @@ export default function Calendar() {
         Cada celda es un día: tócala para ver el recorrido en el mapa.
       </p>
 
-      <div className="controles">
-        <button className="pv-boton" onClick={() => mover(-7)}>← Semana anterior</button>
-        <input
-          className="pv-campo"
-          type="date"
-          value={dia}
-          onChange={(e) => setDia(e.target.value)}
-        />
-        <select
-          className="pv-campo"
-          value={tramo}
-          onChange={(e) => setTramo(e.target.value as typeof tramo)}
-        >
-          <option value="semana">Su semana (L–V)</option>
-          <option value="dia">Solo ese día</option>
-          <option value="quincena">15 días desde ahí</option>
-          <option value="mes">30 días desde ahí</option>
-        </select>
-        <button className="pv-boton" onClick={() => mover(7)}>Semana siguiente →</button>
-        <button
-          className="pv-boton"
-          onClick={() => {
-            setDia(todayISO());
-            setTramo("semana");
+      <div className="controles" style={{ alignItems: "flex-start" }}>
+        <RangoFechas
+          desde={desde}
+          hasta={hasta}
+          onCambio={(d, h) => {
+            setDesde(d);
+            setHasta(h);
           }}
-        >
-          Esta semana
-        </button>
+        />
+        <div className="controles" style={{ marginBottom: 0 }}>
+          <button className="pv-boton" onClick={() => mover(-7)}>← Semana anterior</button>
+          <button className="pv-boton" onClick={() => mover(7)}>Semana siguiente →</button>
+          <button className="pv-boton" onClick={estaSemana}>Esta semana</button>
+        </div>
       </div>
 
       {error && <p className="aviso">{error}</p>}
