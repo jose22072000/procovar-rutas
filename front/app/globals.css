@@ -725,3 +725,8 @@ h1 {
     font-size: 12px;
     color: var(--pv-tinta-suave);
 }
+
+/* Las carpetas de Administración, agrupadas por sucursal: setenta seguidas son una
+   lista que no se lee. */
+.grupo-carpetas { margin-top: 1rem; }
+.grupo-carpetas .pv-rotulo { padding-bottom: 4px; border-bottom: 1px solid var(--pv-trazo-tenue); }

@@ -135,7 +135,7 @@ function FilaBandeja({
         {MOTIVOS[fichero.status] ?? fichero.status} · carpeta{" "}
         {fichero.source}
         {fichero.folderPath ? ` / ${fichero.folderPath}` : ""} ·{" "}
-        {fichero.points} points
+        {fichero.points} puntos
         {fichero.aliasHint ? (
           <>
             {" "}
@@ -170,7 +170,7 @@ function FilaBandeja({
               checked={recordar}
               onChange={(e) => setRecordar(e.target.checked)}
             />{" "}
-            Recordar «{fichero.aliasHint ?? fichero.name}» para este seller
+            Recordar «{fichero.aliasHint ?? fichero.name}» para este vendedor
           </label>
 
           <button

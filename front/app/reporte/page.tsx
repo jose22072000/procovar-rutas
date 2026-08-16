@@ -174,7 +174,7 @@ function Reporte() {
             <>
               <p className="sub">
                 {d.firstFix}–{d.lastFix} · {d.netKm.toFixed(2)} km ·{" "}
-                {d.coverage.toFixed(0)} % de coverage · {d.minMovement} min
+                {d.coverage.toFixed(0)} % de cobertura · {d.minMovement} min
                 en movimiento, {d.minStopped} min parado
               </p>
               <table className="movements">
@@ -197,7 +197,7 @@ function Reporte() {
                       <td>{m.endTime}</td>
                       <td>{m.durationMin} min</td>
                       <td>
-                        {m.type === "parada" ? <b>Stop</b> : "Desplazamiento"}
+                        {m.type === "parada" ? <b>Parada</b> : "Desplazamiento"}
                       </td>
                       <td>{m.type === "parada" ? "—" : `${m.distanceKm} km`}</td>
                       <td>{m.type === "parada" ? "—" : `${m.avgSpeed} km/h`}</td>

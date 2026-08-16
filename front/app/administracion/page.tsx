@@ -34,6 +34,15 @@ interface EstadoCola {
   failed?: number;
 }
 
+// Lo que contesta el barrido. Sin etiquetas json en el Go, así que llegan con el
+// nombre del campo tal cual.
+interface Resultado {
+  Seen: number;
+  New: number;
+  Failed: number;
+  Saltadas: number;
+}
+
 interface Barrido {
   id: string;
   type: string;
@@ -54,6 +63,7 @@ export default function Administracion() {
   const [cola, setCola] = useState<EstadoCola | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [barriendo, setBarriendo] = useState(false);
+  const [resultado, setResultado] = useState<string | null>(null);
 
   const [nombre, setNombre] = useState("");
   const [folderId, setFolderId] = useState("");
@@ -114,8 +124,16 @@ export default function Administracion() {
   async function barrer(tipoBarrido: string) {
     setBarriendo(true);
     setError(null);
+    setResultado(null);
     try {
-      await enviar(`/api/ingest/scan?type=${tipoBarrido}`, {});
+      const r = await enviar<Resultado>(`/api/ingest/scan?type=${tipoBarrido}`, {});
+      // Decir qué pasó, incluso cuando no pasó nada. Un botón que se pulsa y deja
+      // la pantalla igual no se distingue de un botón roto.
+      setResultado(
+        r.Saltadas > 0 && r.Seen === 0
+          ? `No se barrió ninguna carpeta (${r.Saltadas}): este servicio no lee Drive por su cuenta, los ficheros los trae n8n.`
+          : `${r.Seen} ficheros vistos, ${r.New} nuevos, ${r.Failed} fallidos.`,
+      );
       await cargar();
     } catch (e) {
       setError((e as Error).message);
@@ -123,6 +141,14 @@ export default function Administracion() {
       setBarriendo(false);
     }
   }
+
+  // Las carpetas, agrupadas por sucursal. Setenta seguidas son una lista que no se
+  // lee; por sucursal se ve de un vistazo quién tiene cuántas y a quién le falta.
+  const porSucursal = fuentes.reduce<Record<string, Fuente[]>>((acc, f) => {
+    const s = f.branch || "sin sucursal";
+    (acc[s] ??= []).push(f);
+    return acc;
+  }, {});
 
   return (
     <>
@@ -141,34 +167,36 @@ export default function Administracion() {
           barrerse no significa nada raro.
         </p>
 
-        {fuentes.map((f) => (
-          <div className="dato" key={f.id}>
-            <span>
-              {f.name}{" "}
-              {/* La sucursal a la que pertenece la carpeta: es lo que hay que
-                  mirar para saber si la ingesta repartió cada una donde tocaba. */}
-              <span className={f.branch ? "pv-etiqueta pv-etiqueta-azul" : "pv-etiqueta pv-etiqueta-cuno"}>
-                {f.branch || "sin sucursal"}
-              </span>
-            </span>
-            <span>
-              {f.lastError ? (
-                <span style={{ color: "var(--falta)" }}>{f.lastError}</span>
-              ) : f.lastScan ? (
-                new Date(f.lastScan).toLocaleString("es")
-              ) : (
-                "entra por n8n"
-              )}
-              <button
-                className="pv-boton"
-                style={{ marginLeft: "0.75rem" }}
-                onClick={() => quitar(f)}
-              >
-                Quitar
-              </button>
-            </span>
-          </div>
-        ))}
+        {Object.keys(porSucursal)
+          .sort()
+          .map((sucursal) => (
+            <div key={sucursal} className="grupo-carpetas">
+              <div className="pv-rotulo">
+                {sucursal} · {porSucursal[sucursal].length}
+              </div>
+              {porSucursal[sucursal].map((f) => (
+                <div className="dato" key={f.id}>
+                  <span>{f.name}</span>
+                  <span>
+                    {f.lastError ? (
+                      <span style={{ color: "var(--falta)" }}>{f.lastError}</span>
+                    ) : f.lastScan ? (
+                      new Date(f.lastScan).toLocaleString("es")
+                    ) : (
+                      "entra por n8n"
+                    )}
+                    <button
+                      className="pv-boton"
+                      style={{ marginLeft: "0.75rem" }}
+                      onClick={() => quitar(f)}
+                    >
+                      Quitar
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
 
         <div className="controles" style={{ marginTop: "1rem" }}>
           <input
@@ -197,7 +225,7 @@ export default function Administracion() {
         <b>Cola de n8n</b>
         <p className="sub">
           Los ficheros que empuja n8n esperan aquí y los procesa el servicio de
-          ingesta. Si «pending» crece y no baja, el servicio de ingesta está
+          ingesta. Si «pendientes» crece y no baja, el servicio de ingesta está
           parado.
         </p>
         {cola?.active ? (
@@ -211,7 +239,7 @@ export default function Administracion() {
               <span>{cola.processing}</span>
             </div>
             <div className="dato">
-              <span>Apartados tras varios attempts</span>
+              <span>Apartados tras varios intentos</span>
               <span
                 style={{ color: (cola.failed ?? 0) > 0 ? "var(--falta)" : undefined }}
               >
@@ -239,6 +267,8 @@ export default function Administracion() {
             Traer todo el histórico
           </button>
         </div>
+
+        {resultado && <p className="sub">{resultado}</p>}
 
         <table className="movements">
           <thead>
