@@ -98,14 +98,14 @@ for prov, cred in PROVINCIAS.items():
     n1, n2, n3, n4 = (f"Carpetas de {prov}", f"Ya la tienen {prov}",
                       f"Faltan {prov}", f"Crear en {prov}")
     nodos += [
-        http(n1, 60, y, consulta(
+        http(n1, 60, y, {"url": DRIVE, **consulta(
             ("q", f"'me' in owners and mimeType='{CARPETA}' and trashed=false"),
             ("fields", "files(id,name)"),
-            ("pageSize", "1000")), cred=(cred, prov)),
-        http(n2, 280, y, consulta(
+            ("pageSize", "1000"))}, cred=(cred, prov)),
+        http(n2, 280, y, {"url": DRIVE, **consulta(
             ("q", f"name='GPS Procesados' and 'me' in owners and mimeType='{CARPETA}' and trashed=false"),
             ("fields", "files(id,parents)"),
-            ("pageSize", "1000")), cred=(cred, prov)),
+            ("pageSize", "1000"))}, cred=(cred, prov)),
         {"name": n3, "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [500, y],
          "parameters": {"mode": "runOnceForAllItems", "jsCode": FALTAN % {"prov": prov}}},
         http(n4, 720, y, {
@@ -128,15 +128,19 @@ cuerpo = {"name": "Crear GPS Procesados en cada carpeta (repetible)",
           "nodes": nodos, "connections": conexiones,
           "settings": {"executionOrder": "v1"}}
 
+# El flujo ya está publicado; se actualiza en su sitio para no dejar copias sueltas
+# que luego no se sabe cuál es la buena.
+WORKFLOW = "PanWPaQ7qEDEDmgq"
+
 if __name__ == "__main__":
     clave = sys.argv[1]
     r = subprocess.run(
-        ["curl", "-s", "-m", "40", "-X", "POST",
+        ["curl", "-s", "-m", "40", "-X", "PUT",
          "-H", f"X-N8N-API-KEY: {clave}", "-H", "content-type: application/json",
-         "-d", json.dumps(cuerpo), f"{N8N}/workflows"],
+         "-d", json.dumps(cuerpo), f"{N8N}/workflows/{WORKFLOW}"],
         capture_output=True, text=True)
     try:
         w = json.loads(r.stdout)
-        print("creado:", w.get("name"), "| id:", w.get("id"), "| nodos:", len(w.get("nodes", [])))
+        print("actualizado:", w.get("name"), "| id:", w.get("id"), "| nodos:", len(w.get("nodes", [])))
     except Exception:
         print("respuesta:", r.stdout[:500])
