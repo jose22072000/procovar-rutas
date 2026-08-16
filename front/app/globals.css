@@ -51,26 +51,28 @@
     --pv-radio-grande: 5px;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --pv-azul:        #4E9EC9;
-        --pv-azul-hondo:  #0A1B24;
-        --pv-azul-tinte:  #102C3B;
+/* El oscuro NO sigue al sistema, sino a una clase, igual que en Accesos.
+   Seguir al sistema hacía que el panel apareciera oscuro sin que nadie lo pidiera
+   —basta con tener el portátil en oscuro— y las dos aplicaciones se veían
+   distintas abiertas una al lado de la otra. Por defecto, claro. */
+.dark {
+    --pv-azul:        #4E9EC9;
+    --pv-azul-hondo:  #0A1B24;
+    --pv-azul-tinte:  #102C3B;
 
-        --pv-papel:       #0B1418;
-        --pv-blanco:      #111D23;
-        --pv-tinta:       #E6EDF0;
-        --pv-tinta-suave: #94A6AF;
-        --pv-trazo:       #26383F;
-        --pv-trazo-tenue: #1A2A30;
+    --pv-papel:       #0B1418;
+    --pv-blanco:      #111D23;
+    --pv-tinta:       #E6EDF0;
+    --pv-tinta-suave: #94A6AF;
+    --pv-trazo:       #26383F;
+    --pv-trazo-tenue: #1A2A30;
 
-        --pv-cuno:        #E4808A;
-        --pv-cuno-tinte:  #2A1418;
-        --pv-visto:       #67C39C;
-        --pv-visto-tinte: #10251D;
-        --pv-ambar:       #D9AE63;
-        --pv-ambar-tinte: #241C0E;
-    }
+    --pv-cuno:        #E4808A;
+    --pv-cuno-tinte:  #2A1418;
+    --pv-visto:       #67C39C;
+    --pv-visto-tinte: #10251D;
+    --pv-ambar:       #D9AE63;
+    --pv-ambar-tinte: #241C0E;
 }
 
 *,
@@ -638,4 +640,15 @@ h1 {
     body { background: #FFFFFF; }
     main { max-width: none; padding: 0; }
     .tarjeta { break-inside: avoid; border-color: #CBD6DB; }
+}
+
+/* La sucursal, bajo el nombre del vendedor en el calendario. */
+.seller-sucursal {
+    display: block;
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pv-tinta-suave);
+    font-weight: 400;
 }

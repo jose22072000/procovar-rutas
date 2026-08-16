@@ -152,12 +152,12 @@ func (s *Server) deleteAlias(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) sources(w http.ResponseWriter, r *http.Request) {
-	filas, err := s.q.ActiveSources(r.Context())
+	filas, err := s.q.ActiveSourcesWithBranch(r.Context())
 	if err != nil {
 		s.fail(w, "sources", err)
 		return
 	}
-	respond(w, http.StatusOK, aDriveSources(filas))
+	respond(w, http.StatusOK, aDriveSourcesConSucursal(filas))
 }
 
 type sourceRequest struct {

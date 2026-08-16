@@ -190,8 +190,12 @@ func (s *Server) week(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nombreSemana := trabajadorID
+	sucursalSemana := ""
 	if t, err := s.q.SellerByID(r.Context(), trabajadorID); err == nil {
 		nombreSemana = t.Name
+		if suc, err := s.q.BranchByID(r.Context(), t.BranchID); err == nil {
+			sucursalSemana = suc.Name
+		}
 	}
 
 	filas, err := s.q.SellerWeek(r.Context(), store.SellerWeekParams{
@@ -206,6 +210,6 @@ func (s *Server) week(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, map[string]any{
 		"from": desde.Format(iso),
 		"to":   hasta.Format(iso),
-		"days": aSellerDaysFromTrackDay(filas, nombreSemana),
+		"days": aSellerDaysFromTrackDay(filas, nombreSemana, sucursalSemana),
 	})
 }

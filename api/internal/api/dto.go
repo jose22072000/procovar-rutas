@@ -22,6 +22,7 @@ type SellerDay struct {
 	SellerID   string     `json:"sellerId"`
 	Seller     string     `json:"seller"`
 	BranchID   string     `json:"branchId"`
+	Branch     string     `json:"branch"`
 	Date       string     `json:"date"`
 	Status     string     `json:"status"`
 	NetKm      float64    `json:"netKm"`
@@ -38,6 +39,7 @@ func aSellerDay(f store.CalendarRow) SellerDay {
 		SellerID: f.SellerID,
 		Seller:   f.Seller,
 		BranchID: f.BranchID,
+		Branch:   f.Branch,
 		// Date only: the time is noise in a per-day grid, and a full timestamp would
 		// drag the server's time zone out to the client.
 		Date:       f.Date.Format(iso),
@@ -91,6 +93,7 @@ func aSeller(t store.Seller) Seller {
 type DayDetail struct {
 	ID          string     `json:"id"`
 	Seller      string     `json:"seller"`
+	Branch      string     `json:"branch"`
 	Date        string     `json:"date"`
 	Status      string     `json:"status"`
 	NetKm       float64    `json:"netKm"`
@@ -109,6 +112,7 @@ func aDayDetail(d store.SellerDayRow, vendedor string) DayDetail {
 	return DayDetail{
 		ID:          d.ID,
 		Seller:      vendedor,
+		Branch:      d.Branch,
 		Date:        d.Date.Format(iso),
 		Status:      string(d.Status),
 		NetKm:       d.NetKm,
@@ -175,13 +179,14 @@ func aSellerDays(fs []store.CalendarRow) []SellerDay {
 // A seller's week comes from the whole table, not from the calendar query, so it
 // arrives as a different type. It is converted to the SAME shape: to the front end
 // a cell is a cell, wherever it came from.
-func aSellerDaysFromTrackDay(ds []store.TrackDay, vendedor string) []SellerDay {
+func aSellerDaysFromTrackDay(ds []store.TrackDay, vendedor, sucursal string) []SellerDay {
 	out := make([]SellerDay, 0, len(ds))
 	for _, d := range ds {
 		out = append(out, SellerDay{
 			SellerID:   d.SellerID,
 			Seller:     vendedor,
 			BranchID:   d.BranchID,
+			Branch:     sucursal,
 			Date:       d.Date.Format(iso),
 			Status:     string(d.Status),
 			NetKm:      d.NetKm,

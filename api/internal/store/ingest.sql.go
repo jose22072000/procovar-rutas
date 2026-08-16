@@ -117,6 +117,68 @@ func (q *Queries) ActiveSources(ctx context.Context) ([]DriveSource, error) {
 	return items, nil
 }
 
+const activeSourcesWithBranch = `-- name: ActiveSourcesWithBranch :many
+SELECT f.id, f.nombre, f.folder_id, f.tipo, f.sucursal_id, f.trabajador_id, f.credencial, f.activa, f.cursor_modificado, f.ultimo_barrido, f.ultimo_error, f.created_at, f.updated_at, coalesce(s.nombre, '') AS branch
+FROM drive_source f
+LEFT JOIN sucursal s ON s.id = f.sucursal_id
+WHERE f.activa
+ORDER BY coalesce(s.nombre, 'zzz'), f.nombre
+`
+
+type ActiveSourcesWithBranchRow struct {
+	ID             string
+	Name           string
+	FolderID       string
+	Type           SourceType
+	BranchID       *string
+	SellerID       *string
+	Credential     string
+	Active         bool
+	ModifiedCursor *time.Time
+	LastScan       *time.Time
+	LastError      *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Branch         string
+}
+
+// Igual, pero con el nombre de la sucursal: es lo que hay que poder ver en
+// Administración para saber si la ingesta repartió cada carpeta donde tocaba.
+func (q *Queries) ActiveSourcesWithBranch(ctx context.Context) ([]ActiveSourcesWithBranchRow, error) {
+	rows, err := q.db.Query(ctx, activeSourcesWithBranch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveSourcesWithBranchRow{}
+	for rows.Next() {
+		var i ActiveSourcesWithBranchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.FolderID,
+			&i.Type,
+			&i.BranchID,
+			&i.SellerID,
+			&i.Credential,
+			&i.Active,
+			&i.ModifiedCursor,
+			&i.LastScan,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Branch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const allAliases = `-- name: AllAliases :many
 SELECT alias, trabajador_id, sucursal_id FROM device_alias
 `

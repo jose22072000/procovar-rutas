@@ -22,6 +22,7 @@ export interface SellerDay {
   sellerId: string;
   seller: string;
   branchId: string;
+  branch: string;
   date: string;
   status: DayStatus;
   netKm: number;
@@ -82,6 +83,7 @@ export interface Stop {
 export interface DayDetail {
   id: string;
   seller: string;
+  branch: string;
   date: string;
   status: DayStatus;
   netKm: number;

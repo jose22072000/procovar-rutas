@@ -225,7 +225,19 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 		sucursales = append(sucursales, porSucursal{Branch: r.Branch, Sellers: r.Sellers, Files: r.Files})
 	}
 
+	// Redis: el panel decía "sin Redis" y no había forma de saber si era la URL, la
+	// contraseña o que el contenedor no responde.
+	redis := "no configurado"
+	if s.queue != nil {
+		if err := s.queue.Ping(r.Context()); err != nil {
+			redis = "falla: " + err.Error()
+		} else {
+			redis = "ok"
+		}
+	}
+
 	respond(w, http.StatusOK, map[string]any{
+		"redis":           redis,
 		"byBranch":        sucursales,
 		"files":           e.Files,
 		"filesOk":         e.FilesOk,

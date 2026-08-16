@@ -18,6 +18,7 @@ SELECT
     d.trabajador_id,
     t.nombre AS seller,
     d.sucursal_id,
+    coalesce(s.nombre, '') AS branch,
     d.fecha,
     d.estado,
     d.km_netos,
@@ -29,6 +30,7 @@ SELECT
     d.lugar_texto
 FROM track_day d
 JOIN trabajador t ON t.id = d.trabajador_id
+LEFT JOIN sucursal s ON s.id = d.sucursal_id
 WHERE d.fecha BETWEEN @from_date::date AND @to_date::date
   AND (@branch_id::text = '' OR d.sucursal_id = @branch_id)
   AND (cardinality(@sellers::text[]) = 0 OR d.trabajador_id = ANY (@sellers))
@@ -61,9 +63,10 @@ ORDER BY count(*) FILTER (WHERE d.estado = 'SIN_FICHERO')
          t.nombre;
 
 -- name: SellerDay :one
-SELECT d.*, t.nombre AS seller
+SELECT d.*, t.nombre AS seller, coalesce(s.nombre, '') AS branch
 FROM track_day d
 JOIN trabajador t ON t.id = d.trabajador_id
+LEFT JOIN sucursal s ON s.id = d.sucursal_id
 WHERE d.trabajador_id = @seller_id AND d.fecha = @date::date
   AND (@branch_id::text = '' OR d.sucursal_id = @branch_id)
   AND (cardinality(@sellers::text[]) = 0 OR d.trabajador_id = ANY (@sellers))

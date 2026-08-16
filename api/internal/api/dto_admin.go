@@ -94,6 +94,7 @@ func aDeviceAlias(a store.BranchAliasesRow) DeviceAlias {
 type DriveSource struct {
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
+	Branch        string     `json:"branch"`
 	FolderID      string     `json:"folderId"`
 	Type          string     `json:"type"`
 	BranchID      *string    `json:"branchId"`
@@ -103,6 +104,25 @@ type DriveSource struct {
 	LastScan      *time.Time `json:"lastScan"`
 	LastError     *string    `json:"lastError"`
 	CreatedAt     time.Time  `json:"createdAt"`
+}
+
+func aDriveSourceConSucursal(f store.ActiveSourcesWithBranchRow) DriveSource {
+	d := aDriveSource(store.DriveSource{
+		ID: f.ID, Name: f.Name, FolderID: f.FolderID, Type: f.Type,
+		BranchID: f.BranchID, SellerID: f.SellerID, Active: f.Active,
+		Credential: f.Credential, LastScan: f.LastScan, LastError: f.LastError,
+		CreatedAt: f.CreatedAt,
+	})
+	d.Branch = f.Branch
+	return d
+}
+
+func aDriveSourcesConSucursal(fs []store.ActiveSourcesWithBranchRow) []DriveSource {
+	out := make([]DriveSource, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, aDriveSourceConSucursal(f))
+	}
+	return out
 }
 
 func aDriveSource(f store.DriveSource) DriveSource {

@@ -12,6 +12,7 @@ import { enviar, ask } from "@/lib/api";
 interface Fuente {
   id: string;
   name: string;
+  branch: string;
   folderId: string;
   type: string;
   active: boolean;
@@ -128,7 +129,12 @@ export default function Administracion() {
         {fuentes.map((f) => (
           <div className="dato" key={f.id}>
             <span>
-              {f.name} <small style={{ color: "var(--tenue)" }}>({f.type})</small>
+              {f.name}{" "}
+              {/* La sucursal a la que pertenece la carpeta: es lo que hay que
+                  mirar para saber si la ingesta repartió cada una donde tocaba. */}
+              <span className={f.branch ? "pv-etiqueta pv-etiqueta-azul" : "pv-etiqueta pv-etiqueta-cuno"}>
+                {f.branch || "sin sucursal"}
+              </span>
             </span>
             <span>
               {f.lastError ? (

@@ -54,11 +54,11 @@ export default function Calendar() {
   const bySeller = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; days: Map<string, CalendarResponse["days"][0]> }
+      { name: string; branch: string; days: Map<string, CalendarResponse["days"][0]> }
     >();
     for (const d of data?.days ?? []) {
       if (!map.has(d.sellerId)) {
-        map.set(d.sellerId, { name: d.seller, days: new Map() });
+        map.set(d.sellerId, { name: d.seller, branch: d.branch, days: new Map() });
       }
       map.get(d.sellerId)!.days.set(d.date.slice(0, 10), d);
     }
@@ -127,7 +127,13 @@ export default function Calendar() {
                   (summary?.daysNoMovement ?? 0);
                 return (
                   <tr key={id}>
-                    <td className="seller">{v.name}</td>
+                    <td className="seller">
+                      {v.name}
+                      {/* La sucursal, debajo del nombre: es lo que dice si la
+                          ingesta colocó a cada quien donde tocaba, y lo que el
+                          gerente necesita reconocer de un vistazo. */}
+                      <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                    </td>
                     {week.map((f) => {
                       const d = v.days.get(f);
                       // No row for that day is painted as a miss: that is what it

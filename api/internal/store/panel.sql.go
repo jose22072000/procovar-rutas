@@ -134,6 +134,7 @@ SELECT
     d.trabajador_id,
     t.nombre AS seller,
     d.sucursal_id,
+    coalesce(s.nombre, '') AS branch,
     d.fecha,
     d.estado,
     d.km_netos,
@@ -145,6 +146,7 @@ SELECT
     d.lugar_texto
 FROM track_day d
 JOIN trabajador t ON t.id = d.trabajador_id
+LEFT JOIN sucursal s ON s.id = d.sucursal_id
 WHERE d.fecha BETWEEN $1::date AND $2::date
   AND ($3::text = '' OR d.sucursal_id = $3)
   AND (cardinality($4::text[]) = 0 OR d.trabajador_id = ANY ($4))
@@ -164,6 +166,7 @@ type CalendarRow struct {
 	SellerID   string
 	Seller     string
 	BranchID   string
+	Branch     string
 	Date       time.Time
 	Status     DayStatus
 	NetKm      float64
@@ -208,6 +211,7 @@ func (q *Queries) Calendar(ctx context.Context, arg CalendarParams) ([]CalendarR
 			&i.SellerID,
 			&i.Seller,
 			&i.BranchID,
+			&i.Branch,
 			&i.Date,
 			&i.Status,
 			&i.NetKm,
@@ -646,9 +650,10 @@ func (q *Queries) SellerByAuthID(ctx context.Context, authUserID *string) (Selle
 }
 
 const sellerDay = `-- name: SellerDay :one
-SELECT d.id, d.trabajador_id, d.sucursal_id, d.fecha, d.estado, d.primer_fix, d.ultimo_fix, d.km_netos, d.min_movimiento, d.min_parado, d.cobertura, d.huecos, d.puntos, d.radio_dispersion, d.centroide_lat, d.centroide_lon, d.lugar_texto, d.banderas, d.gpx_file_id, d.calculado_at, t.nombre AS seller
+SELECT d.id, d.trabajador_id, d.sucursal_id, d.fecha, d.estado, d.primer_fix, d.ultimo_fix, d.km_netos, d.min_movimiento, d.min_parado, d.cobertura, d.huecos, d.puntos, d.radio_dispersion, d.centroide_lat, d.centroide_lon, d.lugar_texto, d.banderas, d.gpx_file_id, d.calculado_at, t.nombre AS seller, coalesce(s.nombre, '') AS branch
 FROM track_day d
 JOIN trabajador t ON t.id = d.trabajador_id
+LEFT JOIN sucursal s ON s.id = d.sucursal_id
 WHERE d.trabajador_id = $1 AND d.fecha = $2::date
   AND ($3::text = '' OR d.sucursal_id = $3)
   AND (cardinality($4::text[]) = 0 OR d.trabajador_id = ANY ($4))
@@ -685,6 +690,7 @@ type SellerDayRow struct {
 	GpxFileID   *string
 	ComputedAt  time.Time
 	Seller      string
+	Branch      string
 }
 
 func (q *Queries) SellerDay(ctx context.Context, arg SellerDayParams) (SellerDayRow, error) {
@@ -718,6 +724,7 @@ func (q *Queries) SellerDay(ctx context.Context, arg SellerDayParams) (SellerDay
 		&i.GpxFileID,
 		&i.ComputedAt,
 		&i.Seller,
+		&i.Branch,
 	)
 	return i, err
 }

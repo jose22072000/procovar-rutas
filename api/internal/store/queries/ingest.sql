@@ -3,6 +3,15 @@
 -- name: ActiveSources :many
 SELECT * FROM drive_source WHERE activa ORDER BY nombre;
 
+-- name: ActiveSourcesWithBranch :many
+-- Igual, pero con el nombre de la sucursal: es lo que hay que poder ver en
+-- Administración para saber si la ingesta repartió cada carpeta donde tocaba.
+SELECT f.*, coalesce(s.nombre, '') AS branch
+FROM drive_source f
+LEFT JOIN sucursal s ON s.id = f.sucursal_id
+WHERE f.activa
+ORDER BY coalesce(s.nombre, 'zzz'), f.nombre;
+
 -- name: SourceByID :one
 SELECT * FROM drive_source WHERE id = $1;
 

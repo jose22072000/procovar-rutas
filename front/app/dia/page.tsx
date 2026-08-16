@@ -70,7 +70,10 @@ function Visor() {
       <div className="visor-cabecera no-imprimir">
         <div>
           <h1>{datos?.day.seller ?? "Recorrido"}</h1>
-          <p className="sub">{fecha}</p>
+          <p className="sub">
+            {fecha}
+            {datos?.day.branch ? ` · ${datos.day.branch}` : ""}
+          </p>
         </div>
 
         <div className="visor-acciones">
