@@ -386,7 +386,9 @@ func (q *Queries) CloseImportLog(ctx context.Context, arg CloseImportLogParams) 
 const createBranchByKey = `-- name: CreateBranchByKey :one
 INSERT INTO sucursal (id, nombre, clave) VALUES ($1, $2, $3)
 ON CONFLICT (clave) DO UPDATE SET nombre = CASE
-    WHEN length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
+    WHEN sucursal.nombre ~* 'procovar$' AND EXCLUDED.nombre !~* 'procovar$' THEN EXCLUDED.nombre
+    WHEN (sucursal.nombre ~* 'procovar$') = (EXCLUDED.nombre ~* 'procovar$')
+         AND length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
     ELSE sucursal.nombre
 END
 RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave
@@ -400,6 +402,9 @@ type CreateBranchByKeyParams struct {
 
 // Si dos empujes llegan a la vez, el segundo choca con el índice único y se queda con
 // la que creó el primero, en vez de abrir otra. Así aparecieron siete "Guantánamo".
+// Si ya existe, se queda con el nombre que mejor se lee: primero el que NO arrastra
+// el apellido de la empresa, y a igualdad, el más largo ("Las Tunas" gana a
+// "lastunas", y "Santiago" gana a "santiagoprocovar" aunque sea más corto).
 func (q *Queries) CreateBranchByKey(ctx context.Context, arg CreateBranchByKeyParams) (Branch, error) {
 	row := q.db.QueryRow(ctx, createBranchByKey, arg.ID, arg.Name, arg.Key)
 	var i Branch

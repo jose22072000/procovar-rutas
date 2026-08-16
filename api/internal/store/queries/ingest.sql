@@ -202,8 +202,13 @@ SELECT * FROM sucursal WHERE clave = @key LIMIT 1;
 -- Si dos empujes llegan a la vez, el segundo choca con el índice único y se queda con
 -- la que creó el primero, en vez de abrir otra. Así aparecieron siete "Guantánamo".
 INSERT INTO sucursal (id, nombre, clave) VALUES (@id, @name, @key)
+-- Si ya existe, se queda con el nombre que mejor se lee: primero el que NO arrastra
+-- el apellido de la empresa, y a igualdad, el más largo ("Las Tunas" gana a
+-- "lastunas", y "Santiago" gana a "santiagoprocovar" aunque sea más corto).
 ON CONFLICT (clave) DO UPDATE SET nombre = CASE
-    WHEN length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
+    WHEN sucursal.nombre ~* 'procovar$' AND EXCLUDED.nombre !~* 'procovar$' THEN EXCLUDED.nombre
+    WHEN (sucursal.nombre ~* 'procovar$') = (EXCLUDED.nombre ~* 'procovar$')
+         AND length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
     ELSE sucursal.nombre
 END
 RETURNING *;
