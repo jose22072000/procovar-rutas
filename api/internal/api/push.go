@@ -302,3 +302,43 @@ func (s *Server) ingestFolderOwner(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, http.StatusOK, map[string]string{"branch": branch})
 }
+
+// POST /api/ingest/known — de esta lista de ficheros, cuáles ya están dentro.
+//
+// La ingesta tiene que poder saltarse lo ya hecho, y hasta ahora eso dependía de
+// APARTAR el fichero en Drive: lo procesado se movía a "GPS Procesados" y lo que
+// quedaba suelto era lo pendiente. Pero las carpetas se comparten desde la cuenta de
+// cada provincia, y si el permiso es de solo lectura, la cuenta padre no puede mover
+// nada — y sin poder moverlo, cada pasada volvía a bajarse el histórico entero.
+//
+// Quién tiene qué lo sabe este servicio, así que se pregunta y ya. Funciona igual
+// con permiso de escritura o sin él, que es lo que hace que no dependa de cómo esté
+// compartida cada carpeta.
+func (s *Server) ingestKnown(w http.ResponseWriter, r *http.Request) {
+	if !s.validServiceKey(r) {
+		respondError(w, http.StatusUnauthorized, "clave de servicio inválida")
+		return
+	}
+
+	var p struct {
+		DriveFileIDs []string `json:"driveFileIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		respondError(w, http.StatusBadRequest, "cuerpo ilegible")
+		return
+	}
+	if len(p.DriveFileIDs) == 0 {
+		respond(w, http.StatusOK, map[string]any{"known": []string{}})
+		return
+	}
+
+	ya, err := s.q.KnownFiles(r.Context(), p.DriveFileIDs)
+	if err != nil {
+		s.fail(w, "ficheros ya conocidos", err)
+		return
+	}
+	if ya == nil {
+		ya = []string{}
+	}
+	respond(w, http.StatusOK, map[string]any{"known": ya})
+}

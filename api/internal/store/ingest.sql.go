@@ -743,6 +743,32 @@ func (q *Queries) IngestStats(ctx context.Context) (IngestStatsRow, error) {
 	return i, err
 }
 
+const knownFiles = `-- name: KnownFiles :many
+SELECT drive_file_id FROM gpx_file WHERE drive_file_id = ANY($1::text[])
+`
+
+// De esta lista, cuáles ya están dentro. Es lo que permite a la ingesta saltarse lo
+// hecho sin tener que mover nada en Drive.
+func (q *Queries) KnownFiles(ctx context.Context, ids []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, knownFiles, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var drive_file_id string
+		if err := rows.Scan(&drive_file_id); err != nil {
+			return nil, err
+		}
+		items = append(items, drive_file_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markAbsences = `-- name: MarkAbsences :execrows
 INSERT INTO track_day (id, trabajador_id, sucursal_id, fecha, estado)
 SELECT

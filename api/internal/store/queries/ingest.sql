@@ -276,3 +276,8 @@ mueve_dias AS (
 -- respuesta.
 UPDATE trabajador SET sucursal_id = @branch_id, updated_at = now()
 WHERE id IN (SELECT trabajador_id FROM afectados);
+
+-- name: KnownFiles :many
+-- De esta lista, cuáles ya están dentro. Es lo que permite a la ingesta saltarse lo
+-- hecho sin tener que mover nada en Drive.
+SELECT drive_file_id FROM gpx_file WHERE drive_file_id = ANY(@ids::text[]);
