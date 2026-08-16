@@ -52,6 +52,20 @@ func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 		return false, 0, fmt.Errorf("faltan el identificador o el nombre")
 	}
 
+	// Primero, de qué sucursal es la carpeta. Va ANTES del corte por fichero
+	// repetido a propósito: casi todos los ficheros que llegan en la primera pasada
+	// ya están dentro, y si se cortara antes, la carpeta no llegaría a enterarse
+	// nunca de a qué sucursal pertenece. Se busca la carpeta SIN crearla: si el
+	// empuje viene de una subcarpeta de archivo, no casa con ninguna y no pasa nada.
+	if e.Account != "" && e.FolderID != "" {
+		if fuente, ok := s.sourcePorCarpeta(ctx, e.FolderID); ok && !s.mismaCuenta(fuente, e.Account) {
+			if err := s.reasignarSucursal(ctx, &fuente, e.Account); err != nil {
+				s.log.Warn("no se pudo asignar la sucursal de la carpeta",
+					"carpeta", fuente.Name, "cuenta", e.Account, "error", err)
+			}
+		}
+	}
+
 	// Lo ya visto se corta AQUÍ, antes de mirar de qué carpeta viene.
 	//
 	// Los ficheros se archivan en Drive moviéndolos a una subcarpeta ("Procesados",
@@ -69,23 +83,6 @@ func (s *Service) Receive(ctx context.Context, e Pushed) (bool, int64, error) {
 	source, err := s.findSource(ctx, e)
 	if err != nil {
 		return false, 0, err
-	}
-
-	// La sucursal la manda quien empuja, y manda sobre lo que tenga la carpeta.
-	//
-	// Las 53 carpetas se dieron de alta por migración con la credencial de relleno
-	// "principal", y como la carpeta ya traía credencial, ganaba ella: TODO acabó en
-	// una sucursal llamada "principal" — 30 vendedores y 93 ficheros en el mismo
-	// saco, que es justo lo contrario de lo que hace falta para que un gerente vea
-	// lo suyo.
-	//
-	// Ahora la primera vez que llega un empuje con cuenta, la carpeta aprende de qué
-	// sucursal es, y se lleva consigo lo que ya había entrado por ella.
-	if e.Account != "" && !s.mismaCuenta(source, e.Account) {
-		if err := s.reasignarSucursal(ctx, &source, e.Account); err != nil {
-			s.log.Warn("no se pudo asignar la sucursal de la carpeta",
-				"carpeta", source.Name, "cuenta", e.Account, "error", err)
-		}
 	}
 
 	alias, err := s.aliasMap(ctx)
@@ -210,4 +207,19 @@ func (s *Service) reasignarSucursal(ctx context.Context, source *store.DriveSour
 	source.BranchID = &branchID
 	source.Credential = cuenta
 	return nil
+}
+
+// sourcePorCarpeta busca la carpeta por su id de Drive, sin darla de alta. Se usa
+// para enterarse de su sucursal sin el efecto secundario de crear fuentes nuevas.
+func (s *Service) sourcePorCarpeta(ctx context.Context, folderID string) (store.DriveSource, bool) {
+	fuentes, err := s.q.ActiveSources(ctx)
+	if err != nil {
+		return store.DriveSource{}, false
+	}
+	for _, f := range fuentes {
+		if f.FolderID == folderID {
+			return f, true
+		}
+	}
+	return store.DriveSource{}, false
 }

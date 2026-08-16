@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
@@ -14,20 +13,11 @@ import (
 // Un .gpx de 0 bytes existe en Drive. Tiene que quedar REGISTRADO con su error,
 // no tumbar la tanda entera de n8n ni desaparecer sin rastro.
 func TestFicheroVacioQuedaRegistrado(t *testing.T) {
-	url := os.Getenv("DATABASE_URL_TEST")
-	if url == "" {
-		t.Skip("sin DATABASE_URL_TEST")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
+	pool, q := base(t)
 	ctx := context.Background()
-	q := store.New(pool)
 
 	svc := ingest.NewService(pool, ingest.SingleAccount(nil), nil, 100)
-	_, _, err = svc.Receive(ctx, ingest.Pushed{
+	_, _, err := svc.Receive(ctx, ingest.Pushed{
 		Account: "camaguey.procovar@gmail.com", FolderID: "carpeta-vacia",
 		DriveFileID: "f-vacio", Name: "20260813.gpx",
 		FolderPath: []string{"GPS Prueba"}, Content: nil,
@@ -50,17 +40,8 @@ func TestFicheroVacioQuedaRegistrado(t *testing.T) {
 // carpeta: al archivarlo en Drive queda dentro de "Procesados", y si eso llegara a
 // la resolución se daría de alta una fuente, y un "vendedor", con ese nombre.
 func TestFicheroYaVistoNoCreaCarpetaDeArchivo(t *testing.T) {
-	url := os.Getenv("DATABASE_URL_TEST")
-	if url == "" {
-		t.Skip("sin DATABASE_URL_TEST")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
+	pool, q := base(t)
 	ctx := context.Background()
-	q := store.New(pool)
 	svc := ingest.NewService(pool, ingest.SingleAccount(nil), nil, 100)
 
 	entra := ingest.Pushed{
@@ -95,17 +76,8 @@ func TestFicheroYaVistoNoCreaCarpetaDeArchivo(t *testing.T) {
 // lleva consigo lo que ya había entrado por ella. Es el caso real: las 53 carpetas
 // entraron por migración con una credencial de relleno y todo cayó en "principal".
 func TestLaCarpetaAprendeSuSucursalYSeLlevaLoSuyo(t *testing.T) {
-	url := os.Getenv("DATABASE_URL_TEST")
-	if url == "" {
-		t.Skip("sin DATABASE_URL_TEST")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
+	pool, q := base(t)
 	ctx := context.Background()
-	q := store.New(pool)
 	svc := ingest.NewService(pool, ingest.SingleAccount(nil), slog.New(slog.NewTextHandler(os.Stderr, nil)), 100)
 
 	// Primero entra sin decir de qué cuenta viene: cae en la sucursal de relleno.
@@ -144,4 +116,42 @@ func TestLaCarpetaAprendeSuSucursalYSeLlevaLoSuyo(t *testing.T) {
 		t.Fatalf("el vendedor no se mudó a camaguey: %v", err)
 	}
 	t.Logf("vendedor %q en sucursal camaguey", v.Name)
+}
+
+// Un fichero YA VISTO también enseña a su carpeta de qué sucursal es.
+//
+// En la primera pasada con las cuentas bien, casi todo lo que llega ya está dentro.
+// Si el corte por repetido fuese antes, esas carpetas no se enterarían nunca y se
+// quedarían en la sucursal de relleno para siempre.
+func TestFicheroRepetidoIgualEnsenaLaSucursal(t *testing.T) {
+	pool, q := base(t)
+	ctx := context.Background()
+	svc := ingest.NewService(pool, ingest.SingleAccount(nil), slog.New(slog.NewTextHandler(os.Stderr, nil)), 100)
+
+	base := ingest.Pushed{
+		Account: "principal", FolderID: "carpeta-hol", DriveFileID: "f-hol",
+		Name: "20260811.gpx", FolderPath: []string{"GPSXenia"}, Content: []byte("<gpx></gpx>"),
+	}
+	if _, _, err := svc.Receive(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+
+	// El MISMO fichero otra vez, ahora con la cuenta de su provincia.
+	otra := base
+	otra.Account = "Holguín"
+	if _, _, err := svc.Receive(ctx, otra); err != nil {
+		t.Fatal(err)
+	}
+
+	suc, err := q.BranchByName(ctx, "Holguín")
+	if err != nil {
+		t.Fatalf("la carpeta no aprendió su sucursal con un fichero repetido: %v", err)
+	}
+	f, err := q.FileByDriveID(ctx, "f-hol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.BranchID == nil || *f.BranchID != suc.ID {
+		t.Fatalf("el fichero no se mudó: %v", f.BranchID)
+	}
 }
