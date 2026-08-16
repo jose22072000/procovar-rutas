@@ -277,12 +277,15 @@ func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, e
 func nombreDeCuenta(cuenta string) string {
 	c := strings.TrimSpace(cuenta)
 
-	// Si no es un correo, es el nombre de la sucursal escrito tal cual —lo manda la
-	// ingesta de esa provincia— y se respeta con sus tildes y sus mayúsculas. Eso
-	// importa: así el nombre coincide con el de la sucursal en Accesos ("Camagüey",
-	// "Sancti Spíritus") y las dos se pueden emparejar.
+	// Si no es un correo, es el nombre de la cuenta tal como lo enseña Drive
+	// ("Camagüey Procovar", "Habana Procovar"). Sobra el apellido de la empresa, y
+	// lo que queda es el nombre de la sucursal con sus tildes — igual que en
+	// Accesos, que es lo que permite emparejarlas.
 	if !strings.Contains(c, "@") {
-		return c
+		for _, cola := range []string{" Procovar", " procovar", " PROCOVAR"} {
+			c = strings.TrimSuffix(c, cola)
+		}
+		return strings.TrimSpace(c)
 	}
 
 	// Si es un correo, se saca la parte útil: las cuentas se llaman de las dos

@@ -186,6 +186,20 @@ export function dayName(iso: string): string {
   return days[new Date(`${iso.slice(0, 10)}T12:00:00Z`).getUTCDay()];
 }
 
+/** Todos los días entre dos fechas, ambas incluidas. Una columna por día. */
+export function diasEntre(desde: string, hasta: string): string[] {
+  const a = new Date(`${desde}T12:00:00Z`);
+  const b = new Date(`${hasta}T12:00:00Z`);
+  if (b < a) return [];
+  const dias: string[] = [];
+  for (let d = a; d <= b; d = new Date(d.getTime() + 86400000)) {
+    dias.push(d.toISOString().slice(0, 10));
+  }
+  // Un tope por si alguien escribe un año a mano: la cuadrícula no se puede pintar
+  // con 365 columnas, y el API tampoco lo aceptaría.
+  return dias.slice(0, 62);
+}
+
 /** Monday to Friday of the week containing the date. The working week is Mon–Fri. */
 export function workWeek(iso: string): string[] {
   const d = new Date(`${iso}T12:00:00Z`);

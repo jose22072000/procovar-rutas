@@ -21,6 +21,7 @@ import {
   dayName,
   ask,
   workWeek,
+  diasEntre,
   type DayStatus,
   type CalendarResponse,
 } from "@/lib/api";
@@ -31,23 +32,30 @@ function todayISO(): string {
 
 export default function Calendar() {
   const router = useRouter();
-  const [anchor, setAnchor] = useState(todayISO());
+  // Desde/hasta, no un día suelto: el control lo pediste así y además es lo mismo
+  // que ya acepta el API. La semana laboral de hoy es el punto de partida, que es
+  // lo que se quiere ver al entrar.
+  const semanaDeHoy = workWeek(todayISO());
+  const [desde, setDesde] = useState(semanaDeHoy[0]);
+  const [hasta, setHasta] = useState(semanaDeHoy[4]);
   const [data, setData] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const week = useMemo(() => workWeek(anchor), [anchor]);
+  // Los días del rango, uno por columna. Se calculan aquí y no en el API porque es
+  // la cuadrícula la que necesita saber qué columnas pintar, incluso las vacías.
+  const week = useMemo(() => diasEntre(desde, hasta), [desde, hasta]);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     ask<CalendarResponse>(
-      `/api/calendar?from=${week[0]}&to=${week[4]}`,
+      `/api/calendar?from=${desde}&to=${hasta}`,
     )
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [week]);
+  }, [desde, hasta]);
 
   // The grid is assembled on the client: the API returns loose rows, and seller ×
   // day are crossed here so that cells go missing rather than whole rows.
@@ -65,28 +73,57 @@ export default function Calendar() {
     return map;
   }, [data]);
 
+  // Mover el rango entero, manteniendo su longitud: si estás mirando tres días,
+  // "semana anterior" te lleva a los tres días de antes, no a una semana.
   function mover(days: number) {
-    const d = new Date(`${anchor}T12:00:00Z`);
-    setAnchor(new Date(d.getTime() + days * 86400000).toISOString().slice(0, 10));
+    const corre = (iso: string) =>
+      new Date(new Date(`${iso}T12:00:00Z`).getTime() + days * 86400000)
+        .toISOString()
+        .slice(0, 10);
+    setDesde(corre(desde));
+    setHasta(corre(hasta));
   }
 
   return (
     <>
       <h1>Calendario de cumplimiento</h1>
       <p className="sub">
-        Lunes a viernes. Cada celda es un día: tócala para ver el track en el
-        map.
+        Cada celda es un día: tócala para ver el recorrido en el mapa.
       </p>
 
       <div className="controles">
         <button className="pv-boton" onClick={() => mover(-7)}>← Semana anterior</button>
-        <input
-          type="date"
-          value={anchor}
-          onChange={(e) => setAnchor(e.target.value)}
-        />
+        <label>
+          Desde{" "}
+          <input
+            className="pv-campo"
+            type="date"
+            value={desde}
+            max={hasta}
+            onChange={(e) => setDesde(e.target.value)}
+          />
+        </label>
+        <label>
+          Hasta{" "}
+          <input
+            className="pv-campo"
+            type="date"
+            value={hasta}
+            min={desde}
+            onChange={(e) => setHasta(e.target.value)}
+          />
+        </label>
         <button className="pv-boton" onClick={() => mover(7)}>Semana siguiente →</button>
-        <button className="pv-boton" onClick={() => setAnchor(todayISO())}>Esta semana</button>
+        <button
+          className="pv-boton"
+          onClick={() => {
+            const s = workWeek(todayISO());
+            setDesde(s[0]);
+            setHasta(s[4]);
+          }}
+        >
+          Esta semana
+        </button>
       </div>
 
       {error && <p className="aviso">{error}</p>}
@@ -95,9 +132,9 @@ export default function Calendar() {
       {!loading && bySeller.size === 0 && !error && (
         <div className="tarjeta">
           <p>
-            No hay datos para esta semana. Si es la primera vez, hay que dar de
-            alta las carpetas de Drive en <b>Administración</b> y lanzar un
-            barrido.
+            No hay datos en ese rango. Si es la primera vez, las carpetas de Drive
+            se dan de alta solas en cuanto la ingesta de n8n empuja el primer
+            fichero de cada una.
           </p>
         </div>
       )}
