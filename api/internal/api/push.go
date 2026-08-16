@@ -161,3 +161,34 @@ func (s *Server) queueStats(w http.ResponseWriter, r *http.Request) {
 		"failed":     e.Failed,
 	})
 }
+
+// GET /api/ingest/folders — the folders n8n is allowed to read.
+//
+// It exists so the scan stops being "every .gpx in the account". Dropping the date
+// filter — needed for the backlog to ever get in — turned the search into a sweep of
+// the whole Drive, folders nobody asked about included. The registered folders live
+// here, so here is where the list belongs: n8n asks, and searches only inside those.
+//
+// Machine key, like the push: the caller is n8n, not a person.
+func (s *Server) ingestFolders(w http.ResponseWriter, r *http.Request) {
+	if !s.validServiceKey(r) {
+		respondError(w, http.StatusUnauthorized, "clave de servicio inválida")
+		return
+	}
+
+	fuentes, err := s.q.ActiveSources(r.Context())
+	if err != nil {
+		s.fail(w, "carpetas para la ingesta", err)
+		return
+	}
+
+	type carpeta struct {
+		FolderID string `json:"folderId"`
+		Name     string `json:"name"`
+	}
+	out := make([]carpeta, 0, len(fuentes))
+	for _, f := range fuentes {
+		out = append(out, carpeta{FolderID: f.FolderID, Name: f.Name})
+	}
+	respond(w, http.StatusOK, out)
+}
