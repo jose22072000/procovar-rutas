@@ -19,10 +19,13 @@ CLAVE = "14a657aaaf962ef033b1c508b6f6555f225a0c99d90f98358575d33e80f8cf98"
 DRIVE = "https://www.googleapis.com/drive/v3/files"
 
 # Cuántos ficheros SIN INGESTAR se baja como mucho una pasada. Los ya ingestados no
-# cuentan: esos sólo se apartan, que es una llamada y ya. El tope existe para que una
-# pasada termine siempre; lo que sobra entra en la siguiente, y el nodo lo dice en el
-# registro en vez de callárselo.
-TOPE_NUEVOS = 300
+# cuentan: esos sólo se apartan, que es una llamada y ya.
+#
+# Es un freno de emergencia, no un ritmo: alto a propósito para que el atraso se vacíe
+# de una vez en lugar de a trozos de 300 —una pasada tarda unos dos segundos por
+# fichero, así que mil son media hora larga y se aguanta—. Con el atraso vaciado, aquí
+# entran los treinta y pico ficheros del día y esto no vuelve a tocarse.
+TOPE_NUEVOS = 3000
 
 
 def cabecera_servicio():
