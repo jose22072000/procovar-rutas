@@ -181,7 +181,7 @@ func (s *Service) mismaCuenta(source store.DriveSource, cuenta string) bool {
 	if source.BranchID == nil || *source.BranchID == "" {
 		return false
 	}
-	suc, err := s.q.BranchByName(context.Background(), nombreDeCuenta(cuenta))
+	suc, err := s.q.BranchByKey(context.Background(), claveDeSucursal(nombreDeCuenta(cuenta)))
 	return err == nil && suc.ID == *source.BranchID
 }
 

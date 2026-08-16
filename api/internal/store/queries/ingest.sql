@@ -173,7 +173,12 @@ SELECT * FROM trabajador WHERE id = $1;
 -- Minimal inserts, for the integration tests only: branches and sellers are really
 -- created from procovar-auth, not from here.
 -- name: CreateTestBranch :one
-INSERT INTO sucursal (id, nombre, auth_org_id) VALUES ($1, $2, $3) RETURNING *;
+-- La clave se calcula aquí para no tener que repetirla en cada prueba: es la misma
+-- normalización que hace el código (sin tildes, sin espacios, minúsculas).
+INSERT INTO sucursal (id, nombre, auth_org_id, clave)
+VALUES ($1, $2, $3,
+    regexp_replace(lower(translate($2, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN')), '[^a-z0-9]', '', 'g'))
+RETURNING *;
 
 -- name: CreateTestSeller :one
 INSERT INTO trabajador (id, nombre, sucursal_id, auth_user_id, desde)
@@ -187,12 +192,20 @@ RETURNING *;
 -- already knows who is who. Making somebody match every folder to a person by hand
 -- would be asking them to type in what the folder already says.
 
--- name: BranchByName :one
-SELECT * FROM sucursal WHERE nombre = @name LIMIT 1;
+-- name: BranchByKey :one
+-- La sucursal se busca por su CLAVE, no por su nombre: la misma cuenta viene escrita
+-- de varias formas ("Camagüey Procovar", "camaguey.procovar@…", "santiagoprocovar")
+-- y todas tienen que caer en la misma fila.
+SELECT * FROM sucursal WHERE clave = @key LIMIT 1;
 
--- name: CreateBranchByName :one
-INSERT INTO sucursal (id, nombre) VALUES (@id, @name)
-ON CONFLICT DO NOTHING
+-- name: CreateBranchByKey :one
+-- Si dos empujes llegan a la vez, el segundo choca con el índice único y se queda con
+-- la que creó el primero, en vez de abrir otra. Así aparecieron siete "Guantánamo".
+INSERT INTO sucursal (id, nombre, clave) VALUES (@id, @name, @key)
+ON CONFLICT (clave) DO UPDATE SET nombre = CASE
+    WHEN length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
+    ELSE sucursal.nombre
+END
 RETURNING *;
 
 -- name: SellerByNameInBranch :one
@@ -251,11 +264,10 @@ mueve_dias AS (
     UPDATE track_day SET sucursal_id = @branch_id
     WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
     RETURNING 1
-),
-mueve_puntos AS (
-    UPDATE track_point SET sucursal_id = @branch_id
-    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
-    RETURNING 1
 )
+-- Los PUNTOS no se tocan a propósito. Son millones y su sucursal no la mira nadie:
+-- el panel filtra por track_day y por gpx_file. Actualizarlos aquí convertía una
+-- reasignación instantánea en minutos de espera, con n8n clavado esperando la
+-- respuesta.
 UPDATE trabajador SET sucursal_id = @branch_id, updated_at = now()
 WHERE id IN (SELECT trabajador_id FROM afectados);

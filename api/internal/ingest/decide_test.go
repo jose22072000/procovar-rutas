@@ -130,7 +130,7 @@ func TestNombreDeCuenta(t *testing.T) {
 	casos := map[string]string{
 		"habanaprocovar@gmail.com":    "habana",
 		"camaguey.procovar@gmail.com": "camaguey",
-		"Holguin.Procovar@gmail.com":  "holguin",
+		"Holguin.Procovar@gmail.com":  "Holguin",
 		"tablets.procovar@gmail.com":  "tablets",
 		"granma":                      "granma",
 		"":                            "",
@@ -138,6 +138,33 @@ func TestNombreDeCuenta(t *testing.T) {
 	for entra, espera := range casos {
 		if sale := nombreDeCuenta(entra); sale != espera {
 			t.Errorf("nombreDeCuenta(%q) = %q, esperaba %q", entra, sale, espera)
+		}
+	}
+}
+
+// Escriban la cuenta como la escriban, la sucursal tiene que ser LA MISMA.
+//
+// Esto es lo que se rompió en producción: la misma provincia llegó como "Camagüey
+// Procovar" desde el nombre visible y como "camaguey.procovar@gmail.com" desde el
+// correo, y acabaron siendo dos sucursales distintas — con siete "Guantánamo" y
+// cuatro "Holguin" por el camino. El nombre se guarda para leerlo; lo que decide si
+// una sucursal ya existe es la clave.
+func TestLaMismaCuentaDaLaMismaSucursal(t *testing.T) {
+	grupos := [][]string{
+		{"Camagüey Procovar", "camaguey.procovar@gmail.com", "CAMAGUEY", "camagüey"},
+		{"Holguín Procovar", "Holguin.Procovar@gmail.com", "holguinprocovar"},
+		{"Las Tunas Procovar", "lastunasprocovar@gmail.com", "LAS TUNAS"},
+		{"Santiago Procovar", "santiagoprocovar@gmail.com", "santiago"},
+	}
+	for _, formas := range grupos {
+		esperada := claveDeSucursal(nombreDeCuenta(formas[0]))
+		if esperada == "" {
+			t.Fatalf("clave vacía para %q", formas[0])
+		}
+		for _, f := range formas[1:] {
+			if k := claveDeSucursal(nombreDeCuenta(f)); k != esperada {
+				t.Errorf("%q da %q y %q da %q: serían dos sucursales", formas[0], esperada, f, k)
+			}
 		}
 	}
 }

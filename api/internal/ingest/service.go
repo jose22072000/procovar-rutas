@@ -258,12 +258,15 @@ func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, e
 		nombre = "principal"
 	}
 
-	if suc, err := s.q.BranchByName(ctx, nombre); err == nil {
+	clave := claveDeSucursal(nombre)
+	if suc, err := s.q.BranchByKey(ctx, clave); err == nil {
 		return suc.ID, nil
 	}
-	suc, err := s.q.CreateBranchByName(ctx, store.CreateBranchByNameParams{ID: newID(), Name: nombre})
+	suc, err := s.q.CreateBranchByKey(ctx, store.CreateBranchByKeyParams{
+		ID: newID(), Name: nombre, Key: clave,
+	})
 	if err != nil {
-		if suc2, err2 := s.q.BranchByName(ctx, nombre); err2 == nil {
+		if suc2, err2 := s.q.BranchByKey(ctx, clave); err2 == nil {
 			return suc2.ID, nil
 		}
 		return "", err
@@ -282,21 +285,54 @@ func nombreDeCuenta(cuenta string) string {
 	// lo que queda es el nombre de la sucursal con sus tildes — igual que en
 	// Accesos, que es lo que permite emparejarlas.
 	if !strings.Contains(c, "@") {
-		for _, cola := range []string{" Procovar", " procovar", " PROCOVAR"} {
-			c = strings.TrimSuffix(c, cola)
-		}
-		return strings.TrimSpace(c)
+		return limpiarApellido(c)
 	}
 
 	// Si es un correo, se saca la parte útil: las cuentas se llaman de las dos
 	// formas, "camaguey.procovar@…" y "habanaprocovar@…", y sobra el apellido en
 	// los dos casos.
-	c = strings.ToLower(c)
 	c = c[:strings.IndexByte(c, '@')]
 	if i := strings.IndexByte(c, '.'); i > 0 {
 		c = c[:i]
 	}
-	return strings.TrimSpace(strings.TrimSuffix(c, "procovar"))
+	return limpiarApellido(c)
+}
+
+// claveDeSucursal reduce el nombre a lo que de verdad lo identifica: sin tildes, sin
+// espacios y en minúsculas. "Las Tunas", "lastunas" y "LAS TUNAS" son la misma.
+//
+// El NOMBRE se guarda tal cual para leerlo; la clave es la que manda para decidir si
+// una sucursal ya existe.
+func claveDeSucursal(nombre string) string {
+	sustituye := strings.NewReplacer(
+		"á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u", "ñ", "n",
+		"Á", "a", "É", "e", "Í", "i", "Ó", "o", "Ú", "u", "Ü", "u", "Ñ", "n",
+	)
+	var b strings.Builder
+	for _, r := range sustituye.Replace(strings.ToLower(strings.TrimSpace(nombre))) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// limpiarApellido quita el "procovar" del final, venga como venga.
+//
+// Las cuentas están escritas de todas las formas: "Camagüey Procovar",
+// "santiagoprocovar", "camaguey.procovar@…". Sin quitarlo, la MISMA sucursal
+// aparecía dos veces con dos nombres distintos, y un gerente de "Santiago" no vería
+// lo que quedó en "santiagoprocovar".
+func limpiarApellido(s string) string {
+	s = strings.TrimSpace(s)
+	bajo := strings.ToLower(s)
+	for _, cola := range []string{" procovar", "-procovar", ".procovar", "procovar"} {
+		if strings.HasSuffix(bajo, cola) {
+			s = strings.TrimSpace(s[:len(s)-len(cola)])
+			break
+		}
+	}
+	return s
 }
 
 // processFile downloads a .gpx, judges it and stores it. Returns whether it was new.

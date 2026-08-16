@@ -11,7 +11,7 @@ import (
 )
 
 const activeBranches = `-- name: ActiveBranches :many
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE activa ORDER BY nombre
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE activa ORDER BY nombre
 `
 
 func (q *Queries) ActiveBranches(ctx context.Context) ([]Branch, error) {
@@ -31,6 +31,7 @@ func (q *Queries) ActiveBranches(ctx context.Context) ([]Branch, error) {
 			&i.Timezone,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Clave,
 		); err != nil {
 			return nil, err
 		}
@@ -247,7 +248,7 @@ func (q *Queries) BranchBreakdown(ctx context.Context) ([]BranchBreakdownRow, er
 }
 
 const branchByID = `-- name: BranchByID :one
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE id = $1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE id = $1
 `
 
 func (q *Queries) BranchByID(ctx context.Context, id string) (Branch, error) {
@@ -261,13 +262,14 @@ func (q *Queries) BranchByID(ctx context.Context, id string) (Branch, error) {
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Clave,
 	)
 	return i, err
 }
 
-const branchByName = `-- name: BranchByName :one
+const branchByKey = `-- name: BranchByKey :one
 
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE nombre = $1 LIMIT 1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE clave = $1 LIMIT 1
 `
 
 // Find-or-create by name, for the folder-name-is-the-seller flow.
@@ -276,8 +278,11 @@ SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM su
 // well enough for what the panel is for: a manager looks at their branch's GPS and
 // already knows who is who. Making somebody match every folder to a person by hand
 // would be asking them to type in what the folder already says.
-func (q *Queries) BranchByName(ctx context.Context, name string) (Branch, error) {
-	row := q.db.QueryRow(ctx, branchByName, name)
+// La sucursal se busca por su CLAVE, no por su nombre: la misma cuenta viene escrita
+// de varias formas ("Camagüey Procovar", "camaguey.procovar@…", "santiagoprocovar")
+// y todas tienen que caer en la misma fila.
+func (q *Queries) BranchByKey(ctx context.Context, key string) (Branch, error) {
+	row := q.db.QueryRow(ctx, branchByKey, key)
 	var i Branch
 	err := row.Scan(
 		&i.ID,
@@ -287,6 +292,7 @@ func (q *Queries) BranchByName(ctx context.Context, name string) (Branch, error)
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Clave,
 	)
 	return i, err
 }
@@ -377,19 +383,25 @@ func (q *Queries) CloseImportLog(ctx context.Context, arg CloseImportLogParams) 
 	return err
 }
 
-const createBranchByName = `-- name: CreateBranchByName :one
-INSERT INTO sucursal (id, nombre) VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at
+const createBranchByKey = `-- name: CreateBranchByKey :one
+INSERT INTO sucursal (id, nombre, clave) VALUES ($1, $2, $3)
+ON CONFLICT (clave) DO UPDATE SET nombre = CASE
+    WHEN length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
+    ELSE sucursal.nombre
+END
+RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave
 `
 
-type CreateBranchByNameParams struct {
+type CreateBranchByKeyParams struct {
 	ID   string
 	Name string
+	Key  string
 }
 
-func (q *Queries) CreateBranchByName(ctx context.Context, arg CreateBranchByNameParams) (Branch, error) {
-	row := q.db.QueryRow(ctx, createBranchByName, arg.ID, arg.Name)
+// Si dos empujes llegan a la vez, el segundo choca con el índice único y se queda con
+// la que creó el primero, en vez de abrir otra. Así aparecieron siete "Guantánamo".
+func (q *Queries) CreateBranchByKey(ctx context.Context, arg CreateBranchByKeyParams) (Branch, error) {
+	row := q.db.QueryRow(ctx, createBranchByKey, arg.ID, arg.Name, arg.Key)
 	var i Branch
 	err := row.Scan(
 		&i.ID,
@@ -399,6 +411,7 @@ func (q *Queries) CreateBranchByName(ctx context.Context, arg CreateBranchByName
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Clave,
 	)
 	return i, err
 }
@@ -524,7 +537,10 @@ func (q *Queries) CreateStop(ctx context.Context, arg CreateStopParams) error {
 }
 
 const createTestBranch = `-- name: CreateTestBranch :one
-INSERT INTO sucursal (id, nombre, auth_org_id) VALUES ($1, $2, $3) RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at
+INSERT INTO sucursal (id, nombre, auth_org_id, clave)
+VALUES ($1, $2, $3,
+    regexp_replace(lower(translate($2, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN')), '[^a-z0-9]', '', 'g'))
+RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave
 `
 
 type CreateTestBranchParams struct {
@@ -535,6 +551,8 @@ type CreateTestBranchParams struct {
 
 // Minimal inserts, for the integration tests only: branches and sellers are really
 // created from procovar-auth, not from here.
+// La clave se calcula aquí para no tener que repetirla en cada prueba: es la misma
+// normalización que hace el código (sin tildes, sin espacios, minúsculas).
 func (q *Queries) CreateTestBranch(ctx context.Context, arg CreateTestBranchParams) (Branch, error) {
 	row := q.db.QueryRow(ctx, createTestBranch, arg.ID, arg.Name, arg.AuthOrgID)
 	var i Branch
@@ -546,6 +564,7 @@ func (q *Queries) CreateTestBranch(ctx context.Context, arg CreateTestBranchPara
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Clave,
 	)
 	return i, err
 }
@@ -782,11 +801,6 @@ mueve_dias AS (
     UPDATE track_day SET sucursal_id = $1
     WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
     RETURNING 1
-),
-mueve_puntos AS (
-    UPDATE track_point SET sucursal_id = $1
-    WHERE trabajador_id IN (SELECT trabajador_id FROM afectados)
-    RETURNING 1
 )
 UPDATE trabajador SET sucursal_id = $1, updated_at = now()
 WHERE id IN (SELECT trabajador_id FROM afectados)
@@ -803,6 +817,10 @@ type MoveSourceDataToBranchParams struct {
 // Hace falta porque las carpetas se dieron de alta con una credencial de relleno y
 // todo cayó en una sucursal llamada "principal". Sin esto habría que borrar y volver
 // a ingerir, y los ficheros ya están apartados en Drive: no volverían a entrar.
+// Los PUNTOS no se tocan a propósito. Son millones y su sucursal no la mira nadie:
+// el panel filtra por track_day y por gpx_file. Actualizarlos aquí convertía una
+// reasignación instantánea en minutos de espera, con n8n clavado esperando la
+// respuesta.
 func (q *Queries) MoveSourceDataToBranch(ctx context.Context, arg MoveSourceDataToBranchParams) error {
 	_, err := q.db.Exec(ctx, moveSourceDataToBranch, arg.BranchID, arg.SourceID)
 	return err

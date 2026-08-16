@@ -98,7 +98,7 @@ func TestLaCarpetaAprendeSuSucursalYSeLlevaLoSuyo(t *testing.T) {
 		t.Fatalf("segunda entrada: %v", err)
 	}
 
-	suc, err := q.BranchByName(ctx, "camaguey")
+	suc, err := q.BranchByKey(ctx, "camaguey")
 	if err != nil {
 		t.Fatalf("no se creó la sucursal camaguey: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestFicheroRepetidoIgualEnsenaLaSucursal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	suc, err := q.BranchByName(ctx, "Holguín")
+	suc, err := q.BranchByKey(ctx, "holguin")
 	if err != nil {
 		t.Fatalf("la carpeta no aprendió su sucursal con un fichero repetido: %v", err)
 	}

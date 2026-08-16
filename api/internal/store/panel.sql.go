@@ -110,7 +110,7 @@ func (q *Queries) BranchAliases(ctx context.Context, branchID string) ([]BranchA
 }
 
 const branchByAuthOrg = `-- name: BranchByAuthOrg :one
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at FROM sucursal WHERE auth_org_id = $1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE auth_org_id = $1
 `
 
 func (q *Queries) BranchByAuthOrg(ctx context.Context, authOrgID *string) (Branch, error) {
@@ -124,6 +124,7 @@ func (q *Queries) BranchByAuthOrg(ctx context.Context, authOrgID *string) (Branc
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Clave,
 	)
 	return i, err
 }

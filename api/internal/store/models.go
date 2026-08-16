@@ -240,6 +240,7 @@ type Branch struct {
 	Timezone  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Clave     string
 }
 
 type BranchSettings struct {
