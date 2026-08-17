@@ -86,6 +86,20 @@ type Identity struct {
 	Name       string
 	Role       scope.Role
 	AuthOrgID  string
+	// Permisos: lo que procovar-auth dice que esta persona puede hacer. Es la
+	// autoridad, no una copia de lo que se decida aquí: los permisos se reparten
+	// allí, en una sola pantalla, para las seis aplicaciones a la vez.
+	Permisos map[string]bool
+	// Wildcard: el Super Admin. Puede con todo sin que haya que enumerárselo.
+	Wildcard bool
+}
+
+// Puede responde si esta persona tiene esa llave.
+func (i Identity) Puede(clave string) bool {
+	if i.Wildcard {
+		return true
+	}
+	return i.Permisos[clave]
 }
 
 // Translate turns procovar-auth's response into an identity for this application.
@@ -98,15 +112,29 @@ func (s *Session) Translate() Identity {
 
 	if m := s.ActiveMembership(); m != nil {
 		id.AuthOrgID = m.Organization.ID
-		id.Role = MapRole(m.Roles, s.User.IsSystemAdmin)
-	} else {
-		id.Role = MapRole(nil, s.User.IsSystemAdmin)
 	}
 
-	// procovar-auth's resolved RBAC is the second source: if the membership carried
-	// no recognisable role, it is checked before giving up.
+	// El rol viene de procovar-auth, que es donde se reparte.
+	//
+	// Se mira PRIMERO `role` y `rbac.roles`, que traen el nombre del catálogo
+	// ("SUPERVISOR"), y solo después la membresía. Al revés no funcionaba: en la
+	// membresía va la columna de better-auth, que dice "owner" o "member" —su
+	// vocabulario, no el de Procovar—, así que una supervisora se quedaba sin rol
+	// reconocible y sin entrar. Daba 403 y una pantalla en blanco.
+	id.Role = MapRole(append([]string{s.Rol}, s.Rbac.Roles...), s.User.IsSystemAdmin)
 	if id.Role == "" {
-		id.Role = MapRole(s.Rbac.Roles, s.User.IsSystemAdmin)
+		if m := s.ActiveMembership(); m != nil {
+			id.Role = MapRole(m.Roles, s.User.IsSystemAdmin)
+		}
+	}
+
+	// Y los permisos, tal cual: aquí no se decide nada, se obedece.
+	id.Wildcard = s.Rbac.Wildcard || s.User.IsSystemAdmin
+	id.Permisos = map[string]bool{}
+	for _, claves := range [][]string{s.Rbac.Permissions, s.Rbac.Global} {
+		for _, k := range claves {
+			id.Permisos[k] = true
+		}
 	}
 
 	return id

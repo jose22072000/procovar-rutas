@@ -83,25 +83,35 @@ func (s *Server) Routes() http.Handler {
 
 		r.Get("/me", s.me)
 		r.Get("/events", s.events)
-		r.Get("/calendar", s.calendar)
 		r.Get("/sellers", s.sellers)
-		r.Get("/day", s.day)
-		r.Get("/week", s.week)
-		r.Get("/report", s.report)
+
+		// Cada vista, su llave. Se exige AQUÍ y no solo en la pantalla: una función
+		// que desaparece del menú pero sigue contestando por su URL no está quitada.
+		r.With(Exige(PermCalendario)).Get("/calendar", s.calendar)
+		r.With(Exige(PermVisor)).Get("/day", s.day)
+		r.With(Exige(PermVisor)).Get("/week", s.week)
+		r.With(Exige(PermReporte)).Get("/report", s.report)
 
 		r.Group(func(r chi.Router) {
-			r.Use(AdminOnly)
+			r.Use(Exige(PermBandeja))
 			r.Get("/inbox", s.inbox)
 			r.Post("/inbox/assign", s.assign)
-			r.Get("/aliases", s.listAliases)
-			r.Delete("/aliases/{id}", s.deleteAlias)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(Exige(PermAdministracion))
 			r.Get("/sources", s.sources)
-			r.Post("/sources", s.createSource)
-			r.Delete("/sources/{id}", s.deleteSource)
-			r.Post("/ingest/scan", s.scan)
 			r.Get("/scans", s.scans)
 			r.Get("/queue", s.queueStats)
 			r.Get("/ingest/status", s.adminIngestStats)
+			r.Get("/aliases", s.listAliases)
+
+			// Ver Administración y TOCARLA son dos cosas: un gerente puede querer
+			// mirar si las carpetas están al día sin poder darlas de baja.
+			r.With(Exige(PermCarpeta)).Post("/sources", s.createSource)
+			r.With(Exige(PermCarpeta)).Delete("/sources/{id}", s.deleteSource)
+			r.With(Exige(PermAlias)).Delete("/aliases/{id}", s.deleteAlias)
+			r.With(Exige(PermBarrido)).Post("/ingest/scan", s.scan)
 		})
 	})
 

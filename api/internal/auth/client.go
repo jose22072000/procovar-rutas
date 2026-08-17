@@ -85,7 +85,15 @@ type Session struct {
 	User        Usuario       `json:"user"`
 	Session     SesionInterna `json:"session"`
 	Memberships []Membresia   `json:"memberships"`
-	Rbac        struct {
+	// Rol es el de la PERSONA, tal como lo escribe procovar-auth ("SUPERVISOR").
+	Rol  string `json:"role"`
+	Rbac struct {
+		// Wildcard: el Super Admin, que puede en todas partes sin pertenecer a
+		// ninguna sucursal.
+		Wildcard bool `json:"wildcard"`
+		// Las dos llegan con el mismo contenido; `global` es como lo llama
+		// procovar-auth por dentro y `permissions` como lo publica.
+		Global      []string `json:"global"`
 		Permissions []string `json:"permissions"`
 		Roles       []string `json:"roles"`
 	} `json:"rbac"`

@@ -16,6 +16,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import RangoFechas from "@/components/RangoFechas";
+import SinPermiso from "@/components/SinPermiso";
+import { useSesion } from "@/components/Sesion";
 import {
   STATUS_LABEL,
   shortDate,
@@ -33,6 +35,7 @@ function todayISO(): string {
 
 export default function Calendar() {
   const router = useRouter();
+  const { cargando, vetado, puede } = useSesion();
   // Un solo calendario, y sobre él se marca desde dónde hasta dónde. Antes eran un
   // campo de fecha y una lista de tramos ("su semana", "15 días desde ahí"): para
   // ver del 3 al 11 había que elegir el tramo que menos se pasara.
@@ -94,6 +97,12 @@ export default function Calendar() {
     setHasta(s[4]);
   }
 
+  // Antes de pintar nada: si esto no es suyo, no se pinta. Ni la tabla a medias ni
+  // el aviso encima de los datos.
+  if (cargando) return <p className="cargando">Cargando…</p>;
+  if (vetado) return <SinPermiso que="Rutas" detalle={vetado.replace("sin permiso: ", "")} />;
+  if (!puede("rutas.calendario")) return <SinPermiso que="el calendario" detalle="rutas.calendario" />;
+
   return (
     <>
       <h1>Calendario de cumplimiento</h1>
@@ -101,7 +110,8 @@ export default function Calendar() {
         Cada celda es un día: tócala para ver el recorrido en el mapa.
       </p>
 
-      <div className="controles" style={{ alignItems: "flex-start" }}>
+      <div className="controles">
+        <button className="pv-boton" onClick={() => mover(-7)} aria-label="Semana anterior">←</button>
         <RangoFechas
           desde={desde}
           hasta={hasta}
@@ -110,11 +120,12 @@ export default function Calendar() {
             setHasta(h);
           }}
         />
-        <div className="controles" style={{ marginBottom: 0 }}>
-          <button className="pv-boton" onClick={() => mover(-7)}>← Semana anterior</button>
-          <button className="pv-boton" onClick={() => mover(7)}>Semana siguiente →</button>
-          <button className="pv-boton" onClick={estaSemana}>Esta semana</button>
-        </div>
+        <button className="pv-boton" onClick={() => mover(7)} aria-label="Semana siguiente">→</button>
+        <button className="pv-boton" onClick={estaSemana}>Esta semana</button>
+        <span className="controles-cuenta">
+          {week.length} {week.length === 1 ? "día" : "días"}
+          {bySeller.size > 0 ? ` · ${bySeller.size} vendedores` : ""}
+        </span>
       </div>
 
       {error && <p className="aviso">{error}</p>}

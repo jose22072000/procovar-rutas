@@ -13,6 +13,8 @@ import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import SinPermiso from "@/components/SinPermiso";
+import { useSesion } from "@/components/Sesion";
 import {
   FLAG_LABEL,
   STATUS_LABEL,
@@ -27,6 +29,7 @@ const MapaRuta = dynamic(() => import("@/components/RouteMap"), {
 });
 
 function Visor() {
+  const { cargando, vetado, puede } = useSesion();
   const params = useSearchParams();
   const seller = params.get("seller") ?? "";
   const fecha = params.get("fecha") ?? "";
@@ -57,6 +60,10 @@ function Visor() {
       .slice(0, 10);
     return `/dia?seller=${seller}&fecha=${nueva}`;
   }
+
+  if (cargando) return <p className="cargando">Cargando…</p>;
+  if (vetado) return <SinPermiso que="Rutas" detalle={vetado.replace("sin permiso: ", "")} />;
+  if (!puede("rutas.visor")) return <SinPermiso que="el recorrido" detalle="rutas.visor" />;
 
   if (!seller || !fecha) {
     return <p className="aviso">Falta el vendedor o la fecha.</p>;

@@ -12,6 +12,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ask } from "@/lib/api";
+import SinPermiso from "@/components/SinPermiso";
+import { useSesion } from "@/components/Sesion";
 
 interface Movimiento {
   type: string;
@@ -59,6 +61,7 @@ interface Documento {
 }
 
 function Reporte() {
+  const { cargando, vetado, puede } = useSesion();
   const params = useSearchParams();
   const router = useRouter();
   const seller = params.get("seller") ?? "";
@@ -89,6 +92,11 @@ function Reporte() {
   }, [seller, from, to]);
 
   if (error) return <p className="aviso">{error}</p>;
+  // El permiso ANTES que los datos: si no le toca, no se pinta ni el "cargando".
+  if (cargando) return <p className="cargando">Cargando…</p>;
+  if (vetado) return <SinPermiso que="Rutas" detalle={vetado.replace("sin permiso: ", "")} />;
+  if (!puede("rutas.reporte")) return <SinPermiso que="el reporte" detalle="rutas.reporte" />;
+
   if (!doc) return <p className="cargando">Armando el reporte…</p>;
 
   const incidencias =

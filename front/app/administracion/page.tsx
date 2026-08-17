@@ -8,6 +8,8 @@
 import { useEffect, useState } from "react";
 import { useEvents } from "@/lib/events";
 import { enviar, ask, borrar } from "@/lib/api";
+import SinPermiso from "@/components/SinPermiso";
+import { useSesion } from "@/components/Sesion";
 
 interface Fuente {
   id: string;
@@ -73,6 +75,7 @@ interface Barrido {
 }
 
 export default function Administracion() {
+  const { cargando, vetado, puede } = useSesion();
   const [fuentes, setFuentes] = useState<Fuente[]>([]);
   const [alias, setAlias] = useState<Alias[]>([]);
   const [barridos, setBarridos] = useState<Barrido[]>([]);
@@ -171,6 +174,10 @@ export default function Administracion() {
   }
 
   const fallando = fuentes.filter((f) => comoVa(f).mal);
+
+  if (cargando) return <p className="cargando">Cargando…</p>;
+  if (vetado) return <SinPermiso que="Rutas" detalle={vetado.replace("sin permiso: ", "")} />;
+  if (!puede("rutas.administracion")) return <SinPermiso que="Administración" detalle="rutas.administracion" />;
 
   return (
     <>

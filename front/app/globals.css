@@ -657,12 +657,23 @@ h1 {
    Un calendario del mes con el rango pintado encima. Los colores salen de las
    mismas variables que el resto: si la paleta cambia, esto cambia con ella. */
 
+/* El botón que dice qué rango se está mirando, y el panel que cuelga de él. */
+.rango { position: relative; display: inline-block; }
+
+.rango-boton { gap: 9px; }
+.rango-icono { color: var(--pv-azul); }
+.rango-flecha { color: var(--pv-tinta-suave); font-size: 10px; }
+
 .calendario {
-    display: inline-block;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
     padding: 0.75rem;
     background: var(--pv-blanco);
-    border: 1px solid var(--pv-trazo-tenue);
-    border-radius: var(--pv-radio);
+    border: 1px solid var(--pv-trazo);
+    border-radius: var(--pv-radio-grande);
+    box-shadow: 0 10px 30px rgb(0 0 0 / .13);
 }
 
 .calendario-cabecera {
@@ -730,3 +741,51 @@ h1 {
    lista que no se lee. */
 .grupo-carpetas { margin-top: 1rem; }
 .grupo-carpetas .pv-rotulo { padding-bottom: 4px; border-bottom: 1px solid var(--pv-trazo-tenue); }
+
+/* Lo que se está mirando, al final de la barra de controles: cuántos días y
+   cuánta gente. Sin esto hay que contar las columnas para saberlo. */
+.controles-cuenta {
+    margin-left: auto;
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pv-tinta-suave);
+}
+
+/* ── Cuando no hay permiso ───────────────────────────────────────────────────
+   Ocupa la pantalla: no se pinta la vista debajo. Ver a medias lo que no se
+   debía ver, aunque sea un segundo, es haberlo visto. */
+
+.sin-permiso {
+    max-width: 34rem;
+    margin: 4rem auto;
+    padding: 2rem;
+    text-align: center;
+    background: var(--pv-blanco);
+    border: 1px solid var(--pv-trazo-tenue);
+    border-radius: var(--pv-radio-grande);
+}
+
+.sin-permiso-icono { font-size: 2rem; }
+.sin-permiso h1 { margin: 0.75rem 0 0.5rem; font-size: 1.25rem; }
+.sin-permiso p { margin: 0 auto 0.75rem; max-width: 30rem; color: var(--pv-tinta-suave); font-size: 14px; }
+
+.sin-permiso-clave {
+    font-size: 12px;
+}
+.sin-permiso-clave code {
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    background: var(--pv-azul-tinte);
+    color: var(--pv-azul);
+    padding: 2px 6px;
+    border-radius: var(--pv-radio);
+}
+
+.sin-permiso-salidas {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+}

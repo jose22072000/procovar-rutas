@@ -111,11 +111,21 @@ func (s *Server) cookie(valor string, maxEdad int) *http.Cookie {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	c := FromContext(r)
+
+	// Qué llaves tiene, para que la pantalla esconda lo que no puede usar. La
+	// pantalla no decide: pregunta. Y aunque no escondiera nada, la API contesta 403
+	// igual, que es donde se sostiene de verdad.
+	permisos := map[string]bool{}
+	for _, k := range TodasLasLlaves {
+		permisos[k] = c.Puede(k)
+	}
+
 	respond(w, http.StatusOK, map[string]any{
 		"user":     c.Name,
 		"email":    c.Email,
 		"role":     c.Role,
 		"branchId": c.BranchID,
-		"isAdmin":  c.Role == "super_admin" || c.Role == "admin",
+		"isAdmin":  c.Puede(PermAdministracion),
+		"permisos": permisos,
 	})
 }

@@ -11,6 +11,8 @@
 import { useEffect, useState } from "react";
 import { useEvents } from "@/lib/events";
 import { enviar, ask } from "@/lib/api";
+import SinPermiso from "@/components/SinPermiso";
+import { useSesion } from "@/components/Sesion";
 
 interface FicheroBandeja {
   id: string;
@@ -38,6 +40,7 @@ const MOTIVOS: Record<string, string> = {
 };
 
 export default function Bandeja() {
+  const { cargando, vetado, puede } = useSesion();
   const [ficheros, setFicheros] = useState<FicheroBandeja[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +86,10 @@ export default function Bandeja() {
       setGuardando(null);
     }
   }
+
+  if (cargando) return <p className="cargando">Cargando…</p>;
+  if (vetado) return <SinPermiso que="Rutas" detalle={vetado.replace("sin permiso: ", "")} />;
+  if (!puede("rutas.bandeja")) return <SinPermiso que="la bandeja" detalle="rutas.bandeja" />;
 
   return (
     <>

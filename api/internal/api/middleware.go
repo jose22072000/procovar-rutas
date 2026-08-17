@@ -60,15 +60,18 @@ func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 		}
 
 		identidad := sesion.Translate()
-		if identidad.Role == "" {
-			respondError(w, http.StatusForbidden, "este usuario no tiene un rol con acceso al panel de rutas")
+
+		// Quien entra es quien tiene la llave de entrada, no quien tenga un rol que
+		// esta aplicación reconozca. Los permisos los reparte Accesos, y así quitarle
+		// Rutas a alguien es desmarcar una casilla allí y no tocar código aquí.
+		if !identidad.Puede(PermEntrar) {
+			respondError(w, http.StatusForbidden, "sin permiso: "+PermEntrar)
 			return
 		}
-		if identidad.Role == scope.RoleAgent {
-			// Cut off here and not in every handler: the seller does not come in, and
-			// the message explains why instead of showing an empty screen.
-			respondError(w, http.StatusForbidden,
-				"el panel de rutas es para supervisión; los sellers no tienen acceso")
+		if identidad.Role == "" {
+			// Con permiso pero sin rol conocido no se puede calcular qué vendedores le
+			// tocan, y enseñárselos todos sería peor que no enseñar nada.
+			respondError(w, http.StatusForbidden, "este usuario no tiene un rol con acceso al panel de rutas")
 			return
 		}
 
@@ -125,11 +128,13 @@ func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, 
 }
 
 // AdminOnly guards what only super admins and administrators may touch.
+// AdminOnly queda para lo que no tiene llave propia todavía. Lo que sí la tiene se
+// exige con Exige(...), que es lo que permite repartirlo desde Accesos.
 func AdminOnly(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := FromContext(r)
-		if c == nil || !scope.CanAdminister(c.Role) {
-			respondError(w, http.StatusForbidden, "hace falta ser administrador")
+		if c == nil || !c.Puede(PermAdministracion) {
+			respondError(w, http.StatusForbidden, "sin permiso: "+PermAdministracion)
 			return
 		}
 		siguiente.ServeHTTP(w, r)

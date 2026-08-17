@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import Image from "next/image";
-import Link from "next/link";
-import Session from "@/components/Session";
+import { Sesion } from "@/components/Sesion";
 import "./globals.css";
 
 /**
@@ -58,24 +56,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${archivo.variable} ${plex.variable} ${plexMono.variable}`}>
       <body>
-        <header className="barra">
-          {/* The wordmark exactly as Accesos uses it: 516×119 artwork, set by
-              height with the width left free. Boxing it or forcing it square
-              squashes the letters into an illegible smudge — which is what it did
-              the first time round. The application's name goes beside it, because
-              that is the only thing that changes between Procovar's panels. */}
-          <Link href="/" className="marca">
-            <Image src="/logo.png" alt="Procovar" width={150} height={30} className="marca-logo" priority />
-            <span className="marca-app">Rutas</span>
-          </Link>
-          <nav>
-            <Link href="/">Calendario</Link>
-            <Link href="/bandeja">Bandeja</Link>
-            <Link href="/administracion">Administración</Link>
-          </nav>
-          <Session />
-        </header>
-        <main>{children}</main>
+        {/* La barra vive dentro de Sesion: el menú depende de lo que pueda esta
+            persona, y eso solo se sabe después de preguntar. */}
+        <Sesion>{children}</Sesion>
       </body>
     </html>
   );

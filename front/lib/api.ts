@@ -10,6 +10,22 @@
 export const API =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3600";
 
+/** Accesos: donde se reparten los permisos y donde se cierra la sesión. */
+export const AUTH =
+  process.env.NEXT_PUBLIC_AUTH_URL ?? "https://auth.procovar.cloud";
+
+/** Las llaves de esta aplicación, tal como las manda `/api/me`. */
+export type Permisos = Record<string, boolean>;
+
+export interface Yo {
+  user: string;
+  email: string;
+  role: string;
+  branchId: string;
+  isAdmin: boolean;
+  permisos: Permisos;
+}
+
 export type DayStatus =
   | "OK"
   | "SIN_FICHERO"
