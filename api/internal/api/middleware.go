@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -72,7 +73,15 @@ func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 		if identidad.Role == "" {
 			// Con permiso pero sin rol conocido no se puede calcular qué vendedores le
 			// tocan, y enseñárselos todos sería peor que no enseñar nada.
-			respondError(w, http.StatusForbidden, "este usuario no tiene un rol con acceso al panel de rutas")
+			//
+			// El mensaje dice QUÉ ROLES llegaron. Sin eso, "no tiene un rol con
+			// acceso" es indistinguible de "tiene uno que aquí no se reconoce", y son
+			// dos arreglos distintos en dos sitios distintos.
+			s.log.Warn("sesión sin rol reconocible",
+				"usuario", identidad.Email, "role", sesion.Rol, "rbac.roles", sesion.Rbac.Roles)
+			respondError(w, http.StatusForbidden,
+				"este usuario no tiene un rol que rutas reconozca (recibido: "+
+					strings.Join(append([]string{sesion.Rol}, sesion.Rbac.Roles...), ", ")+")")
 			return
 		}
 
