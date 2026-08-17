@@ -106,21 +106,33 @@ func Compute(s Session, fecha time.Time, vigencias []Term) (Filter, error) {
 		return Filter{BranchID: s.BranchID, SellerNot: s.SellerID}, nil
 
 	case RoleSupervisor:
-		if s.SellerID == "" {
-			return Filter{Empty: true}, nil
-		}
+		// Con equipo asignado, su equipo. Sin equipo asignado, SU SUCURSAL.
+		//
+		// Antes, sin vigencias no veía nada, y eso convertía el panel en una pantalla
+		// vacía para la única persona que lo iba a usar todos los días: una
+		// supervisora de sucursal entra a mirar a los vendedores de su sucursal, y
+		// las vigencias —que existen para poder preguntar "¿de quién era Alexander en
+		// agosto?"— no están dadas de alta ni hay dónde darlas.
+		//
+		// No es abrir la mano: no ve otra sucursal, y no se ve a sí misma. En cuanto
+		// se le asigne equipo, el equipo manda y esto deja de aplicar.
 		suyos := []string{}
-		for _, id := range ActiveAgents(vigencias, s.SellerID, fecha) {
-			if id != s.SellerID {
-				suyos = append(suyos, id)
+		if s.SellerID != "" {
+			for _, id := range ActiveAgents(vigencias, s.SellerID, fecha) {
+				if id != s.SellerID {
+					suyos = append(suyos, id)
+				}
 			}
 		}
-		// With no team in force on that date they see nothing. Returning
-		// "everything" when in doubt would be the classic fail-open.
-		if len(suyos) == 0 {
+		if len(suyos) > 0 {
+			return Filter{SellersIn: suyos, SellerNot: s.SellerID}, nil
+		}
+		if s.BranchID == "" {
+			// Sin sucursal no hay a qué limitarla, y devolverlo todo sí sería abrir
+			// la mano.
 			return Filter{Empty: true}, nil
 		}
-		return Filter{SellersIn: suyos, SellerNot: s.SellerID}, nil
+		return Filter{BranchID: s.BranchID, SellerNot: s.SellerID}, nil
 
 	case RoleAgent:
 		return Filter{Empty: true}, ErrNoAccess

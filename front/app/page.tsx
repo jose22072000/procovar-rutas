@@ -111,7 +111,11 @@ export default function Calendar() {
       </p>
 
       <div className="controles">
-        <button className="pv-boton" onClick={() => mover(-7)} aria-label="Semana anterior">←</button>
+        <button className="pv-boton" onClick={() => mover(-7)} aria-label="Semana anterior">
+          <svg className="flecha" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M14.5 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         <RangoFechas
           desde={desde}
           hasta={hasta}
@@ -120,7 +124,11 @@ export default function Calendar() {
             setHasta(h);
           }}
         />
-        <button className="pv-boton" onClick={() => mover(7)} aria-label="Semana siguiente">→</button>
+        <button className="pv-boton" onClick={() => mover(7)} aria-label="Semana siguiente">
+          <svg className="flecha" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M9.5 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         <button className="pv-boton" onClick={estaSemana}>Esta semana</button>
         <span className="controles-cuenta">
           {week.length} {week.length === 1 ? "día" : "días"}

@@ -592,6 +592,27 @@ func (q *Queries) IncidentSummary(ctx context.Context, arg IncidentSummaryParams
 	return items, nil
 }
 
+const linkBranchToAuthOrg = `-- name: LinkBranchToAuthOrg :exec
+UPDATE sucursal SET auth_org_id = $1, updated_at = now()
+WHERE id = $2 AND (auth_org_id IS NULL OR auth_org_id = '')
+`
+
+type LinkBranchToAuthOrgParams struct {
+	AuthOrgID *string
+	ID        string
+}
+
+// Atar la sucursal de aquí con la organización de Accesos.
+//
+// Las sucursales de aquí nacieron del nombre de la cuenta de Drive y las de Accesos
+// se crearon a mano, así que son las mismas con nombres distintos y sin nada que las
+// una. Se atan la primera vez que entra alguien de esa sucursal, y a partir de ahí la
+// búsqueda es directa.
+func (q *Queries) LinkBranchToAuthOrg(ctx context.Context, arg LinkBranchToAuthOrgParams) error {
+	_, err := q.db.Exec(ctx, linkBranchToAuthOrg, arg.AuthOrgID, arg.ID)
+	return err
+}
+
 const recentScans = `-- name: RecentScans :many
 SELECT id, source_id, tipo, inicio, fin, ficheros_vistos, ficheros_nuevos, ficheros_error, puntos_insertados, ok, detalle FROM import_log ORDER BY inicio DESC LIMIT $1
 `

@@ -139,22 +139,39 @@ export default function RangoFechas({
           setAbierto((v) => !v);
         }}
       >
-        <span className="rango-icono" aria-hidden>▦</span>
+        {/* Iconos dibujados, no caracteres sueltos: un ▦ o un ▾ dependen de la
+            fuente que tenga la máquina y se ven distintos en cada una. */}
+        <svg className="rango-icono" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
         <b>{comoSeLee(desde, hasta)}</b>
-        <span className="rango-flecha" aria-hidden>{abierto ? "▴" : "▾"}</span>
+        <svg
+          className="rango-flecha"
+          viewBox="0 0 24 24"
+          fill="none"
+          data-abierto={abierto || undefined}
+          aria-hidden
+        >
+          <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       {abierto && (
         <div className="calendario" onMouseLeave={() => setEncima(null)}>
           <div className="calendario-cabecera">
-            <button className="pv-boton" onClick={() => moverMes(-1)} aria-label="Mes anterior">
-              ‹
+            <button className="pv-boton calendario-mes" onClick={() => moverMes(-1)} aria-label="Mes anterior">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M14.5 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
             <b>
               {MESES[mes.getMonth()]} {mes.getFullYear()}
             </b>
-            <button className="pv-boton" onClick={() => moverMes(1)} aria-label="Mes siguiente">
-              ›
+            <button className="pv-boton calendario-mes" onClick={() => moverMes(1)} aria-label="Mes siguiente">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M9.5 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           </div>
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/procovar/procovar-rutas/api/internal/auth"
 	"github.com/procovar/procovar-rutas/api/internal/scope"
+	"github.com/procovar/procovar-rutas/api/internal/store"
 )
 
 // SessionCookie is the one procovar-auth sets and every application under the
@@ -106,6 +107,25 @@ func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, 
 	if id.AuthOrgID != "" {
 		if suc, err := s.q.BranchByAuthOrg(ctx, &id.AuthOrgID); err == nil {
 			c.BranchID = suc.ID
+		} else if id.AuthOrgNombre != "" {
+			// Todavía no están atadas. Las sucursales de aquí nacieron del nombre de
+			// la cuenta de Drive ("Bayamo") y las de Accesos se crearon a mano
+			// ("Granma"): son la misma y no había nada que las uniera, así que quien
+			// entraba se quedaba sin sucursal —y una supervisora sin sucursal no ve a
+			// nadie.
+			//
+			// Se cruzan por la clave, y al encontrarla se atan: la próxima vez la
+			// búsqueda es directa y esto no vuelve a correr.
+			if suc, err := s.q.BranchByKey(ctx, claveDeSucursal(id.AuthOrgNombre)); err == nil {
+				c.BranchID = suc.ID
+				org := id.AuthOrgID
+				if err := s.q.LinkBranchToAuthOrg(ctx, store.LinkBranchToAuthOrgParams{
+					ID: suc.ID, AuthOrgID: &org,
+				}); err != nil {
+					s.log.Warn("no se pudo atar la sucursal con Accesos",
+						"sucursal", suc.Name, "org", id.AuthOrgNombre, "error", err)
+				}
+			}
 		}
 	}
 

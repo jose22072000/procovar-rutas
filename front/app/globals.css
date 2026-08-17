@@ -661,8 +661,17 @@ h1 {
 .rango { position: relative; display: inline-block; }
 
 .rango-boton { gap: 9px; }
-.rango-icono { color: var(--pv-azul); }
-.rango-flecha { color: var(--pv-tinta-suave); font-size: 10px; }
+.rango-icono { width: 15px; height: 15px; color: var(--pv-azul); }
+.rango-flecha {
+    width: 13px;
+    height: 13px;
+    color: var(--pv-tinta-suave);
+    transition: transform .12s;
+}
+.rango-flecha[data-abierto] { transform: rotate(180deg); }
+
+.calendario-mes { padding: 5px 7px; }
+.calendario-mes svg { width: 14px; height: 14px; }
 
 .calendario {
     position: absolute;
@@ -767,7 +776,7 @@ h1 {
     border-radius: var(--pv-radio-grande);
 }
 
-.sin-permiso-icono { font-size: 2rem; }
+.sin-permiso-icono { width: 2.25rem; height: 2.25rem; color: var(--pv-azul); }
 .sin-permiso h1 { margin: 0.75rem 0 0.5rem; font-size: 1.25rem; }
 .sin-permiso p { margin: 0 auto 0.75rem; max-width: 30rem; color: var(--pv-tinta-suave); font-size: 14px; }
 
@@ -789,3 +798,5 @@ h1 {
     gap: 0.6rem;
     margin-top: 1.25rem;
 }
+
+.flecha { width: 14px; height: 14px; }

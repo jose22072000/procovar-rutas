@@ -27,9 +27,13 @@ export default function SinPermiso({
 }) {
   return (
     <div className="sin-permiso">
-      <span className="sin-permiso-icono" aria-hidden>
-        🔒
-      </span>
+      {/* Un candado dibujado, no un emoji: el emoji lo pinta cada sistema a su
+          manera y en Windows sale amarillo y redondo, que no es esta paleta. */}
+      <svg className="sin-permiso-icono" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="12" cy="15" r="1.4" fill="currentColor" />
+      </svg>
       <h1>No tienes permiso para ver {que}</h1>
       <p>
         Tu cuenta existe y la sesión está abierta: lo que falta es el permiso, y eso

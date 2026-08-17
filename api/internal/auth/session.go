@@ -86,6 +86,10 @@ type Identity struct {
 	Name       string
 	Role       scope.Role
 	AuthOrgID  string
+	// AuthOrgNombre: cómo se llama esa sucursal en Accesos. Hace falta porque las
+	// sucursales de aquí nacieron del nombre de la cuenta de Drive y no traen el
+	// identificador de Accesos: la primera vez hay que cruzarlas por el nombre.
+	AuthOrgNombre string
 	// Permisos: lo que procovar-auth dice que esta persona puede hacer. Es la
 	// autoridad, no una copia de lo que se decida aquí: los permisos se reparten
 	// allí, en una sola pantalla, para las seis aplicaciones a la vez.
@@ -112,6 +116,7 @@ func (s *Session) Translate() Identity {
 
 	if m := s.ActiveMembership(); m != nil {
 		id.AuthOrgID = m.Organization.ID
+		id.AuthOrgNombre = m.Organization.Name
 	}
 
 	// El rol viene de procovar-auth, que es donde se reparte.

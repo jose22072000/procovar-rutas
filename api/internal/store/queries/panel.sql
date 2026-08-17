@@ -167,3 +167,13 @@ SELECT * FROM import_log ORDER BY inicio DESC LIMIT $1;
 
 -- name: BranchByAuthOrg :one
 SELECT * FROM sucursal WHERE auth_org_id = $1;
+
+-- name: LinkBranchToAuthOrg :exec
+-- Atar la sucursal de aquí con la organización de Accesos.
+--
+-- Las sucursales de aquí nacieron del nombre de la cuenta de Drive y las de Accesos
+-- se crearon a mano, así que son las mismas con nombres distintos y sin nada que las
+-- una. Se atan la primera vez que entra alguien de esa sucursal, y a partir de ahí la
+-- búsqueda es directa.
+UPDATE sucursal SET auth_org_id = @auth_org_id, updated_at = now()
+WHERE id = @id AND (auth_org_id IS NULL OR auth_org_id = '');
