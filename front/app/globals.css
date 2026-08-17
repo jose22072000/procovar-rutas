@@ -800,3 +800,83 @@ h1 {
 }
 
 .flecha { width: 14px; height: 14px; }
+
+/* ── En el móvil ─────────────────────────────────────────────────────────────
+   Aquí se entra desde el teléfono, no solo desde la computadora de la oficina:
+   un supervisor mira el cumplimiento de camino a una sucursal. Lo que en un
+   monitor cabe en fila, en 380 píxeles se apila o se desplaza; lo que no puede
+   pasar es que algo se salga y no haya forma de llegar a ello. */
+
+@media (max-width: 820px) {
+    /* La barra en dos alturas: marca y salida arriba, menú debajo. Apretarlo todo
+       en una línea deja el nombre de la persona partido y el menú fuera. */
+    .barra {
+        flex-wrap: wrap;
+        gap: 0.6rem 1rem;
+        padding: 0.6rem 0.85rem;
+    }
+    .barra nav {
+        order: 3;
+        width: 100%;
+        overflow-x: auto;
+        /* Sin barra de desplazamiento a la vista: se arrastra con el dedo. */
+        scrollbar-width: none;
+    }
+    .barra nav::-webkit-scrollbar { display: none; }
+    .barra nav a { white-space: nowrap; padding: 6px 10px; }
+
+    .sesion { gap: 0.5rem; }
+    /* El correo y el rol se van: en el móvil manda el ancho, y quién eres ya lo
+       sabes. Se queda el nombre y, sobre todo, la salida. */
+    .sesion-rol { display: none; }
+    .sesion-quien { font-size: 12px; }
+
+    main { padding: 1rem 0.85rem 2.5rem; }
+
+    h1 { font-size: 1.3rem; }
+
+    .controles { gap: 0.45rem; }
+    .controles-cuenta { margin-left: 0; width: 100%; }
+
+    /* La cuadrícula del calendario no se estrecha: se arrastra. Encoger las
+       columnas hasta que quepan deja celdas donde no se lee ni el kilometraje,
+       que es justo el dato que se viene a mirar. */
+    .tarjeta { padding: 0.85rem; overflow-x: auto; }
+    .rejilla { min-width: 620px; }
+
+    /* Las fichas de dato, en dos líneas: nombre arriba y valor debajo, alineados
+       a la izquierda. En fila, un nombre largo empuja el valor fuera. */
+    .dato {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
+    }
+
+    .cifras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    /* El mapa, más bajo: en vertical, si ocupa toda la pantalla no se ve nada más
+       y hay que adivinar que debajo están las paradas. */
+    .mapa { height: clamp(320px, 55vh, 520px); }
+
+    /* El calendario desplegable, pegado al borde y no más ancho que la pantalla. */
+    .calendario {
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 1.7rem);
+    }
+    .calendario-rejilla { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+
+    .sin-permiso { margin: 2rem auto; padding: 1.25rem; }
+
+    /* Las tablas anchas (movimientos del reporte, barridos) se arrastran. */
+    .movements { min-width: 560px; }
+}
+
+@media (max-width: 480px) {
+    .marca-app { font-size: 12.5px; padding-left: 0.5rem; }
+    .marca-logo { height: 17px; }
+    /* Con el nombre y el botón de salir no cabe nada más: el nombre se va y queda
+       la salida, que es lo que no puede faltar en una máquina compartida. */
+    .sesion-quien { display: none; }
+    .cifras { grid-template-columns: 1fr; }
+}

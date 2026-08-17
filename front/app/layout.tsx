@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Sesion } from "@/components/Sesion";
 import "./globals.css";
@@ -36,6 +36,20 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
   display: "swap",
 });
+
+/**
+ * Sin esto, un teléfono dibuja la página como si la pantalla midiera 980 píxeles y
+ * después la encoge: todo sale diminuto, las reglas de móvil no llegan a aplicarse
+ * nunca y hay que hacer pinza para leer un kilometraje. Aquí se entra desde el móvil
+ * —un supervisor mira el cumplimiento de camino a una sucursal—, así que no es un
+ * detalle.
+ *
+ * `maximumScale` NO se limita: impedir el zoom deja fuera a quien no ve de cerca.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "Rutas — Procovar",
