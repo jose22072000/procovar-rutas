@@ -32,6 +32,8 @@ PROVINCIAS = {
     "LasTunas": "fHefRFz6HQfXt0Eh",
     "SantiSpiritus": "kXkGLZjFQ2Pu1Q2z",
     "Santiago": "sPEHylrec6dQWsEE",
+    "PalmaSoriano": "gXTBf4gP9aNcVwLj",
+    "Moa": "NFqUFPLVd9EAM1Fg",
 }
 
 
