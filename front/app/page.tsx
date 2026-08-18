@@ -151,7 +151,14 @@ export default function Calendar() {
 
       {bySeller.size > 0 && (
         <div className="tarjeta">
-          <table className="rejilla">
+          {/* Dos maneras de enseñar lo mismo, y cada una donde funciona.
+              En un monitor, la cuadrícula: vendedores por días, que es como se
+              compara de un vistazo quién falló y quién no.
+              En un teléfono, una ficha por vendedor con sus días en fila. Meter
+              la cuadrícula en 380 píxeles obliga a arrastrar de lado para leer un
+              renglón, y así no se compara nada: se pierde el nombre al mirar el
+              jueves. */}
+          <table className="rejilla solo-ancho">
             <thead>
               <tr>
                 <th className="seller">Vendedor</th>
@@ -246,6 +253,63 @@ export default function Calendar() {
               })}
             </tbody>
           </table>
+
+          <div className="fichas-dias solo-estrecho">
+            {[...bySeller.entries()].map(([id, v]) => {
+              const summary = data?.summary.find((r) => r.sellerId === id);
+              const incidencias =
+                (summary?.daysNoFile ?? 0) +
+                (summary?.daysNoDate ?? 0) +
+                (summary?.daysNoMovement ?? 0);
+              return (
+                <div className="ficha-dia" key={id}>
+                  <div className="ficha-dia-cabecera">
+                    <div>
+                      <b>{v.name}</b>
+                      <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                    </div>
+                    <span
+                      className="pastilla"
+                      style={
+                        incidencias > 0
+                          ? { background: "var(--falta)", color: "#fff" }
+                          : { background: "var(--ok)" }
+                      }
+                    >
+                      {incidencias === 0 ? "sin fallos" : `${incidencias} fallos`}
+                    </span>
+                  </div>
+
+                  <div className="ficha-dia-tira">
+                    {week.map((f) => {
+                      const d = v.days.get(f);
+                      const status: DayStatus = d?.status ?? "SIN_FICHERO";
+                      return (
+                        <button
+                          key={f}
+                          className="celda celda-tira"
+                          data-status={status}
+                          title={`${v.name} · ${f} · ${STATUS_LABEL[status]}`}
+                          onClick={() => router.push(`/dia?seller=${id}&fecha=${f}`)}
+                        >
+                          <span className="celda-tira-dia">{dayName(f)}</span>
+                          <span className="celda-tira-valor">
+                            {status === "OK" || status === "MOVIMIENTO_ESCASO"
+                              ? `${d?.netKm.toFixed(1)} km`
+                              : STATUS_LABEL[status]}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="ficha-dia-pie">
+                    {(summary?.totalKm ?? 0).toFixed(0)} km en el rango
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="leyenda">
             {(
