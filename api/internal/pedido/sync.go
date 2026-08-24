@@ -33,25 +33,47 @@ type Service struct {
 	q    *store.Queries
 	pool *pgxpool.Pool
 	cli  *Client
+	// cola puede ser nil: sin Redis el trabajador sincroniza igual, día a día y con
+	// la misma pausa, sólo que sin repartirse entre procesos.
+	cola *Cola
 	bus  *events.Bus
 	log  *slog.Logger
 	// Días hacia atrás que se sincronizan en cada pasada.
 	ventanaDias int
+	// Lo que se espera entre un día y el siguiente. Es lo que evita las ráfagas
+	// contra PEDIDO, que es de quien dependen las sucursales para trabajar.
+	pausa time.Duration
 }
 
-func NewService(pool *pgxpool.Pool, cli *Client, bus *events.Bus, log *slog.Logger, ventanaDias int) *Service {
+func NewService(
+	pool *pgxpool.Pool,
+	cli *Client,
+	cola *Cola,
+	bus *events.Bus,
+	log *slog.Logger,
+	ventanaDias int,
+	pausa time.Duration,
+) *Service {
 	if ventanaDias <= 0 {
 		ventanaDias = 21
+	}
+	if pausa <= 0 {
+		pausa = PausaPorDefecto
 	}
 	return &Service{
 		q:           store.New(pool),
 		pool:        pool,
 		cli:         cli,
+		cola:        cola,
 		bus:         bus,
 		log:         log,
 		ventanaDias: ventanaDias,
+		pausa:       pausa,
 	}
 }
+
+// iso es el formato de fecha que se habla con PEDIDO y con la cola.
+const iso = "2006-01-02"
 
 // Configured says whether there is anywhere to talk to. Without PEDIDO the panel
 // works exactly as before: it just does not paint the orders column.
@@ -63,10 +85,42 @@ type Result struct {
 	Orders  int `json:"pedidos"`
 	Crosses int `json:"cruces"`
 	Linked  int `json:"emparejados"`
+	// Traídos es lo que contestó PEDIDO; Clients y Orders, lo que hubo que escribir.
+	// Cuando el segundo es mucho menor que el primero, el espejo está haciendo su
+	// trabajo.
+	Fetched int `json:"traidos"`
 }
 
-// Sync brings the window's orders, pairs the vendors it can, and re-crosses.
-func (s *Service) Sync(ctx context.Context, tipo string) (Result, error) {
+// Tipos de pasada.
+const (
+	// TipoIncremental pide sólo lo que se movió desde la última vez.
+	TipoIncremental = "incremental"
+	// TipoCompleto repasa la ventana entera. Es la red de seguridad.
+	TipoCompleto = "completo"
+)
+
+// SyncRango trae los pedidos de un rango de días, empareja lo que puede y vuelve a
+// cruzar. Quien lo llama es el TRABAJADOR, y lo llama con un solo día: es la unidad
+// que hace que ninguna consulta a PEDIDO sea grande.
+//
+// # Por qué no se baja todo cada vez
+//
+// La ventana son tres semanas y una sucursal mueve miles de pedidos: bajárselos
+// enteros cada hora es pedirle a PEDIDO lo mismo veinticuatro veces al día para
+// reescribir, idénticas, unas filas que nadie tocó. Y los CLIENTES son peor, porque
+// un cliente no se mueve: su pin es el mismo hoy que hace seis meses.
+//
+// Así que dos cosas:
+//
+//   - la pasada incremental le pide a PEDIDO sólo lo que cambió desde el último
+//     pedido que tenemos (`?since=`), que casi siempre es nada o cuatro filas;
+//   - y el pin de un cliente que ya está guardado, en el mismo sitio y con el mismo
+//     nombre, no se vuelve a escribir.
+//
+// El repaso COMPLETO sigue existiendo y es el que garantiza que no falte nada: el
+// incremental se guía por el reloj de PEDIDO, y si allí se corrige una fila sin
+// tocar su `updatedAt`, el incremental no se entera. Una vez al día basta.
+func (s *Service) SyncRango(ctx context.Context, desde, hasta time.Time, tipo string) (Result, error) {
 	var res Result
 
 	if !s.Configured() {
@@ -88,19 +142,33 @@ func (s *Service) Sync(ctx context.Context, tipo string) (Result, error) {
 		})
 	}
 
-	hasta := hoy()
-	desde := hasta.AddDate(0, 0, -s.ventanaDias)
+	// El cursor sale del propio espejo, no de un contador aparte: un contador se
+	// desincroniza del dato el día que algo falle a medias, y entonces deja de
+	// traerse lo que falta sin que nadie se entere.
+	var since *time.Time
+	if tipo == TipoIncremental {
+		if c, err := s.q.LastOrderCursor(ctx); err == nil && c.Year() > 1971 {
+			// Un minuto de solapamiento: `since` es estrictamente mayor, y dos
+			// pedidos guardados en el mismo segundo se perderían si se pide justo
+			// desde el último.
+			c = c.Add(-time.Minute)
+			since = &c
+		}
+	}
 
-	pedidos, err := s.cli.Orders(ctx, desde, hasta)
+	pedidos, err := s.cli.Orders(ctx, desde, hasta, since)
 	if err != nil {
 		cerrar(false, err.Error())
 		return res, err
 	}
+	res.Fetched = len(pedidos)
 
 	// Las sucursales resueltas una vez por pasada: los 8.000 pedidos de Camagüey
 	// traen todos la misma, y buscarla por cada uno son 8.000 consultas para saber
 	// lo mismo ocho mil veces.
 	sucursales := map[string]string{}
+	// Y los pines que ya están guardados, para no reescribir el que no se ha movido.
+	pines := s.pinesGuardados(ctx, pedidos, sucursales)
 
 	for _, p := range pedidos {
 		if p.Client == nil || p.Client.Lat == nil || p.Client.Lon == nil {
@@ -122,21 +190,32 @@ func (s *Service) Sync(ctx context.Context, tipo string) (Result, error) {
 		}
 
 		clienteID := idDe(sucursalID, p.Client.ID)
-		if err := s.q.UpsertClient(ctx, store.UpsertClientParams{
-			ID:           clienteID,
-			BranchID:     sucursalID,
-			Ref:          p.Client.ID,
-			Code:         p.Client.Code,
-			Name:         p.Client.Name,
-			Address:      p.Client.Address,
-			Municipality: p.Client.Municipality,
-			Zone:         p.Client.Zone,
-			Lat:          *p.Client.Lat,
-			Lon:          *p.Client.Lon,
-		}); err != nil {
-			return res, fmt.Errorf("guardando cliente %s: %w", p.Client.ID, err)
+
+		// El pin, sólo si es nuevo o si se movió. Un cliente que ya está guardado en
+		// el mismo sitio y con el mismo nombre no se vuelve a escribir: es el caso
+		// normal, y son miles de filas por pasada.
+		if pinCambio(pines[sucursalID+":"+p.Client.ID], p.Client) {
+			if err := s.q.UpsertClient(ctx, store.UpsertClientParams{
+				ID:           clienteID,
+				BranchID:     sucursalID,
+				Ref:          p.Client.ID,
+				Code:         p.Client.Code,
+				Name:         p.Client.Name,
+				Address:      p.Client.Address,
+				Municipality: p.Client.Municipality,
+				Zone:         p.Client.Zone,
+				Lat:          *p.Client.Lat,
+				Lon:          *p.Client.Lon,
+			}); err != nil {
+				return res, fmt.Errorf("guardando cliente %s: %w", p.Client.ID, err)
+			}
+			// Y se apunta ya como guardado: dos pedidos del mismo cliente en la misma
+			// tanda no lo escriben dos veces.
+			pines[sucursalID+":"+p.Client.ID] = &store.ClientPinsRow{
+				Ref: p.Client.ID, Name: p.Client.Name, Lat: *p.Client.Lat, Lon: *p.Client.Lon,
+			}
+			res.Clients++
 		}
-		res.Clients++
 
 		var vendedorRef, vendedorCodigo, vendedorNombre *string
 		if p.Vendor != nil {
@@ -146,17 +225,18 @@ func (s *Service) Sync(ctx context.Context, tipo string) (Result, error) {
 		}
 
 		if err := s.q.UpsertOrder(ctx, store.UpsertOrderParams{
-			ID:            idDe(sucursalID, p.ID),
-			BranchID:      sucursalID,
-			Ref:           p.ID,
-			Folio:         p.Folio,
-			Date:          fecha,
-			ClientID:      &clienteID,
-			VendorRef:     vendedorRef,
-			VendorCode:    vendedorCodigo,
-			VendorName:    vendedorNombre,
-			Status:        p.Status,
-			NeedsDelivery: p.NeedsDelivery,
+			ID:              idDe(sucursalID, p.ID),
+			BranchID:        sucursalID,
+			Ref:             p.ID,
+			Folio:           p.Folio,
+			Date:            fecha,
+			ClientID:        &clienteID,
+			VendorRef:       vendedorRef,
+			VendorCode:      vendedorCodigo,
+			VendorName:      vendedorNombre,
+			Status:          p.Status,
+			NeedsDelivery:   p.NeedsDelivery,
+			SourceUpdatedAt: p.UpdatedAt,
 		}); err != nil {
 			return res, fmt.Errorf("guardando pedido %s: %w", p.ID, err)
 		}
@@ -181,7 +261,7 @@ func (s *Service) Sync(ctx context.Context, tipo string) (Result, error) {
 	res.Crosses = cruces
 
 	cerrar(true, "")
-	s.avisar("pedidos")
+	s.avisar()
 	return res, nil
 }
 
@@ -453,11 +533,69 @@ func (s *Service) sucursalDe(ctx context.Context, p Order, cache map[string]stri
 	return suc.ID, nil
 }
 
-func (s *Service) avisar(tipo string) {
+// avisar le dice a las pantallas abiertas que hay algo nuevo que mirar. Si Redis no
+// contesta no pasa nada: es un aviso, no el dato.
+func (s *Service) avisar() {
 	if s.bus == nil {
 		return
 	}
-	s.bus.Publish(context.Background(), events.Event{Type: tipo})
+	_ = s.bus.Publish(context.Background(), events.Event{Type: events.TypeOrders})
+}
+
+// --- los pines ya guardados -------------------------------------------------
+
+// pinesGuardados lee de una vez los clientes que ya están en el espejo, para las
+// sucursales que aparecen en esta tanda.
+//
+// De una vez y no cliente a cliente: preguntar «¿tengo ya a este?» por cada pedido
+// son miles de consultas para acabar sabiendo que no había que escribir ninguna. Una
+// sucursal son unos 8.000 clientes; en memoria es medio megabyte y dura lo que dura
+// la pasada.
+//
+// Si la lectura falla se devuelve el mapa vacío y todo se reescribe, que es lo de
+// antes: esto es una optimización, no una fuente de verdad, y no puede ser la razón
+// de que una pasada se caiga.
+func (s *Service) pinesGuardados(ctx context.Context, pedidos []Order, cache map[string]string) map[string]*store.ClientPinsRow {
+	pines := map[string]*store.ClientPinsRow{}
+
+	vistas := map[string]bool{}
+	for _, p := range pedidos {
+		sucursalID, err := s.sucursalDe(ctx, p, cache)
+		if err != nil || vistas[sucursalID] {
+			continue
+		}
+		vistas[sucursalID] = true
+
+		filas, err := s.q.ClientPins(ctx, sucursalID)
+		if err != nil {
+			s.log.Warn("no se pudieron leer los pines guardados", "sucursal", sucursalID, "error", err)
+			continue
+		}
+		for i := range filas {
+			pines[sucursalID+":"+filas[i].Ref] = &filas[i]
+		}
+	}
+	return pines
+}
+
+// pinCambio dice si hay algo que escribir. Sin pin guardado, sí: es nuevo.
+//
+// Se comparan las coordenadas y el nombre, que es lo que se dibuja en el mapa y lo
+// que se lee en la lista. Lo demás —dirección, municipio, zona— viaja en el mismo
+// upsert y se refresca cuando alguna de las dos cambie o en el repaso completo; no
+// vale la pena reescribir ocho mil filas porque a un cliente le corrigieron el número
+// de la calle.
+func pinCambio(guardado *store.ClientPinsRow, viene *Client_) bool {
+	if guardado == nil {
+		return true
+	}
+	if guardado.Name != viene.Name {
+		return true
+	}
+	// Un grado son ~111 km, así que 1e-7 es un centímetro: por debajo de eso no hay
+	// movimiento, hay ruido de redondeo al ir y venir en JSON.
+	const nada = 1e-7
+	return math.Abs(guardado.Lat-*viene.Lat) > nada || math.Abs(guardado.Lon-*viene.Lon) > nada
 }
 
 // --- auxiliares -------------------------------------------------------------

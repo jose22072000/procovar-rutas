@@ -64,7 +64,14 @@ CREATE TABLE pedido (
     trabajador_id      TEXT REFERENCES trabajador (id) ON DELETE SET NULL,
     estado             TEXT,
     requiere_domicilio BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Dos relojes distintos, y hacen falta los dos:
+    --   actualizado_at        cuándo lo copiamos AQUÍ.
+    --   origen_actualizado_at el `updatedAt` de PEDIDO, que es SU reloj.
+    -- El segundo es el que permite pedir sólo lo que se movió desde la última vez
+    -- (`?since=`): sin él habría que bajarse las tres semanas enteras cada hora para
+    -- volver a escribir, idénticas, ocho mil filas que nadie tocó.
     actualizado_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    origen_actualizado_at TIMESTAMPTZ,
     CONSTRAINT pedido_unico UNIQUE (sucursal_id, ref)
 );
 

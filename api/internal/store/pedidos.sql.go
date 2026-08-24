@@ -70,6 +70,45 @@ func (q *Queries) ClearDayStopClients(ctx context.Context, trackDayID string) er
 	return err
 }
 
+const clientPins = `-- name: ClientPins :many
+SELECT ref, nombre, lat, lon FROM pedido_cliente WHERE sucursal_id = $1
+`
+
+type ClientPinsRow struct {
+	Ref  string
+	Name string
+	Lat  float64
+	Lon  float64
+}
+
+// Los pines que YA están guardados, para no volver a escribir los que no se han
+// movido. Con ocho mil clientes por sucursal, la pasada horaria reescribía ocho mil
+// filas idénticas para acabar dejándolo todo como estaba.
+func (q *Queries) ClientPins(ctx context.Context, sucursalID string) ([]ClientPinsRow, error) {
+	rows, err := q.db.Query(ctx, clientPins, sucursalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClientPinsRow{}
+	for rows.Next() {
+		var i ClientPinsRow
+		if err := rows.Scan(
+			&i.Ref,
+			&i.Name,
+			&i.Lat,
+			&i.Lon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeOrderSync = `-- name: CloseOrderSync :exec
 UPDATE pedido_sync
 SET fin = now(), clientes = $2, pedidos = $3, cruces = $4, ok = $5, detalle = $6
@@ -346,6 +385,27 @@ func (q *Queries) EnsureDaysForOrders(ctx context.Context, arg EnsureDaysForOrde
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const lastOrderCursor = `-- name: LastOrderCursor :one
+SELECT coalesce(max(origen_actualizado_at), 'epoch'::timestamptz)::timestamptz AS cursor
+FROM pedido
+`
+
+// Por dónde se quedó la última sincronización, sacado del propio espejo.
+//
+// El cursor NO se guarda aparte a propósito: un cursor en su tabla se desincroniza
+// del dato el día que algo se borre a mano o falle a medias, y entonces deja de
+// traerse lo que falta sin que nadie se entere. Preguntándoselo a las filas que hay,
+// el cursor no puede mentir.
+// Con el espejo vacío no hay cursor y sale `epoch`, que es lo que se quiere en la
+// primera pasada: traerlo todo. (`coalesce` y no un nulo porque una fecha nula leída
+// como no nula revienta al escanear la fila, y sqlc no acierta a inferirlo aquí.)
+func (q *Queries) LastOrderCursor(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, lastOrderCursor)
+	var cursor time.Time
+	err := row.Scan(&cursor)
+	return cursor, err
 }
 
 const linkOrdersToSellers = `-- name: LinkOrdersToSellers :execrows
@@ -766,8 +826,9 @@ func (q *Queries) UpsertClient(ctx context.Context, arg UpsertClientParams) erro
 const upsertOrder = `-- name: UpsertOrder :exec
 INSERT INTO pedido (
     id, sucursal_id, ref, folio, fecha, cliente_id,
-    vendedor_ref, vendedor_codigo, vendedor_nombre, estado, requiere_domicilio, actualizado_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+    vendedor_ref, vendedor_codigo, vendedor_nombre, estado, requiere_domicilio,
+    origen_actualizado_at, actualizado_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
 ON CONFLICT (sucursal_id, ref) DO UPDATE SET
     folio = EXCLUDED.folio,
     fecha = EXCLUDED.fecha,
@@ -777,21 +838,23 @@ ON CONFLICT (sucursal_id, ref) DO UPDATE SET
     vendedor_nombre = EXCLUDED.vendedor_nombre,
     estado = EXCLUDED.estado,
     requiere_domicilio = EXCLUDED.requiere_domicilio,
+    origen_actualizado_at = EXCLUDED.origen_actualizado_at,
     actualizado_at = now()
 `
 
 type UpsertOrderParams struct {
-	ID            string
-	BranchID      string
-	Ref           string
-	Folio         *string
-	Date          time.Time
-	ClientID      *string
-	VendorRef     *string
-	VendorCode    *string
-	VendorName    *string
-	Status        *string
-	NeedsDelivery bool
+	ID              string
+	BranchID        string
+	Ref             string
+	Folio           *string
+	Date            time.Time
+	ClientID        *string
+	VendorRef       *string
+	VendorCode      *string
+	VendorName      *string
+	Status          *string
+	NeedsDelivery   bool
+	SourceUpdatedAt *time.Time
 }
 
 // El pedido entra SIN trabajador: emparejar el vendedor es un paso aparte
@@ -810,6 +873,7 @@ func (q *Queries) UpsertOrder(ctx context.Context, arg UpsertOrderParams) error 
 		arg.VendorName,
 		arg.Status,
 		arg.NeedsDelivery,
+		arg.SourceUpdatedAt,
 	)
 	return err
 }

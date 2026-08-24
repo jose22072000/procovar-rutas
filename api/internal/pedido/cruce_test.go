@@ -27,7 +27,9 @@ func servicio(t *testing.T) (*Service, *pgxpool.Pool) {
 	// Es justo lo que permite volver a cruzar cuando alguien arregla un
 	// emparejamiento, sin bajarse un mes de pedidos otra vez.
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	return NewService(pool, nil, nil, log, 21), pool
+	// Sin cola y sin pausa: aquí se prueba el cruce, no el ritmo al que se le pide a
+	// PEDIDO. La pausa haría que cada prueba tardara cinco segundos por día.
+	return NewService(pool, nil, nil, nil, log, 21, time.Nanosecond), pool
 }
 
 // Un grado de latitud son ~111 km, así que 0,00009° ≈ 10 m.
@@ -211,6 +213,104 @@ func TestUnDiaSinFicheroTambienSeCruza(t *testing.T) {
 	}
 	if len(visitas) != 1 || visitas[0].Visited {
 		t.Fatalf("sin recorrido, el pedido está sin visitar: %+v", visitas)
+	}
+}
+
+// El pin que ya está guardado no se vuelve a escribir.
+//
+// Es lo que hace que la pasada horaria no sea inútil: un cliente no se mueve, su pin
+// es el mismo hoy que hace seis meses, y reescribir ocho mil filas idénticas cada
+// hora es trabajo puro para dejarlo todo como estaba.
+func TestElPinGuardadoNoSeReescribe(t *testing.T) {
+	_, pool := servicio(t)
+	q := store.New(pool)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `TRUNCATE visita, vendedor_pedido, pedido, pedido_cliente,
+		stop, track_day, track_point, gpx_file, drive_source, trabajador, sucursal CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	fecha, _ := time.Parse("2006-01-02", "2026-08-12")
+	sembrar(t, pool, fecha)
+	crearPedido(t, q, ctx, "c1", "o1", "Bodega La Esquina", 21.38, -77.91)
+
+	pines, err := q.ClientPins(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pines) != 1 {
+		t.Fatalf("debería haber un pin guardado, hay %d", len(pines))
+	}
+	guardado := &pines[0]
+
+	lat, lon := 21.38, -77.91
+	mismo := &Client_{Name: "Bodega La Esquina", Lat: &lat, Lon: &lon}
+	if pinCambio(guardado, mismo) {
+		t.Error("el mismo cliente en el mismo sitio no hay que volver a escribirlo")
+	}
+
+	// Un temblor de redondeo al ir y venir en JSON tampoco es un movimiento.
+	casi := lat + 1e-9
+	if pinCambio(guardado, &Client_{Name: "Bodega La Esquina", Lat: &casi, Lon: &lon}) {
+		t.Error("un centímetro de redondeo no es que el cliente se haya mudado")
+	}
+
+	// Mudarse sí.
+	otro := lat + 0.001 // ~110 m
+	if !pinCambio(guardado, &Client_{Name: "Bodega La Esquina", Lat: &otro, Lon: &lon}) {
+		t.Error("si el cliente se mudó, hay que guardar el pin nuevo")
+	}
+
+	// Y que le corrijan el nombre, también: es lo que se lee en la lista y en el mapa.
+	if !pinCambio(guardado, &Client_{Name: "Bodega La Esquina S.A.", Lat: &lat, Lon: &lon}) {
+		t.Error("un nombre corregido hay que guardarlo")
+	}
+
+	// Y el que no está, es nuevo.
+	if !pinCambio(nil, mismo) {
+		t.Error("un cliente que no está guardado hay que guardarlo")
+	}
+}
+
+// El cursor sale del propio espejo: sin nada guardado no hay cursor, y con pedidos
+// guardados es el `updatedAt` más reciente de PEDIDO — no el nuestro.
+func TestElCursorSaleDelEspejo(t *testing.T) {
+	_, pool := servicio(t)
+	q := store.New(pool)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `TRUNCATE visita, vendedor_pedido, pedido, pedido_cliente,
+		stop, track_day, track_point, gpx_file, drive_source, trabajador, sucursal CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Con el espejo vacío: epoch, que es «tráelo todo».
+	c, err := q.LastOrderCursor(ctx)
+	if err != nil {
+		t.Fatalf("con el espejo vacío el cursor tiene que poder leerse: %v", err)
+	}
+	if c.Year() > 1971 {
+		t.Errorf("sin pedidos no hay cursor, y salió %s", c)
+	}
+
+	fecha, _ := time.Parse("2006-01-02", "2026-08-12")
+	sembrar(t, pool, fecha)
+	crearPedido(t, q, ctx, "c1", "o1", "Bodega La Esquina", 21.38, -77.91)
+
+	// El pedido que sembramos no trae `updatedAt`; se le pone uno a mano, que es lo
+	// que hará PEDIDO.
+	movido := time.Date(2026, 8, 12, 15, 30, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx,
+		`UPDATE pedido SET origen_actualizado_at = $1 WHERE id = 'o1'`, movido); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err = q.LastOrderCursor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Equal(movido) {
+		t.Errorf("el cursor es el reloj de PEDIDO (%s), y salió %s", movido, c)
 	}
 }
 

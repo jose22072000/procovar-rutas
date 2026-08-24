@@ -97,10 +97,43 @@ func TestElEquipoSeEvaluaContraLaFechaConsultada(t *testing.T) {
 	}
 }
 
-// Fail closed: when in doubt, nothing is visible.
-func TestSupervisorSinEquipoNoVeNada(t *testing.T) {
+// Sin equipo asignado, su sucursal.
+//
+// Estas dos pruebas decían lo contrario —«sin equipo no ve nada»— y llevaban en rojo
+// desde que el alcance cambió a propósito: el equipo sale de las vigencias, no hay
+// ninguna dada de alta ni pantalla donde darlas, así que la supervisora abría el panel
+// y lo encontraba vacío. Se quedaron describiendo lo de antes, que es la peor forma en
+// que puede fallar una prueba: la que está en rojo no se lee, se aprende a saltar, y
+// con ella dejan de leerse las de al lado.
+//
+// Cerrar por defecto sigue en pie donde de verdad hace falta: sin sucursal a la que
+// limitarla, no ve nada. Es la de abajo.
+func TestSupervisorSinEquipoVeSuSucursal(t *testing.T) {
 	s := sesion(RoleSupervisor)
 	s.SellerID = "t-nadie"
+	f, _ := Compute(s, agosto, vigencias())
+
+	if f.Empty {
+		t.Fatalf("sin equipo ve su sucursal, no una pantalla vacía: %+v", f)
+	}
+	if f.BranchID != s.BranchID {
+		t.Errorf("tendría que quedar limitada a %q, y quedó en %q", s.BranchID, f.BranchID)
+	}
+	if len(f.SellersIn) != 0 {
+		t.Errorf("sin equipo no hay lista de vendedores que valga: %v", f.SellersIn)
+	}
+	// Y lo que no se negocia: nadie ve su propio recorrido.
+	if f.SellerNot != "t-nadie" {
+		t.Errorf("tiene que excluirse a sí misma, y excluye a %q", f.SellerNot)
+	}
+}
+
+// Fail closed donde toca: sin sucursal no hay a qué limitarla, y devolverlo todo sí
+// sería abrir la mano.
+func TestSupervisorSinSucursalNoVeNada(t *testing.T) {
+	s := sesion(RoleSupervisor)
+	s.SellerID = "t-nadie"
+	s.BranchID = ""
 	f, _ := Compute(s, agosto, vigencias())
 	if !f.Empty {
 		t.Errorf("= %+v", f)
@@ -116,12 +149,20 @@ func TestAdminSinSucursalNoVeNada(t *testing.T) {
 	}
 }
 
-func TestSupervisorSinFichaLocalNoVeNada(t *testing.T) {
+// Sin ficha local tampoco se queda a oscuras: sin ficha no hay equipo que buscar —las
+// vigencias se apuntan contra el vendedor, no contra el usuario— así que cae en lo
+// mismo que la de arriba y ve su sucursal. Y no hay nada suyo que excluir, porque no
+// tiene recorrido propio.
+func TestSupervisorSinFichaLocalVeSuSucursal(t *testing.T) {
 	s := sesion(RoleSupervisor)
 	s.SellerID = ""
 	f, _ := Compute(s, agosto, vigencias())
-	if !f.Empty {
-		t.Errorf("= %+v", f)
+
+	if f.Empty {
+		t.Fatalf("= %+v", f)
+	}
+	if f.BranchID != s.BranchID {
+		t.Errorf("tendría que quedar limitada a %q, y quedó en %q", s.BranchID, f.BranchID)
 	}
 }
 

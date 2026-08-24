@@ -64,6 +64,10 @@ type Config struct {
 	PedidoKey         string
 	PedidoVentanaDias int
 	IntervaloPedidos  time.Duration
+	// PausaPedidos es lo que el trabajador espera entre un día y el siguiente. Es
+	// el mando que decide cuánta carga ve PEDIDO: nada más importa, porque el
+	// trabajador nunca hace dos cosas a la vez.
+	PausaPedidos time.Duration
 
 	// Ingesta.
 	IntervaloBarrido      time.Duration
@@ -90,7 +94,8 @@ func Cargar() (*Config, error) {
 		PedidoURL:             os.Getenv("PEDIDO_API_URL"),
 		PedidoKey:             porDefecto("PEDIDO_API_KEY", os.Getenv("SERVICE_API_KEY")),
 		PedidoVentanaDias:     entero("PEDIDO_VENTANA_DIAS", 21),
-		IntervaloPedidos:      duracion("INTERVALO_PEDIDOS", time.Hour),
+		IntervaloPedidos:      duracion("INTERVALO_PEDIDOS", 15*time.Minute),
+		PausaPedidos:          duracion("PAUSA_PEDIDOS", 5*time.Second),
 		IntervaloBarrido:      duracion("INTERVALO_BARRIDO", 30*time.Minute),
 		HoraRepasoNocturno:    entero("HORA_REPASO_NOCTURNO", 2),
 		MaxFicherosPorBarrido: entero("MAX_FICHEROS_BARRIDO", 500),

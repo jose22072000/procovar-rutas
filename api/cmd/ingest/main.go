@@ -92,14 +92,33 @@ func main() {
 	// visitó. Sin PEDIDO_API_URL esto queda apagado y la ingesta es la de siempre.
 	var svcPedidos *pedido.Service
 	if cli := pedido.NewClient(cfg.PedidoURL, cfg.PedidoKey); cli != nil {
-		svcPedidos = pedido.NewService(pool, cli, bus, log, cfg.PedidoVentanaDias)
+		// La cola de días. Sin Redis se sincroniza igual —día a día y con la misma
+		// pausa, que es lo que de verdad importa—, sólo que sin poder repartirse entre
+		// procesos ni sobrevivir a un reinicio a media faena.
+		colaPedidos, err := pedido.NuevaCola(cfg.RedisURL, cfg.PrefijoRedis)
+		if err != nil {
+			log.Warn("sin cola de pedidos", "error", err)
+		} else if colaPedidos != nil {
+			if err := colaPedidos.Ping(ctx); err != nil {
+				log.Warn("Redis no responde; los pedidos se traerán sin cola", "error", err)
+				colaPedidos = nil
+			} else {
+				defer colaPedidos.Close()
+			}
+		}
+
+		svcPedidos = pedido.NewService(
+			pool, cli, colaPedidos, bus, log, cfg.PedidoVentanaDias, cfg.PausaPedidos)
 		svc.TrasRecalcular = func(ctx context.Context, trackDayID, trabajadorID, sucursalID string, fecha time.Time) {
 			if err := svcPedidos.CrossOneDay(ctx, trackDayID, trabajadorID, sucursalID, fecha); err != nil {
 				log.Warn("no se pudo cruzar el día con los pedidos",
 					"dia", trackDayID, "fecha", fecha.Format("2006-01-02"), "error", err)
 			}
 		}
-		log.Info("cruce con PEDIDO listo", "url", cfg.PedidoURL, "ventana_dias", cfg.PedidoVentanaDias)
+		log.Info("cruce con PEDIDO listo",
+			"url", cfg.PedidoURL,
+			"ventana_dias", cfg.PedidoVentanaDias,
+			"pausa_entre_dias", cfg.PausaPedidos)
 	} else {
 		log.Warn("sin PEDIDO_API_URL: no se cruzarán los pedidos con las rutas")
 	}
@@ -222,27 +241,39 @@ func yesterday() time.Time {
 	return time.Date(y.Year(), y.Month(), y.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// sincronizarPedidos trae los pedidos de PEDIDO cada tanto y vuelve a cruzarlos.
+// sincronizarPedidos pone en marcha el trabajador y el planificador.
 //
-// La primera pasada es inmediata: al arrancar el contenedor lo que se quiere es que
-// el panel tenga los pedidos de hoy, no dentro de una hora.
+// Son dos cosas distintas y por eso van por separado:
+//
+//   - EL TRABAJADOR habla con PEDIDO. Coge un día de la cola, lo trae, lo cruza,
+//     ESPERA, y coge el siguiente. Nunca hace dos cosas a la vez y nunca va deprisa.
+//   - EL PLANIFICADOR no habla con nadie: mira el calendario y deja días en la cola.
+//     Es barato, así que puede pasar a menudo sin que eso signifique más carga para
+//     PEDIDO — lo que PEDIDO note depende sólo de la pausa del trabajador.
+//
+// Antes esto pedía la ventana entera de una vez, cada hora: tres semanas y miles de
+// pedidos en una sola llamada. Eso es una ráfaga contra la aplicación de la que
+// dependen las sucursales para trabajar, y con el peor reparto posible — veintitrés
+// minutos de nada y un golpe.
 func sincronizarPedidos(ctx context.Context, svc *pedido.Service, cada time.Duration, log *slog.Logger) {
-	correr := func() {
-		inicio := time.Now()
-		res, err := svc.Sync(ctx, "programado")
+	go svc.Trabajar(ctx)
+
+	planificar := func(completo bool) {
+		n, err := svc.Planificar(ctx, completo)
 		if err != nil {
-			log.Error("no se pudieron traer los pedidos", "error", err)
+			log.Error("no se pudieron encolar los días de pedidos", "error", err)
 			return
 		}
-		log.Info("pedidos sincronizados",
-			"pedidos", res.Orders,
-			"clientes", res.Clients,
-			"dias_cruzados", res.Crosses,
-			"emparejados", res.Linked,
-			"duracion", time.Since(inicio).Round(time.Millisecond))
+		if n > 0 {
+			log.Info("días de pedidos encolados", "dias", n, "completo", completo)
+		}
 	}
 
-	correr()
+	// Al arrancar, la ventana entera: el espejo puede estar vacío o venir de días
+	// parado. No es una ráfaga — son días encolados que el trabajador irá haciendo a
+	// su ritmo.
+	planificar(true)
+	ultimoCompleto := time.Now().Format("2006-01-02")
 
 	t := time.NewTicker(cada)
 	defer t.Stop()
@@ -251,7 +282,15 @@ func sincronizarPedidos(ctx context.Context, svc *pedido.Service, cada time.Dura
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			correr()
+			// Un repaso completo al día, la misma idea que con Drive: el incremental
+			// se guía por el reloj de PEDIDO, y si allí corrigen una fila sin tocar su
+			// `updatedAt`, el incremental no se entera nunca.
+			if hoy := time.Now().Format("2006-01-02"); hoy != ultimoCompleto {
+				ultimoCompleto = hoy
+				planificar(true)
+				continue
+			}
+			planificar(false)
 		}
 	}
 }

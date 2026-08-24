@@ -114,7 +114,23 @@ func main() {
 	// en la caída de esta.
 	var svcPedidos *pedido.Service
 	if cli := pedido.NewClient(cfg.PedidoURL, cfg.PedidoKey); cli != nil {
-		svcPedidos = pedido.NewService(pool, cli, bus, log, cfg.PedidoVentanaDias)
+		// La API ENCOLA días; quien habla con PEDIDO es el trabajador de la ingesta.
+		// Aquí no se arranca ninguno: dos trabajadores tirando de la misma cola serían
+		// el doble de carga contra PEDIDO, que es justo lo que la cola evita.
+		colaPedidos, err := pedido.NuevaCola(cfg.RedisURL, cfg.PrefijoRedis)
+		if err != nil {
+			log.Warn("sin cola de pedidos", "error", err)
+		} else if colaPedidos != nil {
+			if err := colaPedidos.Ping(ctx); err != nil {
+				log.Warn("Redis no responde; el botón de traer pedidos lo hará en el acto", "error", err)
+				colaPedidos = nil
+			} else {
+				defer colaPedidos.Close()
+			}
+		}
+
+		svcPedidos = pedido.NewService(
+			pool, cli, colaPedidos, bus, log, cfg.PedidoVentanaDias, cfg.PausaPedidos)
 		log.Info("cruce con PEDIDO listo", "url", cfg.PedidoURL, "ventana_dias", cfg.PedidoVentanaDias)
 	} else {
 		log.Warn("sin PEDIDO_API_URL: no se cruzarán los pedidos con las rutas")

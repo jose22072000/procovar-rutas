@@ -151,6 +151,25 @@ aunque un fichero llegue renombrado, movido o con la fecha cambiada.
 `Procesados/`, pero estas carpetas las ven los propios trabajadores. El registro de «ya
 procesé esto» vive en `gpx_file`, por `drive_file_id` y `sha256`.
 
+**Los pedidos se traen por COLA, un día por trabajo, con una pausa entre uno y otro.**
+No es una manía: PEDIDO es la aplicación de la que dependen las sucursales para
+trabajar, y pedirle la ventana entera —tres semanas, miles de pedidos— de una sola vez
+cada hora es una ráfaga con el peor reparto posible (veintitrés minutos de nada y un
+golpe). El planificador, que no habla con nadie, deja días en la cola; el trabajador
+coge uno, lo trae, lo cruza, **espera** `PAUSA_PEDIDOS` y coge el siguiente. Ponerse al
+día con un mes atrasado son cuarenta consultas chicas repartidas en un rato. Un día ya
+encolado no se encola dos veces, y lo que un reinicio dejó a medias vuelve a la cola.
+**Sólo la ingesta levanta trabajador**: la API únicamente encola, porque dos
+trabajadores tirando de la misma cola serían el doble de carga contra PEDIDO.
+
+**Y lo que se le pide es lo que no se tiene.** La pasada incremental usa el `updatedAt`
+de PEDIDO (`?since=`), así que casi siempre no trae nada o cuatro filas; el cursor sale
+del propio espejo (`max(origen_actualizado_at)`) y no de un contador aparte, que se
+desincronizaría del dato el día que algo falle a medias. Y **el pin de un cliente que ya
+está guardado, en el mismo sitio y con el mismo nombre, no se vuelve a escribir**: un
+cliente no se muda, su pin es el mismo hoy que hace seis meses. El repaso completo diario
+es la red de seguridad, por si en PEDIDO corrigen una fila sin tocar su `updatedAt`.
+
 **El cruce con PEDIDO es opcional y de solo lectura.** Sin `PEDIDO_API_URL` el panel
 arranca y funciona igual, sencillamente sin la columna de clientes: una integración que
 impidiera arrancar convertiría el reinicio de otra aplicación en la caída de esta. Y

@@ -85,6 +85,9 @@ type Order struct {
 	NeedsDelivery bool     `json:"requiereDomicilio"`
 	Vendor        *Vendor  `json:"vendedor"`
 	Client        *Client_ `json:"cliente"`
+	// UpdatedAt es el reloj de PEDIDO, y es lo que hace posible pedir sólo lo que se
+	// movió: se guarda y en la siguiente pasada se manda como `since`.
+	UpdatedAt *time.Time `json:"updatedAt"`
 }
 
 type ordersResponse struct {
@@ -95,10 +98,18 @@ type ordersResponse struct {
 // Orders brings the orders of a range of days, with their client and their
 // vendor. PEDIDO scopes them to ITS OWN branch, so nothing else has to be asked:
 // each installation hands over what is its own.
-func (c *Client) Orders(ctx context.Context, from, to time.Time) ([]Order, error) {
+//
+// `since` no es nulo = INCREMENTAL: sólo lo que se movió en PEDIDO desde ese
+// instante. Es lo que evita bajarse tres semanas enteras cada hora para volver a
+// escribir, idénticas, las mismas ocho mil filas. Suele no traer nada o cuatro
+// filas.
+func (c *Client) Orders(ctx context.Context, from, to time.Time, since *time.Time) ([]Order, error) {
 	q := url.Values{}
 	q.Set("desde", from.Format("2006-01-02"))
 	q.Set("hasta", to.Format("2006-01-02"))
+	if since != nil {
+		q.Set("since", since.UTC().Format(time.RFC3339))
+	}
 
 	var r ordersResponse
 	if err := c.get(ctx, "/integration/orders", q, &r); err != nil {

@@ -103,6 +103,7 @@ sql:
           pedidos: "Orders"
           cruces: "Crosses"
           actualizado_at: "UpdatedAt"
+          origen_actualizado_at: "SourceUpdatedAt"
           cliente_ref: "ClientRef"
           distancia_cliente_m: "ClientDistM"
           centroide_lat: "CentroidLat"

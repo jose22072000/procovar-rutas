@@ -69,7 +69,9 @@ services:
       PEDIDO_API_URL: ${PEDIDO_API_URL}
       PEDIDO_API_KEY: ${PEDIDO_API_KEY}
       PEDIDO_VENTANA_DIAS: ${PEDIDO_VENTANA_DIAS:-21}
-      INTERVALO_PEDIDOS: ${INTERVALO_PEDIDOS:-1h}
+      INTERVALO_PEDIDOS: ${INTERVALO_PEDIDOS:-15m}
+      # La pausa entre un día y el siguiente: el freno del trabajador.
+      PAUSA_PEDIDOS: ${PAUSA_PEDIDOS:-5s}
     depends_on:
       migrar:
         condition: service_completed_successfully

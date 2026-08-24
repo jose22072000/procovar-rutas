@@ -194,15 +194,21 @@ export default function Calendar() {
     setTrayendo(true);
     setAviso(null);
     try {
-      const r = await enviar<{ pedidos: number; cruces: number; emparejados: number }>(
+      // El botón ENCOLA, no descarga: son tres semanas de días y bajárselas de
+      // golpe dejaría el botón pensando un minuto y le metería a PEDIDO —de quien
+      // dependen las sucursales para trabajar— justo la ráfaga que la cola existe
+      // para evitar. El trabajador los va haciendo de uno en uno, y la pantalla se
+      // entera sola por los avisos en vivo.
+      const r = await enviar<{ encolados: number; cola: { pendientes: number } | null }>(
         "/api/pedidos/sync",
         {},
       );
       setAviso(
-        `${r.pedidos} pedidos traídos, ${r.cruces} días cruzados con su recorrido.`,
+        r.encolados === 0
+          ? "Ya estaba todo encolado; el trabajador los va trayendo."
+          : `${r.encolados} ${r.encolados === 1 ? "día" : "días"} encolados. ` +
+            "Se van trayendo de uno en uno para no cargar a PEDIDO; la pantalla se actualiza sola.",
       );
-      cargarCalendario();
-      cargarPendientes();
     } catch (e) {
       setAviso((e as Error).message);
     } finally {

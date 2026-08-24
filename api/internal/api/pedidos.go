@@ -25,14 +25,25 @@ func (s *Server) syncPedidos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.pedidos.Sync(r.Context(), "manual")
+	// El botón ENCOLA, no descarga.
+	//
+	// A mano es siempre la pasada completa —quien lo pulsa lo pulsa porque algo no le
+	// cuadra, y contestarle con el incremental, que casi siempre no trae nada, sería
+	// confirmarle lo que ya estaba viendo—, pero eso son tres semanas de días, y
+	// bajárselas aquí mismo dejaría la petición colgada un minuto y le metería a
+	// PEDIDO la ráfaga que esta cola existe para evitar. Se dejan los días encolados
+	// y el trabajador los va haciendo a su ritmo; la pantalla se entera sola por los
+	// avisos en vivo, sin recargar.
+	n, err := s.pedidos.Planificar(r.Context(), true)
 	if err != nil {
 		// El error de PEDIDO se pasa tal cual: dice "esta instalación es de la
 		// sucursal X, no Y", y eso es exactamente lo que hay que leer.
 		respondError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	respond(w, http.StatusOK, res)
+
+	estado, _ := s.pedidos.EstadoDeLaCola(r.Context())
+	respond(w, http.StatusOK, map[string]any{"encolados": n, "cola": estado})
 }
 
 // VendorLink is a PEDIDO vendor and who they are here.

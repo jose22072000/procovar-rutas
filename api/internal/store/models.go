@@ -351,19 +351,20 @@ type ImportLog struct {
 }
 
 type Order struct {
-	ID            string
-	BranchID      string
-	Ref           string
-	Folio         *string
-	Date          time.Time
-	ClientID      *string
-	VendorRef     *string
-	VendorCode    *string
-	VendorName    *string
-	SellerID      *string
-	Status        *string
-	NeedsDelivery bool
-	UpdatedAt     time.Time
+	ID              string
+	BranchID        string
+	Ref             string
+	Folio           *string
+	Date            time.Time
+	ClientID        *string
+	VendorRef       *string
+	VendorCode      *string
+	VendorName      *string
+	SellerID        *string
+	Status          *string
+	NeedsDelivery   bool
+	UpdatedAt       time.Time
+	SourceUpdatedAt *time.Time
 }
 
 type OrderSync struct {
