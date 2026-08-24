@@ -32,6 +32,12 @@ type SellerDay struct {
 	Flags      []string   `json:"flags"`
 	SpreadM    *float64   `json:"spreadM"`
 	PlaceLabel *string    `json:"placeLabel"`
+
+	// Los pedidos de ese día y a cuántos se acercó. PUNTEROS y no números: sin el
+	// cruce con PEDIDO configurado no son cero, es que no se sabe, y un cero
+	// dibujado se lee como "no visitó a nadie".
+	Orders  *int32 `json:"orders"`
+	Visited *int32 `json:"visited"`
 }
 
 func aSellerDay(f store.CalendarRow) SellerDay {
@@ -63,6 +69,16 @@ type SummaryRow struct {
 	DaysNoMovement int64   `json:"daysNoMovement"`
 	DaysOk         int64   `json:"daysOk"`
 	TotalKm        float64 `json:"totalKm"`
+
+	// Lo que hace accionable un "sin fichero": cuándo subió por última vez, cuántos
+	// ficheros suyos se atascaron y si está emparejado con un vendedor de PEDIDO.
+	// Vivía en la pantalla de Administración, que es donde nadie entraba a mirarlo.
+	LastUpload *string `json:"lastUpload"`
+	DaysSilent int     `json:"daysSilent"`
+	StuckFiles int     `json:"stuckFiles"`
+	Linked     bool    `json:"linked"`
+	Orders     int32   `json:"orders"`
+	Visited    int32   `json:"visited"`
 }
 
 func aSummaryRow(f store.IncidentSummaryRow) SummaryRow {
@@ -229,6 +245,73 @@ func aStops(ps []store.Stop) []Stop {
 	out := make([]Stop, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, aStop(p))
+	}
+	return out
+}
+
+// StuckDay explains a day that arrived and could not be used: it is the difference
+// between "did not upload" and "uploaded and the system did not know what to do
+// with it", which are two very different conversations to have with a seller.
+type StuckDay struct {
+	SellerID string `json:"sellerId"`
+	Date     string `json:"date"`
+	Status   string `json:"status"`
+	Files    int32  `json:"files"`
+}
+
+func aStuckDays(fs []store.StuckDaysRow) []StuckDay {
+	out := make([]StuckDay, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, StuckDay{
+			SellerID: f.SellerID,
+			Date:     f.Date.Format(iso),
+			Status:   string(f.Status),
+			Files:    f.Files,
+		})
+	}
+	return out
+}
+
+// Visit is one order of the day measured against the route: the client, whether
+// they were called on, and how close the seller got.
+type Visit struct {
+	ID           string     `json:"id"`
+	Visited      bool       `json:"visited"`
+	DistanceM    *float64   `json:"distanceM"`
+	Time         *time.Time `json:"time"`
+	Minutes      *int32     `json:"minutes"`
+	StopID       *string    `json:"stopId"`
+	Folio        *string    `json:"folio"`
+	OrderStatus  *string    `json:"orderStatus"`
+	ClientID     string     `json:"clientId"`
+	ClientCode   *string    `json:"clientCode"`
+	ClientName   string     `json:"clientName"`
+	Address      *string    `json:"address"`
+	Municipality *string    `json:"municipality"`
+	Lat          float64    `json:"lat"`
+	Lon          float64    `json:"lon"`
+}
+
+func aVisits(vs []store.DayVisitsRow) []Visit {
+	out := make([]Visit, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, Visit{
+			ID:           v.ID,
+			Visited:      v.Visited,
+			DistanceM:    v.DistanceM,
+			Time:         v.Time,
+			Minutes:      v.Minutes,
+			StopID:       v.StopID,
+			Folio:        v.Folio,
+			OrderStatus:  v.OrderStatus,
+			ClientID:     v.ClientID,
+			ClientCode:   v.ClientCode,
+			ClientName:   v.ClientName,
+			Address:      v.ClientAddress,
+			Municipality: v.ClientMunicipality,
+			Lat:          v.Lat,
+			Lon:          v.Lon,
+		})
 	}
 	return out
 }

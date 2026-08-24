@@ -1,16 +1,24 @@
 "use client";
 
 /**
- * The viewer's map.
+ * The viewer's map, por capas.
  *
- * The polyline carries a time gradient — light to dark — so the ORDER of the track
- * can be seen without replaying it: where it started and which way it went. A
- * single-colour line only says where someone passed, not in what order, and with a
- * route that crosses itself that is exactly what you need to know.
+ * Tres cosas distintas se dibujan sobre el mismo mapa y responden a preguntas
+ * distintas, así que se encienden y se apagan por separado:
  *
- * It carries a legend because the drawing was making claims nobody could read: a
- * fat orange circle means "stopped here for half an hour" and a thin one means "a
- * traffic light", and without saying so out loud that is just decoration.
+ *   RECORRIDO  por dónde anduvo. La polilínea lleva un degradado en el tiempo
+ *              —claro a oscuro— para que se vea el ORDEN sin reproducirlo: dónde
+ *              empezó y hacia dónde fue. Una línea de un solo color solo dice por
+ *              dónde pasó, y en una ruta que se cruza consigo misma eso no basta.
+ *   PARADAS    dónde se detuvo, con el tamaño en proporción a lo que duró.
+ *   CLIENTES   los del pedido de ese día: verde el que pisó, rojo el que no.
+ *
+ * Encenderlas y apagarlas es lo que permite la comparación que importa: apagando el
+ * recorrido quedan los clientes solos —la ruta que TENÍA que hacer—, y encendiéndolo
+ * encima se ve la que hizo.
+ *
+ * Las capas se crean UNA vez y se rellenan al cambiar los datos; encender o apagar
+ * una no vuelve a dibujar el mapa entero.
  *
  * Leaflet touches `window`, so this component is loaded without SSR from the page.
  */
@@ -19,26 +27,50 @@ import { useEffect, useRef } from "react";
 // La hoja de Leaflet, sin la cual los tiles se colocan sueltos por la caja: se
 // perdió al reescribir este componente y el mapa salía a cuadros con huecos negros.
 import "leaflet/dist/leaflet.css";
-import type { Stop, TrackPoint } from "@/lib/api";
+import type { Stop, TrackPoint, Visit } from "@/lib/api";
+
+/** Qué capas están encendidas. */
+export interface Capas {
+  ruta: boolean;
+  paradas: boolean;
+  clientes: boolean;
+}
 
 interface Props {
   points: TrackPoint[];
   stops: Stop[];
+  visits: Visit[];
+  capas: Capas;
   /** Index up to which it is drawn, for the timeline. -1 = everything. */
   to?: number;
-  /** Stop to centre on and open. Set from the list beside the map. */
+  /** Stop or client to centre on and open. Set from the list beside the map. */
   focusStopId?: string | null;
+  focusClientId?: string | null;
 }
 
 // The gradient's ends, so the legend and the line cannot drift apart.
 const INICIO = "hsl(210, 75%, 58%)";
 const FIN = "hsl(20, 75%, 40%)";
+// Verde y rojo del cliente, aquí una sola vez para que la leyenda no se desvíe.
+const VISITADO = "#2f855a";
+const SIN_VISITAR = "#c53030";
 
-export default function RouteMap({ points, stops, to = -1, focusStopId }: Props) {
+export default function RouteMap({
+  points,
+  stops,
+  visits,
+  capas,
+  to = -1,
+  focusStopId,
+  focusClientId,
+}: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<any>(null);
-  const capa = useRef<any>(null);
-  // Las paradas por id, para poder centrarlas desde la lista de al lado.
+  const capaRuta = useRef<any>(null);
+  const capaParadas = useRef<any>(null);
+  const capaClientes = useRef<any>(null);
+  // Las paradas y los clientes por id, para poder centrarlos desde la lista de al
+  // lado.
   const marcas = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
@@ -54,17 +86,17 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
           attribution: "© OpenStreetMap",
           maxZoom: 19,
         }).addTo(mapa.current);
-        capa.current = L.layerGroup().addTo(mapa.current);
+        capaRuta.current = L.layerGroup();
+        capaParadas.current = L.layerGroup();
+        capaClientes.current = L.layerGroup();
       }
 
-      capa.current.clearLayers();
+      capaRuta.current.clearLayers();
+      capaParadas.current.clearLayers();
+      capaClientes.current.clearLayers();
       marcas.current.clear();
 
       const visibles = to >= 0 ? points.slice(0, to + 1) : points;
-      if (visibles.length === 0) {
-        mapa.current.setView([21.38, -77.91], 12); // Camagüey
-        return;
-      }
 
       // Gradient by legs: each segment is painted according to its place in the day.
       for (let i = 1; i < visibles.length; i++) {
@@ -79,28 +111,30 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
             weight: 4,
             opacity: 0.9,
           },
-        ).addTo(capa.current);
+        ).addTo(capaRuta.current);
       }
 
       // Start and end of the workday.
-      const primero = visibles[0];
-      const ultimo = visibles[visibles.length - 1];
-      L.circleMarker([primero.lat, primero.lon], {
-        radius: 8,
-        color: "#1f6feb",
-        fillColor: "#1f6feb",
-        fillOpacity: 1,
-      })
-        .bindPopup(`Empezó el día — ${hora(primero.ts)}`)
-        .addTo(capa.current);
-      L.circleMarker([ultimo.lat, ultimo.lon], {
-        radius: 8,
-        color: "#8a1f1f",
-        fillColor: "#d64545",
-        fillOpacity: 1,
-      })
-        .bindPopup(`Terminó el día — ${hora(ultimo.ts)}`)
-        .addTo(capa.current);
+      if (visibles.length > 0) {
+        const primero = visibles[0];
+        const ultimo = visibles[visibles.length - 1];
+        L.circleMarker([primero.lat, primero.lon], {
+          radius: 8,
+          color: "#1f6feb",
+          fillColor: "#1f6feb",
+          fillOpacity: 1,
+        })
+          .bindPopup(`Empezó el día — ${hora(primero.ts)}`)
+          .addTo(capaRuta.current);
+        L.circleMarker([ultimo.lat, ultimo.lon], {
+          radius: 8,
+          color: "#8a1f1f",
+          fillColor: "#d64545",
+          fillOpacity: 1,
+        })
+          .bindPopup(`Terminó el día — ${hora(ultimo.ts)}`)
+          .addTo(capaRuta.current);
+      }
 
       // The stops, sized in proportion to how long they lasted: a half-hour visit
       // has to stand out against a traffic light.
@@ -121,8 +155,37 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
                 : ""
             }`,
           )
-          .addTo(capa.current);
+          .addTo(capaParadas.current);
         marcas.current.set(p.id, m);
+      }
+
+      // Los clientes del pedido de ese día. El color ES el veredicto: verde el que
+      // pisó, rojo el que no. Y la distancia va en el globo aunque no cuente como
+      // visita — «pasó a 180 m» no es lo mismo que «no se acercó en todo el día».
+      for (const v of visits) {
+        const m = L.circleMarker([v.lat, v.lon], {
+          radius: 7,
+          color: v.visited ? VISITADO : SIN_VISITAR,
+          fillColor: v.visited ? VISITADO : SIN_VISITAR,
+          fillOpacity: v.visited ? 0.9 : 0.35,
+          weight: 2,
+        })
+          .bindPopup(
+            `<b>${v.clientName}</b>` +
+              (v.folio ? `<br>Pedido ${v.folio}` : "") +
+              (v.address ? `<br>${v.address}` : "") +
+              (v.visited
+                ? `<br>Visitado a las ${hora(v.time)}${
+                    v.minutes ? ` · ${v.minutes} min` : ""
+                  }`
+                : `<br>Sin visitar${
+                    v.distanceM != null
+                      ? ` · lo más cerca que pasó: ${Math.round(v.distanceM)} m`
+                      : ""
+                  }`),
+          )
+          .addTo(capaClientes.current);
+        marcas.current.set(v.clientId, m);
       }
 
       // invalidateSize ANTES de encuadrar: Leaflet mide su caja al crearse, y aquí
@@ -131,16 +194,41 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
       // suyo y el mapa sale a cuadros, con media caja en blanco.
       mapa.current.invalidateSize(false);
 
-      const limites = L.latLngBounds(
-        visibles.map((p) => [p.lat, p.lon] as [number, number]),
-      );
-      mapa.current.fitBounds(limites, { padding: [30, 30] });
+      // Se encuadra con TODO lo que hay —recorrido y clientes—, no solo con el
+      // recorrido: un día sin fichero no tiene ni un punto, y encuadrar solo por
+      // ellos dejaba a los clientes fuera de la pantalla y el mapa en Camagüey
+      // aunque el vendedor fuera de Santiago.
+      const todo: [number, number][] = [
+        ...visibles.map((p) => [p.lat, p.lon] as [number, number]),
+        ...visits.map((v) => [v.lat, v.lon] as [number, number]),
+      ];
+      if (todo.length === 0) {
+        mapa.current.setView([21.38, -77.91], 12); // Camagüey
+        return;
+      }
+      mapa.current.fitBounds(L.latLngBounds(todo), { padding: [30, 30] });
     })();
 
     return () => {
       cancelado = true;
     };
-  }, [points, stops, to]);
+  }, [points, stops, visits, to]);
+
+  // Encender y apagar capas: en su propio efecto, para que marcar una casilla no
+  // vuelva a dibujar el mapa entero ni lo reencuadre.
+  useEffect(() => {
+    if (!mapa.current) return;
+    const pares: [any, boolean][] = [
+      [capaRuta.current, capas.ruta],
+      [capaParadas.current, capas.paradas],
+      [capaClientes.current, capas.clientes],
+    ];
+    for (const [capa, encendida] of pares) {
+      if (!capa) continue;
+      if (encendida && !mapa.current.hasLayer(capa)) capa.addTo(mapa.current);
+      if (!encendida && mapa.current.hasLayer(capa)) mapa.current.removeLayer(capa);
+    }
+  }, [capas, points, stops, visits]);
 
   // Y cada vez que la caja cambie de tamaño: al abrir el panel lateral, al girar
   // el móvil o al cambiar de zoom del navegador.
@@ -151,17 +239,18 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
     return () => ro.disconnect();
   }, []);
 
-  // Tocar una parada en la lista la centra y la abre en el mapa. Va en su propio
-  // efecto para no volver a dibujarlo todo por mirar una parada.
+  // Tocar una parada o un cliente en la lista lo centra y lo abre en el mapa. Va en
+  // su propio efecto para no volver a dibujarlo todo por mirar uno.
   useEffect(() => {
-    if (!focusStopId || !mapa.current) return;
-    const m = marcas.current.get(focusStopId);
+    const id = focusStopId || focusClientId;
+    if (!id || !mapa.current) return;
+    const m = marcas.current.get(id);
     if (!m) return;
     mapa.current.setView(m.getLatLng(), Math.max(mapa.current.getZoom(), 16), {
       animate: true,
     });
     m.openPopup();
-  }, [focusStopId]);
+  }, [focusStopId, focusClientId]);
 
   return (
     <div className="mapa-caja">
@@ -169,26 +258,40 @@ export default function RouteMap({ points, stops, to = -1, focusStopId }: Props)
 
       {/* La leyenda, encima del mapa. Antes el dibujo afirmaba cosas que nadie
           podía leer: el grosor de un círculo naranja significa media hora parado,
-          y sin decirlo es un adorno. */}
+          y sin decirlo es un adorno. Solo se explica lo que está encendido. */}
       <div className="leyenda-mapa">
-        <div className="leyenda-fila">
-          <span
-            className="leyenda-linea"
-            style={{ background: `linear-gradient(90deg, ${INICIO}, ${FIN})` }}
-          />
-          <span>Recorrido, del inicio al final del día</span>
-        </div>
-        <div className="leyenda-fila">
-          <span className="leyenda-punto" style={{ background: "#1f6feb" }} />
-          <span>Empezó</span>
-          <span className="leyenda-punto" style={{ background: "#d64545" }} />
-          <span>Terminó</span>
-        </div>
-        <div className="leyenda-fila">
-          <span className="leyenda-parada leyenda-parada-chica" />
-          <span className="leyenda-parada" />
-          <span>Parada: el tamaño es lo que duró</span>
-        </div>
+        {capas.ruta && (
+          <div className="leyenda-fila">
+            <span
+              className="leyenda-linea"
+              style={{ background: `linear-gradient(90deg, ${INICIO}, ${FIN})` }}
+            />
+            <span>Recorrido, del inicio al final del día</span>
+          </div>
+        )}
+        {capas.ruta && (
+          <div className="leyenda-fila">
+            <span className="leyenda-punto" style={{ background: "#1f6feb" }} />
+            <span>Empezó</span>
+            <span className="leyenda-punto" style={{ background: "#d64545" }} />
+            <span>Terminó</span>
+          </div>
+        )}
+        {capas.paradas && (
+          <div className="leyenda-fila">
+            <span className="leyenda-parada leyenda-parada-chica" />
+            <span className="leyenda-parada" />
+            <span>Parada: el tamaño es lo que duró</span>
+          </div>
+        )}
+        {capas.clientes && (
+          <div className="leyenda-fila">
+            <span className="leyenda-punto" style={{ background: VISITADO }} />
+            <span>Cliente visitado</span>
+            <span className="leyenda-punto" style={{ background: SIN_VISITAR }} />
+            <span>Sin visitar</span>
+          </div>
+        )}
       </div>
     </div>
   );

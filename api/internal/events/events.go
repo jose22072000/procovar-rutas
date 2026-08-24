@@ -34,6 +34,8 @@ const (
 	TypeScan = "scan"
 	// TypeDay: a seller's day was recomputed.
 	TypeDay = "day"
+	// TypeOrders: PEDIDO's orders were synced and re-crossed with the routes.
+	TypeOrders = "pedidos"
 )
 
 type Event struct {

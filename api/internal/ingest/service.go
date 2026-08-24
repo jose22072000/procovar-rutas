@@ -56,6 +56,11 @@ type Service struct {
 	accounts Accounts
 	log      *slog.Logger
 	max      int
+	// TrasRecalcular corre justo después de guardar un día y sus paradas. Es por
+	// donde entra el cruce con los pedidos de PEDIDO, sin que la ingesta tenga que
+	// saber que existe: un fichero nuevo cambia las paradas, y unas paradas nuevas
+	// cambian a quién visitó. Puede ser nil.
+	TrasRecalcular func(ctx context.Context, trackDayID, trabajadorID, sucursalID string, fecha time.Time)
 }
 
 func NewService(pool *pgxpool.Pool, accounts Accounts, log *slog.Logger, maxFicheros int) *Service {
@@ -598,6 +603,14 @@ func (s *Service) RecomputeDay(ctx context.Context, trabajadorID string, date ti
 		}); err != nil {
 			return err
 		}
+	}
+
+	// Paradas nuevas, veredicto nuevo: lo que el vendedor visitó se mide contra
+	// ESTAS paradas, así que se vuelve a cruzar aquí y no en la siguiente pasada
+	// horaria. Si el cruce falla no se tira el día: el recorrido ya está guardado y
+	// lo que falta es una columna, no el dato.
+	if s.TrasRecalcular != nil {
+		s.TrasRecalcular(ctx, dia.ID, trabajadorID, trab.BranchID, date)
 	}
 
 	return nil

@@ -17,7 +17,7 @@
 import { useEffect, useRef } from "react";
 import { API } from "./api";
 
-export type EventType = "queue" | "file" | "scan" | "day";
+export type EventType = "queue" | "file" | "scan" | "day" | "pedidos";
 
 /**
  * Calls `onChange` when one of the requested types arrives.

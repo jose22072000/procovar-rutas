@@ -110,7 +110,7 @@ func (q *Queries) BranchAliases(ctx context.Context, branchID string) ([]BranchA
 }
 
 const branchByAuthOrg = `-- name: BranchByAuthOrg :one
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE auth_org_id = $1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo FROM sucursal WHERE auth_org_id = $1
 `
 
 func (q *Queries) BranchByAuthOrg(ctx context.Context, authOrgID *string) (Branch, error) {
@@ -125,6 +125,7 @@ func (q *Queries) BranchByAuthOrg(ctx context.Context, authOrgID *string) (Branc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Clave,
+		&i.Code,
 	)
 	return i, err
 }
@@ -432,9 +433,10 @@ func (q *Queries) FilePoints(ctx context.Context, gpxFileID string) ([]FilePoint
 }
 
 const inbox = `-- name: Inbox :many
-SELECT f.id, f.source_id, f.drive_file_id, f.sha256, f.nombre, f.ruta_carpeta, f.tamano_bytes, f.drive_created_at, f.estado, f.error, f.trabajador_id, f.sucursal_id, f.fecha, f.origen_fecha, f.puntos_total, f.puntos_validos, f.primer_fix, f.ultimo_fix, f.pista_alias, f.importado_at, s.nombre AS source
+SELECT f.id, f.source_id, f.drive_file_id, f.sha256, f.nombre, f.ruta_carpeta, f.tamano_bytes, f.drive_created_at, f.estado, f.error, f.trabajador_id, f.sucursal_id, f.fecha, f.origen_fecha, f.puntos_total, f.puntos_validos, f.primer_fix, f.ultimo_fix, f.pista_alias, f.importado_at, s.nombre AS source, coalesce(t.nombre, '') AS seller
 FROM gpx_file f
 JOIN drive_source s ON s.id = f.source_id
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
 WHERE f.estado IN ('SIN_ASIGNAR', 'SIN_FECHA', 'ERROR')
   AND ($1::text = '' OR f.sucursal_id IS NULL OR f.sucursal_id = $1)
 ORDER BY f.importado_at DESC
@@ -468,6 +470,7 @@ type InboxRow struct {
 	AliasHint      *string
 	ImportedAt     time.Time
 	Source         string
+	Seller         string
 }
 
 // The inbox: what ingest could not assign or date. It is what stops a file from
@@ -503,6 +506,7 @@ func (q *Queries) Inbox(ctx context.Context, arg InboxParams) ([]InboxRow, error
 			&i.AliasHint,
 			&i.ImportedAt,
 			&i.Source,
+			&i.Seller,
 		); err != nil {
 			return nil, err
 		}
@@ -855,6 +859,80 @@ func (q *Queries) SellersInScope(ctx context.Context, arg SellersInScopeParams) 
 			&i.To,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const stuckDays = `-- name: StuckDays :many
+
+
+SELECT f.trabajador_id::text AS seller_id, f.fecha::date AS fecha, f.estado, count(*)::int AS files
+FROM gpx_file f
+WHERE f.estado <> 'PROCESADO'
+  AND f.trabajador_id IS NOT NULL
+  AND f.fecha BETWEEN $1::date AND $2::date
+  AND ($3::text = '' OR f.sucursal_id = $3)
+  AND (cardinality($4::text[]) = 0 OR f.trabajador_id = ANY ($4))
+  AND ($5::text = '' OR f.trabajador_id <> $5)
+GROUP BY f.trabajador_id, f.fecha, f.estado
+`
+
+type StuckDaysParams struct {
+	FromDate time.Time
+	ToDate   time.Time
+	BranchID string
+	Sellers  []string
+	Exclude  string
+}
+
+type StuckDaysRow struct {
+	SellerID string
+	Date     time.Time
+	Status   FileStatus
+	Files    int32
+}
+
+// ---------------------------------------------------------------------------
+// Por qué no subió
+// ---------------------------------------------------------------------------
+//
+// Un día en SIN_FICHERO decía "no hay ruta" y se quedaba callado sobre lo único que
+// hay que hacer con él: si el vendedor no subió nada, si subió y el fichero se
+// atascó, o si lleva un mes sin subir y lo que falla es el GPS. Eso vivía en la
+// pantalla de Administración, que es donde nadie iba a mirarlo.
+// Lo primero de las dos —cuándo subió cada vendedor por última vez— se escribe a
+// mano en upload_state.go: sqlc no acierta a inferir qué es nulo ahí y devolvía
+// `interface{}` en la mitad de las columnas.
+// Los ficheros que SÍ llegaron para un día y no se pudieron usar. Es la diferencia
+// entre "no subió" y "subió y el sistema no supo qué hacer con ello", que son dos
+// conversaciones muy distintas con el vendedor.
+func (q *Queries) StuckDays(ctx context.Context, arg StuckDaysParams) ([]StuckDaysRow, error) {
+	rows, err := q.db.Query(ctx, stuckDays,
+		arg.FromDate,
+		arg.ToDate,
+		arg.BranchID,
+		arg.Sellers,
+		arg.Exclude,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StuckDaysRow{}
+	for rows.Next() {
+		var i StuckDaysRow
+		if err := rows.Scan(
+			&i.SellerID,
+			&i.Date,
+			&i.Status,
+			&i.Files,
 		); err != nil {
 			return nil, err
 		}

@@ -126,9 +126,10 @@ WHERE supervisor_id = $1;
 -- The inbox: what ingest could not assign or date. It is what stops a file from
 -- being lost in silence.
 -- name: Inbox :many
-SELECT f.*, s.nombre AS source
+SELECT f.*, s.nombre AS source, coalesce(t.nombre, '') AS seller
 FROM gpx_file f
 JOIN drive_source s ON s.id = f.source_id
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
 WHERE f.estado IN ('SIN_ASIGNAR', 'SIN_FECHA', 'ERROR')
   AND (@branch_id::text = '' OR f.sucursal_id IS NULL OR f.sucursal_id = @branch_id)
 ORDER BY f.importado_at DESC
@@ -177,3 +178,30 @@ SELECT * FROM sucursal WHERE auth_org_id = $1;
 -- búsqueda es directa.
 UPDATE sucursal SET auth_org_id = @auth_org_id, updated_at = now()
 WHERE id = @id AND (auth_org_id IS NULL OR auth_org_id = '');
+
+-- ---------------------------------------------------------------------------
+-- Por qué no subió
+-- ---------------------------------------------------------------------------
+--
+-- Un día en SIN_FICHERO decía "no hay ruta" y se quedaba callado sobre lo único que
+-- hay que hacer con él: si el vendedor no subió nada, si subió y el fichero se
+-- atascó, o si lleva un mes sin subir y lo que falla es el GPS. Eso vivía en la
+-- pantalla de Administración, que es donde nadie iba a mirarlo.
+
+-- Lo primero de las dos —cuándo subió cada vendedor por última vez— se escribe a
+-- mano en upload_state.go: sqlc no acierta a inferir qué es nulo ahí y devolvía
+-- `interface{}` en la mitad de las columnas.
+
+-- Los ficheros que SÍ llegaron para un día y no se pudieron usar. Es la diferencia
+-- entre "no subió" y "subió y el sistema no supo qué hacer con ello", que son dos
+-- conversaciones muy distintas con el vendedor.
+-- name: StuckDays :many
+SELECT f.trabajador_id::text AS seller_id, f.fecha::date AS fecha, f.estado, count(*)::int AS files
+FROM gpx_file f
+WHERE f.estado <> 'PROCESADO'
+  AND f.trabajador_id IS NOT NULL
+  AND f.fecha BETWEEN @from_date::date AND @to_date::date
+  AND (@branch_id::text = '' OR f.sucursal_id = @branch_id)
+  AND (cardinality(@sellers::text[]) = 0 OR f.trabajador_id = ANY (@sellers))
+  AND (@exclude::text = '' OR f.trabajador_id <> @exclude)
+GROUP BY f.trabajador_id, f.fecha, f.estado;

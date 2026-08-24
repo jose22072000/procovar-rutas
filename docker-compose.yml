@@ -34,6 +34,11 @@ services:
       QB_AUTH_SIGNING_KEY: ${QB_AUTH_SIGNING_KEY}
       QB_SESSION_COOKIE_DOMAIN: ${QB_SESSION_COOKIE_DOMAIN}
       GOOGLE_CUENTAS: ${GOOGLE_CUENTAS}
+      # PEDIDO por dentro de la red de Docker: los dos contenedores están en
+      # `dokploy-network`, así que esto no sale de la máquina.
+      PEDIDO_API_URL: ${PEDIDO_API_URL}
+      PEDIDO_API_KEY: ${PEDIDO_API_KEY}
+      PEDIDO_VENTANA_DIAS: ${PEDIDO_VENTANA_DIAS:-21}
     depends_on:
       migrar:
         condition: service_completed_successfully
@@ -59,6 +64,12 @@ services:
       GOOGLE_CUENTAS: ${GOOGLE_CUENTAS}
       INTERVALO_BARRIDO: ${INTERVALO_BARRIDO:-30m}
       HORA_REPASO_NOCTURNO: ${HORA_REPASO_NOCTURNO:-2}
+      # La ingesta es la que trae los pedidos por reloj y la que vuelve a cruzar
+      # cada día que recalcula: paradas nuevas, veredicto nuevo.
+      PEDIDO_API_URL: ${PEDIDO_API_URL}
+      PEDIDO_API_KEY: ${PEDIDO_API_KEY}
+      PEDIDO_VENTANA_DIAS: ${PEDIDO_VENTANA_DIAS:-21}
+      INTERVALO_PEDIDOS: ${INTERVALO_PEDIDOS:-1h}
     depends_on:
       migrar:
         condition: service_completed_successfully

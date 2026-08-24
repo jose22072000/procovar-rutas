@@ -13,6 +13,7 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/config"
 	"github.com/procovar/procovar-rutas/api/internal/events"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
+	"github.com/procovar/procovar-rutas/api/internal/pedido"
 	"github.com/procovar/procovar-rutas/api/internal/queue"
 	"github.com/procovar/procovar-rutas/api/internal/store"
 )
@@ -23,6 +24,9 @@ type Server struct {
 	q      *store.Queries
 	auth   *auth.Client
 	ingest *ingest.Service
+	// pedidos may be nil: without PEDIDO_API_URL there is no crossing with orders
+	// and the panel works exactly as it did before, minus that column.
+	pedidos *pedido.Service
 	// queue may be nil: with no Redis, n8n's push is processed on the spot.
 	queue *queue.Queue
 	// bus may be nil for the same reason: with no Redis there are no live
@@ -36,19 +40,21 @@ func NewServer(
 	pool *pgxpool.Pool,
 	cliAuth *auth.Client,
 	svcIngesta *ingest.Service,
+	svcPedidos *pedido.Service,
 	colaRedis *queue.Queue,
 	bus *events.Bus,
 	log *slog.Logger,
 ) *Server {
 	return &Server{
-		cfg:    cfg,
-		pool:   pool,
-		q:      store.New(pool),
-		auth:   cliAuth,
-		ingest: svcIngesta,
-		queue:  colaRedis,
-		bus:    bus,
-		log:    log,
+		cfg:     cfg,
+		pool:    pool,
+		q:       store.New(pool),
+		auth:    cliAuth,
+		ingest:  svcIngesta,
+		pedidos: svcPedidos,
+		queue:   colaRedis,
+		bus:     bus,
+		log:     log,
 	}
 }
 
@@ -91,6 +97,17 @@ func (s *Server) Routes() http.Handler {
 		r.With(Exige(PermVisor)).Get("/day", s.day)
 		r.With(Exige(PermVisor)).Get("/week", s.week)
 		r.With(Exige(PermReporte)).Get("/report", s.report)
+
+		// Los pedidos del día y su cruce con el recorrido.
+		//
+		// Se leen con la llave del calendario porque es AHÍ donde se enseñan: quien
+		// puede ver el cumplimiento puede ver contra qué se está midiendo. Tocar
+		// reutiliza las llaves que ya existen —emparejar es de la misma naturaleza
+		// que un alias de dispositivo, y sincronizar que un barrido—, para no tener
+		// que dar de alta llaves nuevas en Accesos.
+		r.With(Exige(PermCalendario)).Get("/pedidos/vendedores", s.vendedores)
+		r.With(Exige(PermAlias)).Post("/pedidos/emparejar", s.emparejar)
+		r.With(Exige(PermBarrido)).Post("/pedidos/sync", s.syncPedidos)
 
 		r.Group(func(r chi.Router) {
 			r.Use(Exige(PermBandeja))

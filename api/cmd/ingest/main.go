@@ -26,6 +26,7 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/drive"
 	"github.com/procovar/procovar-rutas/api/internal/events"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
+	"github.com/procovar/procovar-rutas/api/internal/pedido"
 	"github.com/procovar/procovar-rutas/api/internal/queue"
 )
 
@@ -71,7 +72,37 @@ func main() {
 		log.Warn("sin credenciales de Google; solo se consumirá la cola de n8n", "motivo", err)
 	}
 
+	// Los avisos en vivo se montan aquí arriba y no dentro del modo demonio: los usan
+	// tanto el consumidor de la cola como la sincronización de pedidos, y montarlos
+	// dos veces serían dos conexiones a Redis para lo mismo.
+	var bus *events.Bus
+	if cfg.RedisURL != "" {
+		if b, err := events.New(cfg.RedisURL, cfg.PrefijoRedis); err != nil {
+			log.Warn("sin avisos en vivo", "error", err)
+		} else {
+			bus = b
+			defer b.Close()
+		}
+	}
+
 	svc := ingest.NewService(pool, cuentas, log, cfg.MaxFicherosPorBarrido)
+
+	// El cruce con PEDIDO, si está configurado. Se engancha a la ingesta: cada día
+	// que se recalcula trae paradas nuevas, y con paradas nuevas cambia a quién
+	// visitó. Sin PEDIDO_API_URL esto queda apagado y la ingesta es la de siempre.
+	var svcPedidos *pedido.Service
+	if cli := pedido.NewClient(cfg.PedidoURL, cfg.PedidoKey); cli != nil {
+		svcPedidos = pedido.NewService(pool, cli, bus, log, cfg.PedidoVentanaDias)
+		svc.TrasRecalcular = func(ctx context.Context, trackDayID, trabajadorID, sucursalID string, fecha time.Time) {
+			if err := svcPedidos.CrossOneDay(ctx, trackDayID, trabajadorID, sucursalID, fecha); err != nil {
+				log.Warn("no se pudo cruzar el día con los pedidos",
+					"dia", trackDayID, "fecha", fecha.Format("2006-01-02"), "error", err)
+			}
+		}
+		log.Info("cruce con PEDIDO listo", "url", cfg.PedidoURL, "ventana_dias", cfg.PedidoVentanaDias)
+	} else {
+		log.Warn("sin PEDIDO_API_URL: no se cruzarán los pedidos con las rutas")
+	}
 
 	if *absences {
 		fecha := yesterday()
@@ -118,14 +149,6 @@ func main() {
 		if err := c.Ping(ctx); err != nil {
 			log.Warn("Redis no responde; no se consumirá la cola de n8n", "error", err)
 		} else {
-			// Same Redis and same prefix for the panel's notifications.
-			var bus *events.Bus
-			if b, err := events.New(cfg.RedisURL, cfg.PrefijoRedis); err != nil {
-				log.Warn("sin avisos en vivo", "error", err)
-			} else {
-				bus = b
-				defer b.Close()
-			}
 			go ingest.NewConsumer(svc, c, bus, log).Run(ctx)
 		}
 	}
@@ -138,6 +161,14 @@ func main() {
 
 	log.Info("ingesta en marcha",
 		"intervalo", cfg.IntervaloBarrido, "repaso_nightly", cfg.HoraRepasoNocturno)
+
+	// Los pedidos van por su propio reloj, más lento que el de Drive: un .gpx aparece
+	// cuando el vendedor termina el día, pero los pedidos ya estaban puestos por la
+	// mañana. Cada hora es de sobra, y así no se le hacen a PEDIDO cuarenta y ocho
+	// consultas diarias para traer lo mismo.
+	if svcPedidos != nil {
+		go sincronizarPedidos(ctx, svcPedidos, cfg.IntervaloPedidos, log)
+	}
 
 	run(ctx, svc, tipo, log)
 
@@ -189,4 +220,38 @@ func run(ctx context.Context, svc *ingest.Service, tipo string, log *slog.Logger
 func yesterday() time.Time {
 	y := time.Now().AddDate(0, 0, -1)
 	return time.Date(y.Year(), y.Month(), y.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// sincronizarPedidos trae los pedidos de PEDIDO cada tanto y vuelve a cruzarlos.
+//
+// La primera pasada es inmediata: al arrancar el contenedor lo que se quiere es que
+// el panel tenga los pedidos de hoy, no dentro de una hora.
+func sincronizarPedidos(ctx context.Context, svc *pedido.Service, cada time.Duration, log *slog.Logger) {
+	correr := func() {
+		inicio := time.Now()
+		res, err := svc.Sync(ctx, "programado")
+		if err != nil {
+			log.Error("no se pudieron traer los pedidos", "error", err)
+			return
+		}
+		log.Info("pedidos sincronizados",
+			"pedidos", res.Orders,
+			"clientes", res.Clients,
+			"dias_cruzados", res.Crosses,
+			"emparejados", res.Linked,
+			"duracion", time.Since(inicio).Round(time.Millisecond))
+	}
+
+	correr()
+
+	t := time.NewTicker(cada)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			correr()
+		}
+	}
 }

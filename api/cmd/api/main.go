@@ -19,6 +19,7 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/drive"
 	"github.com/procovar/procovar-rutas/api/internal/events"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
+	"github.com/procovar/procovar-rutas/api/internal/pedido"
 	"github.com/procovar/procovar-rutas/api/internal/queue"
 )
 
@@ -106,7 +107,20 @@ func main() {
 	}
 
 	svcIngesta := ingest.NewService(pool, cuentas, log, cfg.MaxFicherosPorBarrido)
-	servidor := api.NewServer(cfg, pool, cliAuth, svcIngesta, colaRedis, bus, log)
+
+	// El cruce con PEDIDO es OPCIONAL: sin PEDIDO_API_URL el panel arranca igual y
+	// sirve todo lo de siempre, sencillamente sin la columna de pedidos. Una
+	// integración que impidiera arrancar convertiría el reinicio de otra aplicación
+	// en la caída de esta.
+	var svcPedidos *pedido.Service
+	if cli := pedido.NewClient(cfg.PedidoURL, cfg.PedidoKey); cli != nil {
+		svcPedidos = pedido.NewService(pool, cli, bus, log, cfg.PedidoVentanaDias)
+		log.Info("cruce con PEDIDO listo", "url", cfg.PedidoURL, "ventana_dias", cfg.PedidoVentanaDias)
+	} else {
+		log.Warn("sin PEDIDO_API_URL: no se cruzarán los pedidos con las rutas")
+	}
+
+	servidor := api.NewServer(cfg, pool, cliAuth, svcIngesta, svcPedidos, colaRedis, bus, log)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Puerto,

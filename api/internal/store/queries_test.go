@@ -2,12 +2,11 @@ package store_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/procovar/procovar-rutas/api/internal/store"
+	"github.com/procovar/procovar-rutas/api/internal/testdb"
 )
 
 // These tests EXECUTE the queries against a real Postgres, with an empty database
@@ -23,19 +22,7 @@ import (
 // Hence the shape of these tests: they do not check results, they check that the
 // query RUNS. A query that has never been executed is not tested, however well it
 // aunque compile.
-func abrir(t *testing.T) *store.Queries {
-	t.Helper()
-	url := os.Getenv("DATABASE_URL_TEST")
-	if url == "" {
-		t.Skip("sin DATABASE_URL_TEST")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	return store.New(pool)
-}
+func abrir(t *testing.T) *store.Queries { return store.New(testdb.Open(t)) }
 
 func TestConsultasDelPanelCorren(t *testing.T) {
 	q := abrir(t)

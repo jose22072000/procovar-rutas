@@ -50,11 +50,95 @@ func (s *Server) calendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A partir de aquí, lo que convierte la cuadrícula en información.
+	//
+	// Antes esto devolvía kilómetros y una etiqueta, y las dos preguntas que se hacen
+	// al abrirlo —¿subió?, y si no, ¿por qué?— había que ir a contestarlas a otra
+	// pantalla. Ahora vienen en la misma respuesta: cuándo subió cada uno por última
+	// vez, qué ficheros suyos se atascaron, y cuántos de sus pedidos del día pisó.
+	//
+	// Ninguna de las tres tumba el calendario si falla: son el porqué de lo que ya
+	// se está pintando, no lo pintado. Un Redis caído o un PEDIDO que no contesta
+	// dejan la cuadrícula con menos detalle, nunca en blanco.
+	estados, err := store.UploadStates(r.Context(), s.pool, p.BranchID, p.Sellers, p.Exclude)
+	if err != nil {
+		s.log.Warn("sin estado de subida", "error", err)
+	}
+
+	atascados, err := s.q.StuckDays(r.Context(), store.StuckDaysParams{
+		FromDate: desde, ToDate: hasta,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
+	})
+	if err != nil {
+		s.log.Warn("sin ficheros atascados", "error", err)
+	}
+
+	visitas, err := s.q.VisitSummary(r.Context(), store.VisitSummaryParams{
+		FromDate: desde, ToDate: hasta,
+		BranchID: p.BranchID, Sellers: p.Sellers, Exclude: p.Exclude,
+	})
+	if err != nil {
+		s.log.Warn("sin cruce de pedidos", "error", err)
+	}
+
+	celdas := aSellerDays(dias)
+	filas := aSummaryRows(resumen)
+	conPedidos := s.pedidos != nil && s.pedidos.Configured()
+
+	// Los pedidos, celda a celda. La clave es vendedor+día porque eso es lo que
+	// identifica una celda de la cuadrícula.
+	porCelda := make(map[string]store.VisitSummaryRow, len(visitas))
+	porVendedor := map[string]struct{ orders, visited int32 }{}
+	for _, v := range visitas {
+		porCelda[v.SellerID+":"+v.Date.Format(iso)] = v
+		acc := porVendedor[v.SellerID]
+		acc.orders += v.Orders
+		acc.visited += v.Visited
+		porVendedor[v.SellerID] = acc
+	}
+
+	if conPedidos {
+		for i := range celdas {
+			if v, ok := porCelda[celdas[i].SellerID+":"+celdas[i].Date]; ok {
+				pedidos, visitados := v.Orders, v.Visited
+				celdas[i].Orders, celdas[i].Visited = &pedidos, &visitados
+			}
+		}
+	}
+
+	porTrabajador := make(map[string]store.UploadState, len(estados))
+	for _, e := range estados {
+		porTrabajador[e.SellerID] = e
+	}
+	hoy := time.Now().Truncate(24 * time.Hour)
+	for i := range filas {
+		if e, ok := porTrabajador[filas[i].SellerID]; ok {
+			filas[i].StuckFiles = e.StuckFiles
+			filas[i].Linked = e.Linked
+			if e.LastUpload != nil {
+				ultima := e.LastUpload.Format(iso)
+				filas[i].LastUpload = &ultima
+				filas[i].DaysSilent = int(hoy.Sub(*e.LastUpload).Hours() / 24)
+			} else {
+				// -1 y no 0: por ahí no ha entrado NUNCA nada, que no es lo mismo
+				// que haber subido hoy.
+				filas[i].DaysSilent = -1
+			}
+		}
+		if acc, ok := porVendedor[filas[i].SellerID]; ok {
+			filas[i].Orders, filas[i].Visited = acc.orders, acc.visited
+		}
+	}
+
 	respond(w, http.StatusOK, map[string]any{
 		"from":    desde.Format(iso),
 		"to":      hasta.Format(iso),
-		"days":    aSellerDays(dias),
-		"summary": aSummaryRows(resumen),
+		"days":    celdas,
+		"summary": filas,
+		"stuck":   aStuckDays(atascados),
+		// Si esto es falso, la pantalla NO pinta la columna de pedidos: mejor no
+		// decir nada que decir cero cuando lo que pasa es que no hay con qué medir.
+		"withOrders": conPedidos,
 		// The working days go to the client so the grid does not have to guess which
 		// ones they are: they are configured per branch.
 		"workdays": calendar.Workdays(desde, hasta, nil),
@@ -152,10 +236,19 @@ func (s *Server) day(w http.ResponseWriter, r *http.Request) {
 		nombreVendedor = t.Name
 	}
 
+	// Los clientes del día: la capa que se enciende y se apaga sobre el mapa. Si el
+	// cruce no está configurado la lista viene vacía y el visor no ofrece la capa,
+	// en vez de ofrecer una capa que no enciende nada.
+	visitas, err := s.q.DayVisits(r.Context(), day.ID)
+	if err != nil {
+		s.log.Warn("sin visitas del día", "dia", day.ID, "error", err)
+	}
+
 	respond(w, http.StatusOK, map[string]any{
 		"day":      aDayDetail(day, nombreVendedor),
 		"points":   aTrackPoints(puntos),
 		"stops":    aStops(paradas),
+		"visits":   aVisits(visitas),
 		"timezone": zona,
 	})
 }

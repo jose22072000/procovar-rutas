@@ -241,6 +241,7 @@ type Branch struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Clave     string
+	Code      *string
 }
 
 type BranchSettings struct {
@@ -263,6 +264,20 @@ type BranchSettings struct {
 	EntryToleranceMin int32
 	ExitToleranceMin  int32
 	VisitRadiusM      int32
+}
+
+type Client struct {
+	ID           string
+	BranchID     string
+	Ref          string
+	Code         *string
+	Name         string
+	Address      *string
+	Municipality *string
+	Zone         *string
+	Lat          float64
+	Lon          float64
+	UpdatedAt    time.Time
 }
 
 type DeviceAlias struct {
@@ -335,6 +350,34 @@ type ImportLog struct {
 	Detail         *string
 }
 
+type Order struct {
+	ID            string
+	BranchID      string
+	Ref           string
+	Folio         *string
+	Date          time.Time
+	ClientID      *string
+	VendorRef     *string
+	VendorCode    *string
+	VendorName    *string
+	SellerID      *string
+	Status        *string
+	NeedsDelivery bool
+	UpdatedAt     time.Time
+}
+
+type OrderSync struct {
+	ID      string
+	Type    string
+	Start   time.Time
+	End     *time.Time
+	Clients int32
+	Orders  int32
+	Crosses int32
+	Ok      bool
+	Detail  *string
+}
+
 type Seller struct {
 	ID         string
 	AuthUserID *string
@@ -346,6 +389,16 @@ type Seller struct {
 	To         *time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+type SellerLink struct {
+	ID         string
+	BranchID   string
+	SellerID   string
+	VendorCode string
+	VendorName string
+	Origin     string
+	CreatedAt  time.Time
 }
 
 type Stop struct {
@@ -410,4 +463,17 @@ type TrackPoint struct {
 	Accuracy  *float64
 	Seq       int32
 	Quality   PointQuality
+}
+
+type Visitum struct {
+	ID         string
+	TrackDayID string
+	PedidoID   string
+	ClientID   string
+	StopID     *string
+	Visited    bool
+	DistanceM  *float64
+	Time       *time.Time
+	Minutes    *int32
+	ComputedAt time.Time
 }

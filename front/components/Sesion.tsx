@@ -65,12 +65,16 @@ export function Sesion({ children }: { children: React.ReactNode }) {
           <span className="marca-app">Rutas</span>
         </Link>
 
-        {/* El menú se arma con lo que tiene, no con lo que existe. Un enlace a una
-            pantalla que va a contestar 403 es una promesa que no se cumple. */}
+        {/* Un solo enlace, porque hay una sola pantalla.
+            Había tres —Calendario, Bandeja y Administración— y las dos últimas eran
+            listas a las que nadie entraba: lo suyo (qué fichero llegó sin dueño, qué
+            vendedor lleva días sin subir) es la EXPLICACIÓN de un hueco del
+            calendario, y puesto en otra pestaña se queda sin leer. Ahora sale encima
+            de la cuadrícula, y solo cuando hay algo que hacer.
+            El reporte imprimible no va aquí: necesita un vendedor y un día, así que
+            se entra desde el recorrido, que es donde se sabe cuáles. */}
         <nav>
           {puede("rutas.calendario") && <Link href="/">Calendario</Link>}
-          {puede("rutas.bandeja") && <Link href="/bandeja">Bandeja</Link>}
-          {puede("rutas.administracion") && <Link href="/administracion">Administración</Link>}
         </nav>
 
         {/* Cerrar sesión sale SIEMPRE, aunque no se sepa quién es o no tenga

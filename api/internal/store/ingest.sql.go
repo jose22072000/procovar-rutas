@@ -11,7 +11,7 @@ import (
 )
 
 const activeBranches = `-- name: ActiveBranches :many
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE activa ORDER BY nombre
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo FROM sucursal WHERE activa ORDER BY nombre
 `
 
 func (q *Queries) ActiveBranches(ctx context.Context) ([]Branch, error) {
@@ -32,6 +32,7 @@ func (q *Queries) ActiveBranches(ctx context.Context) ([]Branch, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Clave,
+			&i.Code,
 		); err != nil {
 			return nil, err
 		}
@@ -274,7 +275,7 @@ func (q *Queries) BranchBreakdown(ctx context.Context) ([]BranchBreakdownRow, er
 }
 
 const branchByID = `-- name: BranchByID :one
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE id = $1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo FROM sucursal WHERE id = $1
 `
 
 func (q *Queries) BranchByID(ctx context.Context, id string) (Branch, error) {
@@ -289,13 +290,14 @@ func (q *Queries) BranchByID(ctx context.Context, id string) (Branch, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Clave,
+		&i.Code,
 	)
 	return i, err
 }
 
 const branchByKey = `-- name: BranchByKey :one
 
-SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave FROM sucursal WHERE clave = $1 LIMIT 1
+SELECT id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo FROM sucursal WHERE clave = $1 LIMIT 1
 `
 
 // Find-or-create by name, for the folder-name-is-the-seller flow.
@@ -319,6 +321,7 @@ func (q *Queries) BranchByKey(ctx context.Context, key string) (Branch, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Clave,
+		&i.Code,
 	)
 	return i, err
 }
@@ -417,7 +420,7 @@ ON CONFLICT (clave) DO UPDATE SET nombre = CASE
          AND length(EXCLUDED.nombre) > length(sucursal.nombre) THEN EXCLUDED.nombre
     ELSE sucursal.nombre
 END
-RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave
+RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo
 `
 
 type CreateBranchByKeyParams struct {
@@ -443,6 +446,7 @@ func (q *Queries) CreateBranchByKey(ctx context.Context, arg CreateBranchByKeyPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Clave,
+		&i.Code,
 	)
 	return i, err
 }
@@ -571,7 +575,7 @@ const createTestBranch = `-- name: CreateTestBranch :one
 INSERT INTO sucursal (id, nombre, auth_org_id, clave)
 VALUES ($1, $2, $3,
     regexp_replace(lower(translate($2, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN')), '[^a-z0-9]', '', 'g'))
-RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave
+RETURNING id, auth_org_id, nombre, activa, timezone, created_at, updated_at, clave, codigo
 `
 
 type CreateTestBranchParams struct {
@@ -596,6 +600,7 @@ func (q *Queries) CreateTestBranch(ctx context.Context, arg CreateTestBranchPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Clave,
+		&i.Code,
 	)
 	return i, err
 }

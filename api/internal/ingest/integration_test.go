@@ -25,27 +25,23 @@ import (
 	"github.com/procovar/procovar-rutas/api/internal/gpx"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
 	"github.com/procovar/procovar-rutas/api/internal/store"
+	"github.com/procovar/procovar-rutas/api/internal/testdb"
 )
 
 const carpeta = "carpeta-camaguey"
 
 func base(t *testing.T) (*pgxpool.Pool, *store.Queries) {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL_TEST")
-	if url == "" {
-		t.Skip("sin DATABASE_URL_TEST: se salta la prueba de integración")
-	}
-
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("conectando: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	// El pool viene con el cerrojo de pruebas puesto: `go test ./...` corre los
+	// paquetes en paralelo y aquí, en store y en pedido se vacían y se siembran las
+	// MISMAS tablas de la MISMA base. Sin el cerrojo, uno truncaba lo que otro
+	// acababa de sembrar y las caídas no tenían nada que ver con lo que se probaba.
+	pool := testdb.Open(t)
 
 	// Every test starts from zero. TRUNCATE ... CASCADE rather than dropping the
 	// database: the migrations are already applied and re-applying them per test
 	// sería mucho más lento.
-	_, err = pool.Exec(context.Background(),
+	_, err := pool.Exec(context.Background(),
 		`TRUNCATE track_point, stop, track_day, gpx_file, device_alias, import_log,
 		 drive_source, supervision, trabajador, sucursal_config, feriado, sucursal CASCADE`)
 	if err != nil {

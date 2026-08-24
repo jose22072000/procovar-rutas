@@ -53,6 +53,18 @@ type Config struct {
 	// not a person's: a procovar-auth session will not do.
 	ServiceKey string
 
+	// PEDIDO: de dónde salen los pedidos del día con la geo de su cliente.
+	//
+	// PedidoURL es la dirección INTERNA del contenedor de PEDIDO
+	// (`http://pedido-api-xxxx:8400`): los dos cuelgan de la misma red de Docker en
+	// Dokploy, así que el tráfico no sale de la máquina — ni vuelta pública, ni TLS
+	// que negociar, ni nada que publicar. Vacío = el cruce con pedidos queda
+	// apagado y el panel funciona exactamente como antes.
+	PedidoURL         string
+	PedidoKey         string
+	PedidoVentanaDias int
+	IntervaloPedidos  time.Duration
+
 	// Ingesta.
 	IntervaloBarrido      time.Duration
 	HoraRepasoNocturno    int // hora local, 0-23
@@ -75,6 +87,10 @@ func Cargar() (*Config, error) {
 		RedisURL:              os.Getenv("REDIS_URL"),
 		PrefijoRedis:          porDefecto("PREFIJO_REDIS", "procovar-rutas:"),
 		ServiceKey:            os.Getenv("SERVICE_API_KEY"),
+		PedidoURL:             os.Getenv("PEDIDO_API_URL"),
+		PedidoKey:             porDefecto("PEDIDO_API_KEY", os.Getenv("SERVICE_API_KEY")),
+		PedidoVentanaDias:     entero("PEDIDO_VENTANA_DIAS", 21),
+		IntervaloPedidos:      duracion("INTERVALO_PEDIDOS", time.Hour),
 		IntervaloBarrido:      duracion("INTERVALO_BARRIDO", 30*time.Minute),
 		HoraRepasoNocturno:    entero("HORA_REPASO_NOCTURNO", 2),
 		MaxFicherosPorBarrido: entero("MAX_FICHEROS_BARRIDO", 500),

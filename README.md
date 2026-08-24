@@ -3,14 +3,19 @@
 Control de las rutas GPS de los vendedores a partir de los `.gpx` que suben a las
 carpetas de Google Drive. **Aplicación administrativa**: el vendedor no entra.
 
-Hace tres cosas:
+Hace cuatro cosas:
 
 1. **Guarda el histórico.** Ingiere los `.gpx` de las carpetas de Drive y los mete en
    Postgres para siempre; a partir de ahí se consultan sin volver a tocar Drive.
 2. **Es el visor.** Se toca un vendedor, se elige un día y se ve por dónde estuvo, sin
-   descargar nada ni abrir ninguna aplicación externa de GPX.
-3. **Avisa solo.** Calendario de lunes a viernes con los tres casos que hay que cazar:
-   *sin fichero*, *fichero sin fechas* y *día sin moverse del sitio*.
+   descargar nada ni abrir ninguna aplicación externa de GPX. Por capas: el recorrido,
+   las paradas y los clientes del día se encienden y se apagan por separado.
+3. **Avisa solo, y dice por qué.** Calendario de lunes a viernes. Una celda vacía ya no
+   dice solo «sin fichero»: dice si no subió, si subió y el fichero se atascó, o si
+   lleva días callado.
+4. **Contrasta la ruta con los pedidos.** Trae de PEDIDO los pedidos del día con la
+   geolocalización de su cliente y mide cada uno contra las paradas: «pasó por 6 de sus
+   8 clientes». Treinta kilómetros no dicen nada — se hacen igual dando vueltas.
 
 Plan completo: [`../PLAN-RUTAS-GPX.md`](../PLAN-RUTAS-GPX.md)
 
@@ -68,12 +73,13 @@ api/                     Go — la API y la ingesta
   internal/ingesta/      el barrido y el recálculo de días
   internal/api/          manejadores HTTP
   internal/reporte/      el documento semanal
+  internal/pedido/       los pedidos de PEDIDO y su cruce con el recorrido
   internal/almacen/      acceso a datos (sqlc)
   internal/cola/         cola en Redis de lo que empuja n8n
   migraciones/           *.sql versionados, empotrados en el binario
 n8n/                     flujo que recoge los .gpx y los manda a la API
 front/                   Next.js + Leaflet — solo interfaz, sin acceso a la base
-  app/                   calendario · visor · bandeja · administración · reporte
+  app/                   calendario · visor · reporte
 ```
 
 Toda la lógica que decide algo vive en `internal/` y se prueba sin base de datos.
@@ -145,6 +151,36 @@ aunque un fichero llegue renombrado, movido o con la fecha cambiada.
 `Procesados/`, pero estas carpetas las ven los propios trabajadores. El registro de «ya
 procesé esto» vive en `gpx_file`, por `drive_file_id` y `sha256`.
 
+**El cruce con PEDIDO es opcional y de solo lectura.** Sin `PEDIDO_API_URL` el panel
+arranca y funciona igual, sencillamente sin la columna de clientes: una integración que
+impidiera arrancar convertiría el reinicio de otra aplicación en la caída de esta. Y
+nunca se escribe en PEDIDO — es su dato, y lo de aquí es un espejo que se puede tirar y
+volver a traer. Los dos contenedores están en la misma red de Docker, así que la
+dirección es la interna y el tráfico no sale de la máquina.
+
+**Emparejar un vendedor de PEDIDO con un trabajador de Rutas se hace por el nombre, y
+ante la duda NO se empareja.** Los nombres nacen de sitios distintos: en PEDIDO del
+maestro de vendedores (`andy.almanza`), aquí del nombre de una carpeta de Drive
+(`ANDY`, `STGTadyslai`, `TABLET3`). Si un nombre le vale a dos vendedores —o a un
+trabajador le valen dos códigos— no se empareja ninguno y el calendario lo dice.
+Adjudicarle la ruta al Alexander equivocado no deja el panel incompleto, lo deja
+mintiendo, y desde la pantalla no hay forma de notarlo. Está en
+`internal/pedido/match.go`, con sus pruebas.
+
+**Una visita es una parada a menos de `visita_radio_m` (80 m) de la puerta del
+cliente**, y la distancia se guarda aunque no llegue: el GPS de un teléfono en la calle
+no cae en el portal exacto, y «pasó de largo a 200 m» no es lo mismo que «no se acercó
+en todo el día».
+
+**Hay una sola pantalla.** Había tres —calendario, bandeja y administración— y las dos
+últimas eran listas a las que nadie entraba. Lo suyo (qué fichero llegó sin dueño, qué
+vendedor lleva días sin subir, qué vendedor de PEDIDO no está emparejado) es la
+EXPLICACIÓN de un hueco del calendario, y puesto en otra pestaña se queda sin leer.
+Ahora sale encima de la cuadrícula y solo cuando hay algo que hacer. Los manejadores de
+la API que servían a esas pantallas siguen ahí (`/api/sources`, `/api/scans`,
+`/api/queue`, `/api/aliases`, `/api/ingest/scan`): son la puerta de servicio, se usan
+con `curl` y desde n8n.
+
 **Nadie ve su propio recorrido**, y el alcance del supervisor se evalúa contra la fecha
 consultada, no contra hoy (tabla `supervision`, con vigencias). Está en
 `internal/alcance` y es lo único que toda consulta debe atravesar.
@@ -169,9 +205,9 @@ de Drive, ni alias, ni umbrales.
 - [x] Acceso a datos con sqlc
 - [x] Ingesta de Drive, multicuenta, con pruebas de extremo a extremo
 - [x] API HTTP con sesión de procovar-auth
-- [x] Frontend: calendario, visor, bandeja, administración, reporte semanal
+- [x] Frontend: calendario, visor por capas, reporte semanal
 - [x] Cola en Redis y puerta de servicio para n8n, con flujo listo para importar
 - [x] Probado con un `.gpx` real de 49 565 puntos y con las 53 carpetas del Drive
 - [ ] Desplegar y hacer la primera pasada de verdad (backfill de los 1795 ficheros)
-- [ ] Cruce de paradas con la geo de clientes (visitas probables)
+- [x] Cruce de paradas con la geo de clientes de PEDIDO (pedidos del día vs. recorrido)
 - [ ] Despliegue en Dokploy

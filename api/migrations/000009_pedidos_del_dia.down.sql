@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS pedido_sync;
+DROP TABLE IF EXISTS visita;
+DROP TABLE IF EXISTS vendedor_pedido;
+DROP TABLE IF EXISTS pedido;
+DROP TABLE IF EXISTS pedido_cliente;
+ALTER TABLE sucursal DROP COLUMN IF EXISTS codigo;

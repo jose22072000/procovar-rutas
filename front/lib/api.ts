@@ -48,6 +48,14 @@ export interface SellerDay {
   flags: string[];
   spreadM: number | null;
   placeLabel: string | null;
+  /**
+   * Los pedidos de ese día y a cuántos se acercó.
+   *
+   * NULOS y no ceros: sin el cruce con PEDIDO configurado no es que no visitara a
+   * nadie, es que no se sabe, y un cero dibujado se lee como lo primero.
+   */
+  orders: number | null;
+  visited: number | null;
 }
 
 export interface SummaryRow {
@@ -58,6 +66,28 @@ export interface SummaryRow {
   daysNoMovement: number;
   daysOk: number;
   totalKm: number;
+  /** Cuándo subió por última vez; null = por ahí no ha entrado nunca nada. */
+  lastUpload: string | null;
+  /** Días desde esa última subida. -1 = nunca subió. */
+  daysSilent: number;
+  /** Ficheros suyos que llegaron y no se pudieron usar. */
+  stuckFiles: number;
+  /** Si está emparejado con un vendedor de PEDIDO. */
+  linked: boolean;
+  orders: number;
+  visited: number;
+}
+
+/**
+ * Un día que SÍ llegó y no se pudo usar. Es la diferencia entre «no subió» y
+ * «subió y el sistema no supo qué hacer con ello», que son dos conversaciones muy
+ * distintas con el vendedor.
+ */
+export interface StuckDay {
+  sellerId: string;
+  date: string;
+  status: string;
+  files: number;
 }
 
 export interface CalendarResponse {
@@ -65,6 +95,9 @@ export interface CalendarResponse {
   to: string;
   days: SellerDay[];
   summary: SummaryRow[];
+  stuck: StuckDay[];
+  /** Si el cruce con PEDIDO está configurado. Si no, no se pinta esa columna. */
+  withOrders: boolean;
   workdays: string[];
 }
 
@@ -114,10 +147,30 @@ export interface DayDetail {
   placeLabel: string | null;
 }
 
+/** Un pedido del día medido contra el recorrido. */
+export interface Visit {
+  id: string;
+  visited: boolean;
+  distanceM: number | null;
+  time: string | null;
+  minutes: number | null;
+  stopId: string | null;
+  folio: string | null;
+  orderStatus: string | null;
+  clientId: string;
+  clientCode: string | null;
+  clientName: string;
+  address: string | null;
+  municipality: string | null;
+  lat: number;
+  lon: number;
+}
+
 export interface DayResponse {
   day: DayDetail;
   points: TrackPoint[];
   stops: Stop[];
+  visits: Visit[];
   timezone: string;
 }
 
@@ -203,6 +256,39 @@ export const FLAG_LABEL: Record<string, string> = {
   sin_horas: "El fichero no trae horas: se ve por dónde anduvo, pero no cuándo",
   sin_datos_en_jornada: "No hay nada entre las 9:00 y las 16:00",
 };
+
+/**
+ * Por qué no hay ruta ese día, dicho en una frase que se puede accionar.
+ *
+ * Antes la celda decía «Sin fichero» y ahí se acababa: para saber si el vendedor
+ * no subió, si subió y el fichero se atascó, o si lleva un mes sin subir, había que
+ * ir a la pantalla de Administración, que es donde nadie entraba. Ahora lo dice la
+ * celda que ya se está mirando.
+ */
+export function porQueNoHayRuta(
+  status: DayStatus,
+  atascado: StuckDay | undefined,
+  resumen: SummaryRow | undefined,
+): string {
+  if (atascado) {
+    if (atascado.status === "SIN_ASIGNAR") return "Subió, pero no se supo de quién era";
+    if (atascado.status === "SIN_FECHA") return "Subió, pero el fichero no trae fecha";
+    if (atascado.status === "ERROR") return "Subió, pero el fichero no se pudo leer";
+    return "Subió, pero el fichero no se pudo usar";
+  }
+
+  if (status === "SIN_FECHA") return "El fichero llegó sin fecha";
+  if (status === "SIN_MOVIMIENTO") return "Subió la ruta, pero no se movió del sitio";
+  if (status === "MOVIMIENTO_ESCASO") return "Subió la ruta, pero se movió muy poco";
+
+  // SIN_FICHERO de verdad: no llegó nada. Lo que hay que decir entonces es desde
+  // cuándo, que es lo que distingue un despiste de un GPS apagado hace tres semanas.
+  if (!resumen || resumen.daysSilent === -1) return "No ha subido nunca ninguna ruta";
+  if (resumen.daysSilent >= 3) {
+    return `No subió — y lleva ${resumen.daysSilent} días sin subir nada`;
+  }
+  return "No subió la ruta de ese día";
+}
 
 export function shortDate(iso: string): string {
   const [a, m, d] = iso.slice(0, 10).split("-");
