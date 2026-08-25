@@ -118,6 +118,9 @@ func (s *Server) Routes() http.Handler {
 			r.Use(Exige(PermBandeja))
 			r.Get("/inbox", s.inbox)
 			r.Post("/inbox/assign", s.assign)
+			// Volver a intentarlo: se olvida el fichero y n8n lo trae otra vez, ahora
+			// con el lector que sabe rescatar los .gpx cortados.
+			r.Post("/inbox/{id}/retry", s.retryFile)
 		})
 
 		r.Group(func(r chi.Router) {

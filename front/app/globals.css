@@ -1076,3 +1076,18 @@ img, svg, video, canvas, table { max-width: 100%; }
 .pv-boton .icono:first-child:not(:only-child) { margin-right: 0.35rem; }
 .pv-boton .icono:last-child:not(:only-child) { margin-left: 0.35rem; }
 .linea-revisar-ir { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+/* «a medias», pegado a los kilómetros de una celda cuyo fichero llegó cortado.
+   Va AHÍ y no en un aviso aparte porque es justo ahí donde se lee el número: un día
+   truncado se pinta en verde y con sus kilómetros, y sin esto no hay manera de saber
+   que son los de medio día. */
+.celda-cortado {
+    margin-left: 0.35rem;
+    padding: 0 4px;
+    border-radius: 2px;
+    background: var(--pv-ambar-tinte);
+    color: var(--pv-ambar);
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}

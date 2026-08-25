@@ -981,3 +981,69 @@ func (q *Queries) SupervisorTerms(ctx context.Context, supervisorID string) ([]S
 	}
 	return items, nil
 }
+
+const truncatedDays = `-- name: TruncatedDays :many
+SELECT
+    f.trabajador_id::text AS seller_id,
+    coalesce(t.nombre, '') AS seller,
+    f.fecha::date          AS fecha,
+    f.nombre               AS file,
+    coalesce(f.error, '')  AS detail,
+    f.puntos_total         AS points
+FROM gpx_file f
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
+WHERE f.estado = 'PROCESADO'
+  AND f.error IS NOT NULL AND f.error <> ''
+  AND f.trabajador_id IS NOT NULL
+  AND f.fecha IS NOT NULL
+  AND ($1::text = '' OR f.sucursal_id = $1)
+ORDER BY f.fecha DESC
+LIMIT $2
+`
+
+type TruncatedDaysParams struct {
+	BranchID  string
+	LimitRows int32
+}
+
+type TruncatedDaysRow struct {
+	SellerID string
+	Seller   string
+	Date     time.Time
+	File     string
+	Detail   string
+	Points   int32
+}
+
+// Los días que entraron A MEDIAS: su fichero llegó cortado y lo que hay es el trozo
+// que se pudo leer, no la jornada.
+//
+// Va en su propia consulta y no como una bandera más del calendario porque lo que se
+// necesita aquí es la LISTA —quién, qué día, y qué dijo el error—, para poder ir a
+// pedir que vuelvan a subir esos días concretos.
+func (q *Queries) TruncatedDays(ctx context.Context, arg TruncatedDaysParams) ([]TruncatedDaysRow, error) {
+	rows, err := q.db.Query(ctx, truncatedDays, arg.BranchID, arg.LimitRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TruncatedDaysRow{}
+	for rows.Next() {
+		var i TruncatedDaysRow
+		if err := rows.Scan(
+			&i.SellerID,
+			&i.Seller,
+			&i.Date,
+			&i.File,
+			&i.Detail,
+			&i.Points,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

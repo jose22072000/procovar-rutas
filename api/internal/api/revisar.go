@@ -70,6 +70,18 @@ func (s *Server) review(w http.ResponseWriter, r *http.Request) {
 	}
 	salida["silent"] = aSilentSellers(estados, nombres)
 
+	// 2b. Y los días que entraron A MEDIAS. Es lo que pidió quien usa esto: que no se
+	//     pueda leer «8 km» de medio día como si fueran los de la jornada. El fichero
+	//     se cortó, sus puntos son buenos, pero acaban donde acaba el fichero.
+	cortados, err := s.q.TruncatedDays(r.Context(), store.TruncatedDaysParams{
+		BranchID: p.BranchID, LimitRows: 200,
+	})
+	if err != nil {
+		s.log.Warn("días cortados", "error", err)
+	} else {
+		salida["truncated"] = aTruncatedDays(cortados)
+	}
+
 	// 3. Y quién es quién con PEDIDO: los que ya están atados y los que faltan. Los
 	//    dos, porque «lo que tengo» es tan informativo como «lo que falta»: sirve
 	//    para revisar que un emparejamiento automático no se equivocó.
@@ -159,9 +171,9 @@ func aStuckFiles(fs []store.InboxRow) []StuckFile {
 
 // SilentSeller es un vendedor y cuándo subió por última vez.
 type SilentSeller struct {
-	SellerID string  `json:"sellerId"`
-	Seller   string  `json:"seller"`
-	Branch   string  `json:"branchId"`
+	SellerID string `json:"sellerId"`
+	Seller   string `json:"seller"`
+	Branch   string `json:"branchId"`
 	// LastUpload nulo = por ahí no ha entrado nunca ninguna ruta.
 	LastUpload *string `json:"lastUpload"`
 	DaysSilent int     `json:"daysSilent"`
@@ -196,6 +208,31 @@ func aSilentSellers(estados []store.UploadState, trabajadores []store.Seller) []
 			fila.DaysSilent = int(hoy.Sub(*e.LastUpload).Hours() / 24)
 		}
 		out = append(out, fila)
+	}
+	return out
+}
+
+// TruncatedDay es un día cuyo fichero llegó cortado.
+type TruncatedDay struct {
+	SellerID string `json:"sellerId"`
+	Seller   string `json:"seller"`
+	Date     string `json:"date"`
+	File     string `json:"file"`
+	Detail   string `json:"detail"`
+	Points   int32  `json:"points"`
+}
+
+func aTruncatedDays(fs []store.TruncatedDaysRow) []TruncatedDay {
+	out := make([]TruncatedDay, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, TruncatedDay{
+			SellerID: f.SellerID,
+			Seller:   f.Seller,
+			Date:     f.Date.Format(iso),
+			File:     f.File,
+			Detail:   f.Detail,
+			Points:   f.Points,
+		})
 	}
 	return out
 }

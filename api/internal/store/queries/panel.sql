@@ -205,3 +205,27 @@ WHERE f.estado <> 'PROCESADO'
   AND (cardinality(@sellers::text[]) = 0 OR f.trabajador_id = ANY (@sellers))
   AND (@exclude::text = '' OR f.trabajador_id <> @exclude)
 GROUP BY f.trabajador_id, f.fecha, f.estado;
+
+-- Los días que entraron A MEDIAS: su fichero llegó cortado y lo que hay es el trozo
+-- que se pudo leer, no la jornada.
+--
+-- Va en su propia consulta y no como una bandera más del calendario porque lo que se
+-- necesita aquí es la LISTA —quién, qué día, y qué dijo el error—, para poder ir a
+-- pedir que vuelvan a subir esos días concretos.
+-- name: TruncatedDays :many
+SELECT
+    f.trabajador_id::text AS seller_id,
+    coalesce(t.nombre, '') AS seller,
+    f.fecha::date          AS fecha,
+    f.nombre               AS file,
+    coalesce(f.error, '')  AS detail,
+    f.puntos_total         AS points
+FROM gpx_file f
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
+WHERE f.estado = 'PROCESADO'
+  AND f.error IS NOT NULL AND f.error <> ''
+  AND f.trabajador_id IS NOT NULL
+  AND f.fecha IS NOT NULL
+  AND (@branch_id::text = '' OR f.sucursal_id = @branch_id)
+ORDER BY f.fecha DESC
+LIMIT @limit_rows;

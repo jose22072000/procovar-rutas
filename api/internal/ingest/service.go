@@ -569,6 +569,19 @@ func (s *Service) RecomputeDay(ctx context.Context, trabajadorID string, date ti
 
 	res := metrics.ComputeDay(points, cfg)
 
+	// Si alguno de los ficheros de ese día llegó cortado, el día se marca.
+	//
+	// No se puede deducir de los puntos: un día que acaba a las 11:40 porque el
+	// fichero se cortó tiene exactamente la misma pinta que uno en el que el vendedor
+	// se fue a las 11:40. La diferencia solo la sabe quien leyó el fichero, así que
+	// se pregunta aquí y se guarda con el día — y el panel puede decir «esto es medio
+	// día» en vez de dejar leer ocho kilómetros como los de la jornada.
+	if n, err := s.q.TruncatedFilesOfDay(ctx, store.TruncatedFilesOfDayParams{
+		SellerID: trabajadorID, Date: date,
+	}); err == nil && n > 0 {
+		res.Flags = append(res.Flags, metrics.FlagTruncated)
+	}
+
 	dia, err := s.q.SaveDay(ctx, store.SaveDayParams{
 		ID:          idDia(trabajadorID, date),
 		SellerID:    trabajadorID,

@@ -307,3 +307,38 @@ func (s *Server) createAlias(w http.ResponseWriter, r *http.Request) {
 	s.notify(r, events.Event{Type: events.TypeFile, Detail: "alias"})
 	respond(w, http.StatusOK, map[string]any{"ok": true, "id": fila.ID})
 }
+
+// POST /api/inbox/{id}/retry — olvidar un fichero para que vuelva a entrar.
+//
+// La ingesta se salta lo que ya conoce, y eso deja atrapado a un fichero que entró
+// mal: por bien que se arregle el lector, ese día sigue perdido porque nadie lo
+// vuelve a leer. Aquí se borra su registro y el siguiente empuje de n8n lo trae otra
+// vez, ahora con el lector de hoy — que sabe rescatar los .gpx cortados.
+//
+// No borra nada de Drive: el fichero sigue donde está. Lo único que se tira es
+// nuestra nota de «este ya lo vi».
+func (s *Server) retryFile(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
+	id := chi.URLParam(r, "id")
+
+	fila, err := s.q.FileByID(r.Context(), id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "ese fichero no está")
+		return
+	}
+	// Scope: un gerente no puede tocar los ficheros de otra sucursal.
+	if c.Role != "super_admin" && c.BranchID != "" &&
+		fila.BranchID != nil && *fila.BranchID != c.BranchID {
+		respondError(w, http.StatusForbidden, "sin acceso a ese fichero")
+		return
+	}
+
+	if err := s.q.ForgetFile(r.Context(), id); err != nil {
+		s.fail(w, "olvidando fichero", err)
+		return
+	}
+
+	s.auth.RecordAudit(r.Context(), "rutas.fichero.reintentar", id, c.AuthUserID)
+	s.notify(r, events.Event{Type: events.TypeFile, Detail: "olvidado"})
+	respond(w, http.StatusOK, map[string]any{"ok": true})
+}

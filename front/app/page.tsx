@@ -36,6 +36,7 @@ import { useSesion } from "@/components/Sesion";
 import { useEvents } from "@/lib/events";
 import {
   STATUS_LABEL,
+  FLAG_LABEL,
   shortDate,
   dayName,
   ask,
@@ -43,6 +44,7 @@ import {
   workWeek,
   diasEntre,
   porQueNoHayRuta,
+  CORTADO,
   type DayStatus,
   type CalendarResponse,
   type SellerDay,
@@ -521,19 +523,28 @@ function Celda({
   const status: DayStatus = dia?.status ?? "SIN_FICHERO";
   const hubo = status === "OK" || status === "MOVIMIENTO_ESCASO";
   const porque = hubo ? "" : porQueNoHayRuta(status, atasco, resumen);
+  const cortado = dia?.flags?.includes(CORTADO) ?? false;
 
   return (
     <button
       className={tira ? "celda celda-tira" : "celda"}
       data-status={status}
-      title={`${vendedor} · ${fecha} · ${porque || STATUS_LABEL[status]}`}
+      title={`${vendedor} · ${fecha} · ${
+        porque || STATUS_LABEL[status]
+      }${cortado ? ` · ${FLAG_LABEL[CORTADO]}` : ""}`}
       onClick={onAbrir}
     >
       {tira && <span className="celda-tira-dia">{dayName(fecha)}</span>}
 
       {hubo ? (
         <>
-          <span className="km">{dia?.netKm.toFixed(1)} km</span>
+          <span className="km">
+            {dia?.netKm.toFixed(1)} km
+            {/* Si el fichero llegó cortado, estos kilómetros son los del trozo que
+                se pudo leer. Sin decirlo aquí, medio día se lee como el día — y es
+                justo en esta celda donde se lee. */}
+            {cortado && <b className="celda-cortado" title={FLAG_LABEL[CORTADO]}>a medias</b>}
+          </span>
           {!tira && dia?.firstFix
             ? new Date(dia.firstFix).toLocaleTimeString("es", {
                 hour: "2-digit",

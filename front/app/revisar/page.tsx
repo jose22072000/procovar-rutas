@@ -71,8 +71,18 @@ interface Alias {
   seller: string;
 }
 
+interface DiaCortado {
+  sellerId: string;
+  seller: string;
+  date: string;
+  file: string;
+  detail: string;
+  points: number;
+}
+
 interface Revision {
   files: FicheroAtascado[];
+  truncated?: DiaCortado[];
   silent: VendedorCallado[];
   links: Enlace[];
   unlinked: Suelto[];
@@ -160,6 +170,48 @@ export default function Revisar() {
         </div>
       )}
 
+      {/* Los días que entraron a medias. Van arriba porque son los que ENGAÑAN: el
+          calendario los pinta en verde y con sus kilómetros, y no hay forma de saber
+          desde ahí que son los de medio día. Los otros avisos se ven solos; este no. */}
+      {(datos.truncated?.length ?? 0) > 0 && (
+        <div className="tarjeta">
+          <b>
+            {datos.truncated!.length === 1
+              ? "Un día entró a medias"
+              : `${datos.truncated!.length} días entraron a medias`}
+          </b>
+          <p className="sub">
+            Su fichero se cortó —el teléfono se quedó sin batería, lo mataron a media
+            escritura o la subida a Drive se interrumpió— y lo que hay es el trozo que
+            se pudo leer. <b>Los kilómetros de esos días NO son los de la jornada</b>,
+            así que no sirven para juzgar a nadie. Si hace falta el día completo, hay
+            que volver a subir ese .gpx.
+          </p>
+          <table className="movements">
+            <thead>
+              <tr>
+                <th>Día</th>
+                <th>Vendedor</th>
+                <th>Fichero</th>
+                <th>Puntos que entraron</th>
+                <th>Qué pasó</th>
+              </tr>
+            </thead>
+            <tbody>
+              {datos.truncated!.map((d) => (
+                <tr key={`${d.sellerId}:${d.date}`}>
+                  <td className="pv-codigo">{d.date}</td>
+                  <td>{d.seller}</td>
+                  <td className="pv-codigo">{d.file}</td>
+                  <td>{d.points}</td>
+                  <td className="sub">{d.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Los rotos, primero: son los que solo se arreglan volviendo a subir. */}
       {rotos.length > 0 && (
         <div className="tarjeta">
@@ -169,23 +221,15 @@ export default function Revisar() {
               : `${rotos.length} ficheros llegaron rotos`}
           </b>
           <p className="sub">
-            Llegaron a Drive, pero el .gpx está cortado o mal formado y no se pudo
-            leer. Hay que volver a subirlos desde el teléfono: aquí no hay nada que
-            asignar. La fecha del nombre dice qué día se perdió.
+            Llegaron a Drive, pero el .gpx no se pudo leer. Estos fallaron con el
+            lector viejo, que era todo o nada; el de ahora rescata lo que traiga un
+            fichero cortado hasta donde llegue. <b>Volver a intentarlo</b> olvida el
+            fichero para que n8n lo traiga otra vez y se lea con el lector de hoy —
+            no borra nada de Drive. Si vuelve a fallar, es que está roto de verdad y
+            hay que subirlo otra vez desde el teléfono.
           </p>
           {rotos.map((f) => (
-            <div className="fila-suelta" key={f.id}>
-              <div>
-                <b>{f.name}</b>
-                <span className="sub">
-                  carpeta {f.source}
-                  {f.folderPath ? ` / ${f.folderPath}` : ""}
-                  {f.seller ? ` · ${f.seller}` : ""}
-                  {f.date ? ` · del ${f.date}` : ""} · {f.points} puntos
-                </span>
-                {f.error && <span className="aviso">{f.error}</span>}
-              </div>
-            </div>
+            <FilaRota key={f.id} fichero={f} alReintentar={cargar} puede={puede("rutas.bandeja")} />
           ))}
         </div>
       )}
@@ -545,5 +589,56 @@ function NuevoAlias({
       </div>
       {fallo && <p className="aviso">{fallo}</p>}
     </>
+  );
+}
+
+function FilaRota({
+  fichero,
+  alReintentar,
+  puede,
+}: {
+  fichero: FicheroAtascado;
+  alReintentar: () => void;
+  puede: boolean;
+}) {
+  const [yendo, setYendo] = useState(false);
+  const [fallo, setFallo] = useState<string | null>(null);
+  const [listo, setListo] = useState(false);
+
+  async function reintentar() {
+    setYendo(true);
+    setFallo(null);
+    try {
+      await enviar(`/api/inbox/${fichero.id}/retry`, {});
+      setListo(true);
+      alReintentar();
+    } catch (e) {
+      setFallo((e as Error).message);
+    } finally {
+      setYendo(false);
+    }
+  }
+
+  return (
+    <div className="fila-suelta">
+      <div>
+        <b>{fichero.name}</b>
+        <span className="sub">
+          carpeta {fichero.source}
+          {fichero.folderPath ? ` / ${fichero.folderPath}` : ""}
+          {fichero.seller ? ` · ${fichero.seller}` : ""}
+          {fichero.date ? ` · del ${fichero.date}` : ""} · {fichero.points} puntos
+        </span>
+        {fichero.error && <span className="aviso">{fichero.error}</span>}
+      </div>
+      {puede && (
+        <div className="controles">
+          <button className="pv-boton" disabled={yendo || listo} onClick={reintentar}>
+            {listo ? "Esperando a n8n…" : yendo ? "Olvidando…" : "Volver a intentarlo"}
+          </button>
+        </div>
+      )}
+      {fallo && <p className="aviso">{fallo}</p>}
+    </div>
   );
 }

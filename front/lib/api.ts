@@ -255,7 +255,12 @@ export const FLAG_LABEL: Record<string, string> = {
   movimiento_escaso: "Se movió muy poco",
   sin_horas: "El fichero no trae horas: se ve por dónde anduvo, pero no cuándo",
   sin_datos_en_jornada: "No hay nada entre las 9:00 y las 16:00",
+  fichero_cortado:
+    "El fichero llegó cortado: lo que se ve es hasta donde se pudo leer, no el día entero",
 };
+
+/** La bandera del día incompleto, que se mira en más de un sitio. */
+export const CORTADO = "fichero_cortado";
 
 /**
  * Por qué no hay ruta ese día, dicho en una frase que se puede accionar.

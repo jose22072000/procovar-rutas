@@ -709,6 +709,38 @@ func (q *Queries) FileByDriveID(ctx context.Context, driveFileID string) (GpxFil
 	return i, err
 }
 
+const fileByID = `-- name: FileByID :one
+SELECT id, source_id, drive_file_id, sha256, nombre, ruta_carpeta, tamano_bytes, drive_created_at, estado, error, trabajador_id, sucursal_id, fecha, origen_fecha, puntos_total, puntos_validos, primer_fix, ultimo_fix, pista_alias, importado_at FROM gpx_file WHERE id = $1
+`
+
+func (q *Queries) FileByID(ctx context.Context, id string) (GpxFile, error) {
+	row := q.db.QueryRow(ctx, fileByID, id)
+	var i GpxFile
+	err := row.Scan(
+		&i.ID,
+		&i.SourceID,
+		&i.DriveFileID,
+		&i.Sha256,
+		&i.Name,
+		&i.FolderPath,
+		&i.SizeBytes,
+		&i.DriveCreatedAt,
+		&i.Status,
+		&i.Error,
+		&i.SellerID,
+		&i.BranchID,
+		&i.Date,
+		&i.DateSource,
+		&i.TotalPoints,
+		&i.ValidPoints,
+		&i.FirstFix,
+		&i.LastFix,
+		&i.AliasHint,
+		&i.ImportedAt,
+	)
+	return i, err
+}
+
 const fileBySha = `-- name: FileBySha :one
 SELECT id, source_id, drive_file_id, sha256, nombre, ruta_carpeta, tamano_bytes, drive_created_at, estado, error, trabajador_id, sucursal_id, fecha, origen_fecha, puntos_total, puntos_validos, primer_fix, ultimo_fix, pista_alias, importado_at FROM gpx_file WHERE sha256 = $1
 `
@@ -739,6 +771,24 @@ func (q *Queries) FileBySha(ctx context.Context, sha256 string) (GpxFile, error)
 		&i.ImportedAt,
 	)
 	return i, err
+}
+
+const forgetFile = `-- name: ForgetFile :exec
+DELETE FROM gpx_file WHERE id = $1
+`
+
+// Olvidar un fichero para que pueda volver a entrar.
+//
+// La ingesta se salta lo que ya conoce (por `drive_file_id`), que es lo que evita
+// procesar mil ficheros dos veces. El precio: un fichero que entró mal se queda mal
+// para siempre, aunque el lector mejore. Borrando su registro, el siguiente empuje de
+// n8n lo trae otra vez y se lee con el código de hoy.
+//
+// Los puntos se van con él por la clave foránea (ON DELETE CASCADE). El día NO se
+// borra: se recalcula solo cuando el fichero vuelva a entrar.
+func (q *Queries) ForgetFile(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, forgetFile, id)
+	return err
 }
 
 const ingestStats = `-- name: IngestStats :one

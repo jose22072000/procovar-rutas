@@ -322,3 +322,18 @@ WHERE trabajador_id = @seller_id::text
   AND fecha = @date::date
   AND estado = 'PROCESADO'
   AND error IS NOT NULL AND error <> '';
+
+-- Olvidar un fichero para que pueda volver a entrar.
+--
+-- La ingesta se salta lo que ya conoce (por `drive_file_id`), que es lo que evita
+-- procesar mil ficheros dos veces. El precio: un fichero que entró mal se queda mal
+-- para siempre, aunque el lector mejore. Borrando su registro, el siguiente empuje de
+-- n8n lo trae otra vez y se lee con el código de hoy.
+--
+-- Los puntos se van con él por la clave foránea (ON DELETE CASCADE). El día NO se
+-- borra: se recalcula solo cuando el fichero vuelva a entrar.
+-- name: ForgetFile :exec
+DELETE FROM gpx_file WHERE id = $1;
+
+-- name: FileByID :one
+SELECT * FROM gpx_file WHERE id = $1;

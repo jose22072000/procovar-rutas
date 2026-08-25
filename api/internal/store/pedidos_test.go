@@ -92,6 +92,26 @@ func TestConsultasDePedidosCorren(t *testing.T) {
 			})
 			return err
 		}},
+		{"TruncatedDays", func() error {
+			_, err := q.TruncatedDays(ctx, store.TruncatedDaysParams{LimitRows: 50})
+			return err
+		}},
+		{"DaysMissingOrders", func() error {
+			_, err := q.DaysMissingOrders(ctx, 30)
+			return err
+		}},
+		{"DaysMissingCount", func() error {
+			_, err := q.DaysMissingCount(ctx)
+			return err
+		}},
+		{"LastOrderCursor", func() error {
+			_, err := q.LastOrderCursor(ctx)
+			return err
+		}},
+		{"ClientPins", func() error {
+			_, err := q.ClientPins(ctx, "no-existe")
+			return err
+		}},
 		{"UploadStates", func() error {
 			_, err := store.UploadStates(ctx, pool, "", nil, "")
 			return err
