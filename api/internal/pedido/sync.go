@@ -43,6 +43,9 @@ type Service struct {
 	// Lo que se espera entre un día y el siguiente. Es lo que evita las ráfagas
 	// contra PEDIDO, que es de quien dependen las sucursales para trabajar.
 	pausa time.Duration
+	// Cuántos días atrasados se encolan por pasada. El histórico son dos mil días y
+	// se traen por tandas: no hay ninguna prisa, son días que ya pasaron.
+	porTanda int
 }
 
 func NewService(
@@ -69,6 +72,7 @@ func NewService(
 		log:         log,
 		ventanaDias: ventanaDias,
 		pausa:       pausa,
+		porTanda:    DiasPorTanda,
 	}
 }
 

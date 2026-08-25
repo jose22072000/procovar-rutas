@@ -34,10 +34,17 @@ type UploadState struct {
 
 const consultaUploadState = `
 WITH ultima AS (
-    SELECT d.trabajador_id, max(d.fecha) AS fecha
-    FROM track_day d
-    WHERE d.gpx_file_id IS NOT NULL
-    GROUP BY d.trabajador_id
+    -- La última subida sale del REGISTRO DE FICHEROS, no de track_day.
+    --
+    -- Antes se miraba track_day.gpx_file_id IS NOT NULL, y esa columna no la rellena
+    -- nadie: RecomputeDay guarda el día sin ella porque recalcula desde los puntos,
+    -- que pueden venir de varios ficheros. Resultado: el panel decía que los treinta
+    -- y seis vendedores no habían subido NUNCA, con dos mil días de recorrido
+    -- cargados. Un aviso que sale para todos no avisa de nada.
+    SELECT f.trabajador_id, max(f.fecha) AS fecha
+    FROM gpx_file f
+    WHERE f.estado = 'PROCESADO' AND f.fecha IS NOT NULL
+    GROUP BY f.trabajador_id
 ),
 ficheros AS (
     SELECT f.trabajador_id,

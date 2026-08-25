@@ -75,6 +75,10 @@ export function Sesion({ children }: { children: React.ReactNode }) {
             se entra desde el recorrido, que es donde se sabe cuáles. */}
         <nav>
           {puede("rutas.calendario") && <Link href="/">Calendario</Link>}
+          {/* Y el detalle de lo que falta, que es a donde se va CUANDO hay algo que
+              arreglar. Está en el menú y no solo colgando del calendario porque se
+              entra a propósito: «voy a ver qué ficheros hay que volver a subir». */}
+          {puede("rutas.calendario") && <Link href="/revisar">Revisar</Link>}
         </nav>
 
         {/* Cerrar sesión sale SIEMPRE, aunque no se sepa quién es o no tenga

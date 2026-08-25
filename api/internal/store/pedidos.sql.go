@@ -256,6 +256,63 @@ func (q *Queries) DayVisits(ctx context.Context, trackDayID string) ([]DayVisits
 	return items, nil
 }
 
+const daysMissingCount = `-- name: DaysMissingCount :one
+SELECT count(DISTINCT d.fecha)::int
+FROM track_day d
+WHERE NOT EXISTS (SELECT 1 FROM dia_pedidos dp WHERE dp.fecha = d.fecha)
+`
+
+// Cuántos días quedan por traer, para poder decirlo en la pantalla en vez de dejar
+// a quien mira preguntándose si aquello avanza.
+func (q *Queries) DaysMissingCount(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, daysMissingCount)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const daysMissingOrders = `-- name: DaysMissingOrders :many
+
+SELECT DISTINCT d.fecha
+FROM track_day d
+WHERE NOT EXISTS (SELECT 1 FROM dia_pedidos dp WHERE dp.fecha = d.fecha)
+ORDER BY d.fecha DESC
+LIMIT $1
+`
+
+// ---------------------------------------------------------------------------
+// Qué días hay que traer
+// ---------------------------------------------------------------------------
+//
+// El criterio NO es una ventana de tres semanas hacia atrás: es «de este día tengo
+// ruta, así que quiero saber por dónde debía pasar». Hay dos mil días de recorrido
+// cargados del backfill y de ninguno se había pedido nunca su lista de clientes,
+// así que se abría un día de agosto, salía la ruta, y no había con qué compararla.
+//
+// PEDIDO deja preguntar por fecha, así que se puede ir hacia atrás todo lo que haga
+// falta; lo único que hay que llevar es la cuenta de por qué días ya se preguntó.
+// Los más recientes primero: si hay dos mil días atrasados, lo que se quiere ver
+// lleno mañana por la mañana es esta semana, no enero.
+func (q *Queries) DaysMissingOrders(ctx context.Context, limit int32) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, daysMissingOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []time.Time{}
+	for rows.Next() {
+		var fecha time.Time
+		if err := rows.Scan(&fecha); err != nil {
+			return nil, err
+		}
+		items = append(items, fecha)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const daysToCross = `-- name: DaysToCross :many
 SELECT d.id, d.trabajador_id, d.sucursal_id, d.fecha
 FROM track_day d
@@ -423,6 +480,26 @@ func (q *Queries) LinkOrdersToSellers(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markDayFetched = `-- name: MarkDayFetched :exec
+INSERT INTO dia_pedidos (fecha, pedidos, completo, traido_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (fecha) DO UPDATE SET
+    pedidos = EXCLUDED.pedidos,
+    completo = dia_pedidos.completo OR EXCLUDED.completo,
+    traido_at = now()
+`
+
+type MarkDayFetchedParams struct {
+	Date     time.Time
+	Orders   int32
+	Completo bool
+}
+
+func (q *Queries) MarkDayFetched(ctx context.Context, arg MarkDayFetchedParams) error {
+	_, err := q.db.Exec(ctx, markDayFetched, arg.Date, arg.Orders, arg.Completo)
+	return err
 }
 
 const openOrderSync = `-- name: OpenOrderSync :one

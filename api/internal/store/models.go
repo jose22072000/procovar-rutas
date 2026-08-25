@@ -290,6 +290,13 @@ type DeviceAlias struct {
 	CreatedBy     *string
 }
 
+type DiaPedido struct {
+	Date     time.Time
+	TraidoAt time.Time
+	Orders   int32
+	Completo bool
+}
+
 type DriveSource struct {
 	ID             string
 	Name           string

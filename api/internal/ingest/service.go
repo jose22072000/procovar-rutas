@@ -134,13 +134,6 @@ func (s *Service) Scan(ctx context.Context, tipo string) (Summary, error) {
 func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo string) (Summary, error) {
 	res := Summary{}
 
-	registro, err := s.q.OpenImportLog(ctx, store.OpenImportLogParams{
-		ID: newID(), SourceID: &source.ID, Type: tipo,
-	})
-	if err != nil {
-		return res, fmt.Errorf("abriendo registro de importación: %w", err)
-	}
-
 	// Only the incremental scan uses the cursor. The nightly and backfill scans
 	// deliberately walk everything.
 	var desde time.Time
@@ -157,6 +150,22 @@ func (s *Service) ScanSource(ctx context.Context, source store.DriveSource, tipo
 	// the same. This used to blow up with a nil pointer mid-scan.
 	if cli == nil {
 		return res, fmt.Errorf("%w: la carpeta %q", ErrSinDrive, source.Name)
+	}
+
+	// El registro se abre AQUÍ, cuando ya se sabe que hay algo que barrer, y no al
+	// entrar.
+	//
+	// Abriéndolo antes, las salidas de arriba se iban sin cerrarlo y dejaban una fila
+	// abierta —sin fin, sin detalle y con `ok` en falso— por cada carpeta y cada
+	// noche. En esta instalación, que no lee Drive por su cuenta, eso eran cincuenta
+	// y tres líneas en rojo cada madrugada describiendo el funcionamiento NORMAL. Y
+	// el precio de eso no es la fealdad: es que el día que falle algo de verdad,
+	// nadie lo va a distinguir del ruido.
+	registro, err := s.q.OpenImportLog(ctx, store.OpenImportLogParams{
+		ID: newID(), SourceID: &source.ID, Type: tipo,
+	})
+	if err != nil {
+		return res, fmt.Errorf("abriendo registro de importación: %w", err)
 	}
 
 	ficheros, errListar := cli.List(ctx, source.FolderID, desde, s.max)

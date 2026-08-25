@@ -29,18 +29,10 @@ import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type { Stop, TrackPoint, Visit } from "@/lib/api";
 
-/** Qué capas están encendidas. */
-export interface Capas {
-  ruta: boolean;
-  paradas: boolean;
-  clientes: boolean;
-}
-
 interface Props {
   points: TrackPoint[];
   stops: Stop[];
   visits: Visit[];
-  capas: Capas;
   /** Index up to which it is drawn, for the timeline. -1 = everything. */
   to?: number;
   /** Stop or client to centre on and open. Set from the list beside the map. */
@@ -59,7 +51,6 @@ export default function RouteMap({
   points,
   stops,
   visits,
-  capas,
   to = -1,
   focusStopId,
   focusClientId,
@@ -69,6 +60,7 @@ export default function RouteMap({
   const capaRuta = useRef<any>(null);
   const capaParadas = useRef<any>(null);
   const capaClientes = useRef<any>(null);
+  const control = useRef<any>(null);
   // Las paradas y los clientes por id, para poder centrarlos desde la lista de al
   // lado.
   const marcas = useRef<Map<string, any>>(new Map());
@@ -86,9 +78,26 @@ export default function RouteMap({
           attribution: "© OpenStreetMap",
           maxZoom: 19,
         }).addTo(mapa.current);
-        capaRuta.current = L.layerGroup();
-        capaParadas.current = L.layerGroup();
-        capaClientes.current = L.layerGroup();
+        // Las tres capas, encendidas de entrada, y el CONTROL DE CAPAS de Leaflet
+        // —el mismo cuadradito apilado que se usa en OpenStreetMap—. Antes esto eran
+        // tres casillas metidas en la barra de arriba, robándole sitio a los botones
+        // de navegar y sin ninguna relación visual con el mapa al que mandan. El
+        // control va DENTRO del mapa, que es donde se busca.
+        capaRuta.current = L.layerGroup().addTo(mapa.current);
+        capaParadas.current = L.layerGroup().addTo(mapa.current);
+        capaClientes.current = L.layerGroup().addTo(mapa.current);
+
+        control.current = L.control
+          .layers(
+            undefined,
+            {
+              Recorrido: capaRuta.current,
+              Paradas: capaParadas.current,
+              "Clientes del día": capaClientes.current,
+            },
+            { collapsed: true, position: "topright" },
+          )
+          .addTo(mapa.current);
       }
 
       capaRuta.current.clearLayers();
@@ -214,22 +223,6 @@ export default function RouteMap({
     };
   }, [points, stops, visits, to]);
 
-  // Encender y apagar capas: en su propio efecto, para que marcar una casilla no
-  // vuelva a dibujar el mapa entero ni lo reencuadre.
-  useEffect(() => {
-    if (!mapa.current) return;
-    const pares: [any, boolean][] = [
-      [capaRuta.current, capas.ruta],
-      [capaParadas.current, capas.paradas],
-      [capaClientes.current, capas.clientes],
-    ];
-    for (const [capa, encendida] of pares) {
-      if (!capa) continue;
-      if (encendida && !mapa.current.hasLayer(capa)) capa.addTo(mapa.current);
-      if (!encendida && mapa.current.hasLayer(capa)) mapa.current.removeLayer(capa);
-    }
-  }, [capas, points, stops, visits]);
-
   // Y cada vez que la caja cambie de tamaño: al abrir el panel lateral, al girar
   // el móvil o al cambiar de zoom del navegador.
   useEffect(() => {
@@ -246,6 +239,10 @@ export default function RouteMap({
     if (!id || !mapa.current) return;
     const m = marcas.current.get(id);
     if (!m) return;
+    // Si su capa estaba apagada, tocar la fila de la lista no haría nada y parecería
+    // que la pantalla está rota. Se enciende.
+    const capa = focusClientId ? capaClientes.current : capaParadas.current;
+    if (capa && !mapa.current.hasLayer(capa)) capa.addTo(mapa.current);
     mapa.current.setView(m.getLatLng(), Math.max(mapa.current.getZoom(), 16), {
       animate: true,
     });
@@ -260,7 +257,7 @@ export default function RouteMap({
           podía leer: el grosor de un círculo naranja significa media hora parado,
           y sin decirlo es un adorno. Solo se explica lo que está encendido. */}
       <div className="leyenda-mapa">
-        {capas.ruta && (
+        {(
           <div className="leyenda-fila">
             <span
               className="leyenda-linea"
@@ -269,7 +266,7 @@ export default function RouteMap({
             <span>Recorrido, del inicio al final del día</span>
           </div>
         )}
-        {capas.ruta && (
+        {(
           <div className="leyenda-fila">
             <span className="leyenda-punto" style={{ background: "#1f6feb" }} />
             <span>Empezó</span>
@@ -277,14 +274,14 @@ export default function RouteMap({
             <span>Terminó</span>
           </div>
         )}
-        {capas.paradas && (
+        {(
           <div className="leyenda-fila">
             <span className="leyenda-parada leyenda-parada-chica" />
             <span className="leyenda-parada" />
             <span>Parada: el tamaño es lo que duró</span>
           </div>
         )}
-        {capas.clientes && (
+        {visits.length > 0 && (
           <div className="leyenda-fila">
             <span className="leyenda-punto" style={{ background: VISITADO }} />
             <span>Cliente visitado</span>

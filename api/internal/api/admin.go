@@ -2,12 +2,13 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/procovar/procovar-rutas/api/internal/events"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/procovar/procovar-rutas/api/internal/events"
 	"github.com/procovar/procovar-rutas/api/internal/gpx"
 	"github.com/procovar/procovar-rutas/api/internal/ingest"
 	"github.com/procovar/procovar-rutas/api/internal/store"
@@ -247,4 +248,62 @@ func (s *Server) scans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, aScanLogs(filas))
+}
+
+// POST /api/aliases — decir a mano de quién es un GPS.
+//
+// El alias es el NOMBRE DEL PERFIL DE GPS: el de la carpeta de Drive («GPS Diana
+// Acosta», «STGGari», «TABLET3»), que es lo único que trae un .gpx para saber de
+// quién es. Cuando la ingesta no lo reconoce, el fichero se queda esperando.
+//
+// Hasta ahora un alias solo podía nacer de refilón, al asignar un fichero atascado:
+// había que ESPERAR a que se atascara uno para poder decir de quién era el teléfono.
+// Con esto se puede dejar dicho antes, que es lo sensato cuando se entrega un GPS
+// nuevo: se apunta a quién se le dio y sus ficheros entran solos desde el primero.
+func (s *Server) createAlias(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
+
+	var p struct {
+		Alias    string `json:"alias"`
+		SellerID string `json:"sellerId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		respondError(w, http.StatusBadRequest, "cuerpo ilegible")
+		return
+	}
+	p.Alias = strings.TrimSpace(p.Alias)
+	if p.Alias == "" || p.SellerID == "" {
+		respondError(w, http.StatusBadRequest, "falta el alias o el vendedor")
+		return
+	}
+
+	// El trabajador tiene que ser uno que esta persona pueda ver: si no, un gerente
+	// de una sucursal podría llevarse los ficheros de otra.
+	trab, err := s.q.SellerByID(r.Context(), p.SellerID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "ese vendedor no existe")
+		return
+	}
+	if c.Role != "super_admin" && c.BranchID != "" && trab.BranchID != c.BranchID {
+		respondError(w, http.StatusForbidden, "sin acceso a ese vendedor")
+		return
+	}
+
+	fila, err := s.q.CreateAlias(r.Context(), store.CreateAliasParams{
+		ID:            newID(),
+		Alias:         gpx.Normalize(p.Alias),
+		OriginalAlias: p.Alias,
+		SellerID:      trab.ID,
+		BranchID:      &trab.BranchID,
+		CreatedBy:     &c.AuthUserID,
+	})
+	if err != nil {
+		s.fail(w, "guardando alias", err)
+		return
+	}
+
+	s.auth.RecordAudit(r.Context(), "rutas.alias.crear", fila.ID, c.AuthUserID)
+	// Quien tenga la pantalla abierta ve el alias nuevo sin recargar.
+	s.notify(r, events.Event{Type: events.TypeFile, Detail: "alias"})
+	respond(w, http.StatusOK, map[string]any{"ok": true, "id": fila.ID})
 }

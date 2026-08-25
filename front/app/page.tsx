@@ -26,7 +26,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Icon } from "@iconify/react";
+import { flechaIzquierda, flechaDerecha, traer, aviso as iconoAviso, ir } from "@/components/iconos";
 import RangoFechas from "@/components/RangoFechas";
 import SinPermiso from "@/components/SinPermiso";
 import { useSesion } from "@/components/Sesion";
@@ -226,6 +229,7 @@ export default function Calendar() {
   const callados = (data?.summary ?? []).filter(
     (r) => r.daysSilent === -1 || r.daysSilent > DIAS_MALO,
   );
+  const pendientes = callados.length + sueltos.length + sinEmparejar.length;
 
   return (
     <>
@@ -239,9 +243,7 @@ export default function Calendar() {
 
       <div className="controles">
         <button className="pv-boton" onClick={() => mover(-7)} aria-label="Semana anterior">
-          <svg className="flecha" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M14.5 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Icon icon={flechaIzquierda} className="icono" aria-hidden />
         </button>
         <RangoFechas
           desde={desde}
@@ -252,14 +254,13 @@ export default function Calendar() {
           }}
         />
         <button className="pv-boton" onClick={() => mover(7)} aria-label="Semana siguiente">
-          <svg className="flecha" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M9.5 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Icon icon={flechaDerecha} className="icono" aria-hidden />
         </button>
         <button className="pv-boton" onClick={estaSemana}>Esta semana</button>
         {conPedidos && puede("rutas.barrido") && (
           <button className="pv-boton" disabled={trayendo} onClick={traerPedidos}>
-            {trayendo ? "Trayendo…" : "Traer pedidos"}
+            <Icon icon={traer} className="icono" aria-hidden />
+            {trayendo ? "Encolando…" : "Traer pedidos"}
           </button>
         )}
         <span className="controles-cuenta">
@@ -272,20 +273,37 @@ export default function Calendar() {
       {aviso && <p className="sub">{aviso}</p>}
       {loading && <p className="loading">Cargando…</p>}
 
-      {/* Los avisos, y SOLO cuando hay algo que hacer. Una tarjeta permanente que
-          dice "no hay nada pendiente" es una línea que se aprende a saltar. */}
-      <Avisos
-        callados={callados}
-        sueltos={sueltos}
-        sinEmparejar={sinEmparejar}
-        vendedores={vendedores}
-        puedeAsignar={puede("rutas.bandeja")}
-        puedeEmparejar={puede("rutas.alias")}
-        alResolver={() => {
-          cargarCalendario();
-          cargarPendientes();
-        }}
-      />
+      {/* UNA LÍNEA, y solo cuando hay algo. El detalle —qué fichero falló y por qué,
+          quién no sube y desde cuándo— vive en su propia pantalla: aquí dentro
+          convertía la cuadrícula en un muro de texto que hay que atravesar para
+          llegar a lo que se venía a ver, y encima el detalle salía a medias porque
+          no cabe. */}
+      {pendientes > 0 && (
+        <Link href="/revisar" className="tarjeta linea-revisar">
+          <Icon icon={iconoAviso} className="icono" aria-hidden />
+          <b>
+            {pendientes === 1
+              ? "Hay 1 cosa que revisar"
+              : `Hay ${pendientes} cosas que revisar`}
+          </b>
+          <span className="sub">
+            {[
+              callados.length > 0 &&
+                `${callados.length} ${callados.length === 1 ? "vendedor lleva" : "vendedores llevan"} días sin subir`,
+              sueltos.length > 0 &&
+                `${sueltos.length} ${sueltos.length === 1 ? "fichero llegó" : "ficheros llegaron"} y no se pudieron usar`,
+              sinEmparejar.length > 0 &&
+                `${sinEmparejar.length} sin emparejar con PEDIDO`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="linea-revisar-ir">
+            Ver el detalle
+            <Icon icon={ir} className="icono" aria-hidden />
+          </span>
+        </Link>
+      )}
 
       {!loading && bySeller.size === 0 && !error && (
         <div className="tarjeta">
@@ -535,256 +553,5 @@ function Celda({
         <span className="celda-motivo">{porque}</span>
       )}
     </button>
-  );
-}
-
-/**
- * Lo que hay que resolver, si hay algo que resolver.
- *
- * Cada bloque aparece SOLO si tiene contenido y si esta persona tiene la llave para
- * tocarlo. Un bloque vacío o un botón que va a contestar 403 no son información,
- * son ruido encima de la cuadrícula.
- */
-function Avisos({
-  callados,
-  sueltos,
-  sinEmparejar,
-  vendedores,
-  puedeAsignar,
-  puedeEmparejar,
-  alResolver,
-}: {
-  callados: SummaryRow[];
-  sueltos: FicheroSuelto[];
-  sinEmparejar: VendedorSuelto[];
-  vendedores: Seller[];
-  puedeAsignar: boolean;
-  puedeEmparejar: boolean;
-  alResolver: () => void;
-}) {
-  const hayFicheros = puedeAsignar && sueltos.length > 0;
-  const hayVendedores = puedeEmparejar && sinEmparejar.length > 0;
-
-  if (callados.length === 0 && !hayFicheros && !hayVendedores) return null;
-
-  return (
-    <div className="tarjeta avisos">
-      {callados.length > 0 && (
-        <div className="aviso-bloque">
-          <b>
-            {callados.length === 1
-              ? "Un vendedor lleva días sin subir"
-              : `${callados.length} vendedores llevan días sin subir`}
-          </b>
-          <p className="sub">
-            O no llevan el GPS encendido, o dejó de subir. Más de {DIAS_MALO} días
-            callado es un teléfono que hay que ir a mirar.
-          </p>
-          <div className="lista-callados">
-            {callados
-              .slice()
-              .sort((a, b) => (b.daysSilent < 0 ? 1e9 : b.daysSilent) - (a.daysSilent < 0 ? 1e9 : a.daysSilent))
-              .map((c) => (
-                <span key={c.sellerId} className="pv-etiqueta pv-etiqueta-cuno">
-                  {c.seller} ·{" "}
-                  {c.daysSilent === -1 ? "nunca" : `${c.daysSilent} días`}
-                </span>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {hayFicheros && (
-        <div className="aviso-bloque">
-          <b>
-            {sueltos.length === 1
-              ? "Un fichero llegó y no se pudo colocar"
-              : `${sueltos.length} ficheros llegaron y no se pudieron colocar`}
-          </b>
-          <p className="sub">
-            Al asignarlos se recuerda el dispositivo, y los siguientes de ese mismo
-            teléfono se colocan solos. Es una vez por dispositivo, no todos los días.
-          </p>
-          {sueltos.slice(0, 10).map((f) => (
-            <FilaSuelta key={f.id} fichero={f} vendedores={vendedores} alAsignar={alResolver} />
-          ))}
-          {sueltos.length > 10 && (
-            <p className="sub">y {sueltos.length - 10} más.</p>
-          )}
-        </div>
-      )}
-
-      {hayVendedores && (
-        <div className="aviso-bloque">
-          <b>
-            {sinEmparejar.length === 1
-              ? "Un vendedor de PEDIDO no está emparejado"
-              : `${sinEmparejar.length} vendedores de PEDIDO no están emparejados`}
-          </b>
-          <p className="sub">
-            Sus pedidos no se cruzan con ninguna ruta mientras sigan así. El
-            emparejamiento automático solo se atreve cuando no hay duda: si un
-            nombre le vale a dos, prefiere no decir nada. Esto se hace una vez por
-            vendedor.
-          </p>
-          {sinEmparejar.slice(0, 10).map((v) => (
-            <FilaVendedor
-              key={`${v.branchId}:${v.vendorCode}`}
-              vendedor={v}
-              vendedores={vendedores}
-              alEmparejar={alResolver}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const MOTIVOS: Record<string, string> = {
-  SIN_ASIGNAR: "No se supo de quién es",
-  SIN_FECHA: "No se pudo fechar",
-  ERROR: "No se pudo leer",
-};
-
-function FilaSuelta({
-  fichero,
-  vendedores,
-  alAsignar,
-}: {
-  fichero: FicheroSuelto;
-  vendedores: Seller[];
-  alAsignar: () => void;
-}) {
-  const [seller, setVendedor] = useState("");
-  const [fecha, setFecha] = useState(fichero.date?.slice(0, 10) ?? "");
-  const [guardando, setGuardando] = useState(false);
-  const [fallo, setFallo] = useState<string | null>(null);
-
-  async function asignar() {
-    if (!seller) return;
-    setGuardando(true);
-    setFallo(null);
-    try {
-      await enviar("/api/inbox/assign", {
-        fileId: fichero.id,
-        sellerId: seller,
-        fecha: fecha || null,
-        // Recordar SIEMPRE: el alias es lo que hace que esto sea una vez por
-        // dispositivo y no una vez por día. Era una casilla que había que marcar, y
-        // desmarcarla no tenía ningún uso salvo condenarse a repetir el trabajo.
-        rememberAlias: true,
-        alias: fichero.aliasHint ?? "",
-      });
-      alAsignar();
-    } catch (e) {
-      setFallo((e as Error).message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <div className="fila-suelta">
-      <div>
-        <b>{fichero.name}</b>
-        <span className="sub">
-          {MOTIVOS[fichero.status] ?? fichero.status} · {fichero.source}
-          {fichero.folderPath ? ` / ${fichero.folderPath}` : ""} · {fichero.points} puntos
-          {fichero.aliasHint ? ` · el fichero dice «${fichero.aliasHint}»` : ""}
-        </span>
-        {fichero.error && <span className="aviso">{fichero.error}</span>}
-      </div>
-
-      {fichero.status !== "ERROR" && (
-        <div className="controles">
-          <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
-            <option value="">¿De quién es?</option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="pv-campo"
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-          />
-          <button
-            className="pv-boton pv-boton-primario"
-            disabled={!seller || guardando}
-            onClick={asignar}
-          >
-            {guardando ? "Guardando…" : "Asignar"}
-          </button>
-        </div>
-      )}
-      {fallo && <p className="aviso">{fallo}</p>}
-    </div>
-  );
-}
-
-function FilaVendedor({
-  vendedor,
-  vendedores,
-  alEmparejar,
-}: {
-  vendedor: VendedorSuelto;
-  vendedores: Seller[];
-  alEmparejar: () => void;
-}) {
-  const [seller, setVendedor] = useState("");
-  const [guardando, setGuardando] = useState(false);
-  const [fallo, setFallo] = useState<string | null>(null);
-
-  async function emparejar() {
-    if (!seller) return;
-    setGuardando(true);
-    setFallo(null);
-    try {
-      await enviar("/api/pedidos/emparejar", {
-        vendorCode: vendedor.vendorCode,
-        vendorName: vendedor.vendorName,
-        sellerId: seller,
-      });
-      alEmparejar();
-    } catch (e) {
-      setFallo((e as Error).message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <div className="fila-suelta">
-      <div>
-        <b>{vendedor.vendorName}</b>
-        <span className="sub">
-          {vendedor.branch} · {vendedor.orders}{" "}
-          {vendedor.orders === 1 ? "pedido" : "pedidos"} · el último el{" "}
-          {vendedor.lastOrder}
-        </span>
-      </div>
-      <div className="controles">
-        <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
-          <option value="">¿Quién es aquí?</option>
-          {vendedores.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="pv-boton pv-boton-primario"
-          disabled={!seller || guardando}
-          onClick={emparejar}
-        >
-          {guardando ? "Guardando…" : "Es este"}
-        </button>
-      </div>
-      {fallo && <p className="aviso">{fallo}</p>}
-    </div>
   );
 }

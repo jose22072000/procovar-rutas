@@ -23,6 +23,12 @@ import (
 // menos de lo que le hace una tablet sincronizando.
 const PausaPorDefecto = 5 * time.Second
 
+// DiasPorTanda: cuántos días atrasados se encolan en cada pasada del planificador.
+// Con la pausa de cinco segundos, treinta días son dos minutos y medio de trabajo;
+// el histórico entero se pone al día solo en unas cuantas pasadas y sin que nadie lo
+// note.
+const DiasPorTanda = 30
+
 // Planificar encola los días que hay que refrescar y devuelve cuántos encoló.
 //
 // Con `completo`, la ventana entera: es el repaso de una vez al día, y el que
@@ -37,41 +43,65 @@ func (s *Service) Planificar(ctx context.Context, completo bool) (int, error) {
 		return 0, fmt.Errorf("PEDIDO no está configurado: falta PEDIDO_API_URL")
 	}
 
-	dias := s.ventanaDias
-	if !completo {
-		// Tres días hacia atrás: un pedido de anteayer todavía puede cambiar de
-		// estado, uno de hace dos semanas ya no.
-		dias = 3
-	}
-
-	hasta := hoy()
 	encolados := 0
-	for i := 0; i <= dias; i++ {
-		fecha := hasta.AddDate(0, 0, -i).Format(iso)
-		t := Trabajo{Fecha: fecha, Completo: completo}
-
+	encolar := func(t Trabajo) error {
 		if s.cola == nil {
 			// Sin Redis no hay dónde encolar: se hace aquí mismo, con la misma pausa,
 			// que es lo que de verdad importa. Se pierde el repartirse entre procesos
 			// y el sobrevivir a un reinicio, no el ir despacio.
 			if err := s.hacerDia(ctx, t); err != nil {
-				return encolados, err
+				return err
 			}
 			encolados++
-			if err := esperar(ctx, s.pausa); err != nil {
-				return encolados, err
-			}
-			continue
+			return esperar(ctx, s.pausa)
 		}
-
 		nuevo, err := s.cola.Encolar(ctx, t)
 		if err != nil {
-			return encolados, err
+			return err
 		}
 		if nuevo {
 			encolados++
 		}
+		return nil
 	}
+
+	// 1. LO RECIENTE, siempre. Un pedido de anteayer todavía puede cambiar de estado;
+	//    uno de hace dos semanas ya no. Esto se vuelve a pedir aunque ya se haya
+	//    traído, porque lo que cambia no es que exista, es lo que dice.
+	recientes := 3
+	if completo {
+		recientes = s.ventanaDias
+	}
+	hasta := hoy()
+	for i := 0; i <= recientes; i++ {
+		if err := encolar(Trabajo{Fecha: hasta.AddDate(0, 0, -i).Format(iso), Completo: completo}); err != nil {
+			return encolados, err
+		}
+	}
+
+	// 2. Y LOS DÍAS DE LOS QUE YA HAY RUTA Y NUNCA SE PIDIERON SUS CLIENTES.
+	//
+	// Aquí está el histórico: dos mil días entraron por el backfill de Drive y de
+	// ninguno se había preguntado nunca por dónde tenía que pasar el vendedor. Se
+	// abría un día de agosto, salía la ruta dibujada, y no había con qué compararla.
+	//
+	// Se van trayendo POR TANDAS y de los más recientes hacia atrás: lo que se quiere
+	// ver lleno mañana por la mañana es esta semana, no enero. Con la pausa del
+	// trabajador, dos mil días son unas cuantas noches — y no hay ninguna prisa,
+	// porque son días que ya pasaron.
+	faltan, err := s.q.DaysMissingOrders(ctx, int32(s.porTanda))
+	if err != nil {
+		// Que falle el histórico no puede impedir que se traiga lo de hoy, que es lo
+		// que de verdad se está mirando.
+		s.log.Warn("no se pudo mirar qué días faltan por traer", "error", err)
+		return encolados, nil
+	}
+	for _, f := range faltan {
+		if err := encolar(Trabajo{Fecha: f.Format(iso), Completo: true}); err != nil {
+			return encolados, err
+		}
+	}
+
 	return encolados, nil
 }
 
@@ -137,6 +167,15 @@ func (s *Service) hacerDia(ctx context.Context, t Trabajo) error {
 	res, err := s.SyncRango(ctx, fecha, fecha, tipo)
 	if err != nil {
 		return err
+	}
+
+	// Queda apuntado que por este día YA se preguntó, aunque no hubiera ni un pedido.
+	// Sin esto, un día sin pedidos es indistinguible de uno que nunca se pidió y se
+	// volvería a pedir en cada pasada, para siempre.
+	if err := s.q.MarkDayFetched(ctx, store.MarkDayFetchedParams{
+		Date: fecha, Orders: int32(res.Orders), Completo: t.Completo,
+	}); err != nil {
+		s.log.Warn("no se pudo apuntar el día como traído", "fecha", t.Fecha, "error", err)
 	}
 
 	// Sólo se avisa a las pantallas cuando hubo algo. Un aviso por cada día vacío

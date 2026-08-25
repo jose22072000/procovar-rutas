@@ -21,7 +21,8 @@ import {
   ask,
   type DayResponse,
 } from "@/lib/api";
-import type { Capas } from "@/components/RouteMap";
+import { Icon } from "@iconify/react";
+import { flechaIzquierda, flechaDerecha, imprimir } from "@/components/iconos";
 
 // Leaflet touches `window`: kept out of server rendering.
 const MapaRuta = dynamic(() => import("@/components/RouteMap"), {
@@ -43,12 +44,6 @@ function Visor() {
   // centra.
   const [paradaVista, setParadaVista] = useState<string | null>(null);
   const [clienteVisto, setClienteVisto] = useState<string | null>(null);
-
-  // Las capas del mapa. Se entra con las tres encendidas, que es la vista completa;
-  // apagando el recorrido quedan los clientes solos —la ruta que TENÍA que hacer— y
-  // volviéndolo a encender se ve encima la que hizo. Esa comparación es justo para
-  // lo que se abre esta pantalla.
-  const [capas, setCapas] = useState<Capas>({ ruta: true, paradas: true, clientes: true });
 
   useEffect(() => {
     if (!seller || !fecha) return;
@@ -95,8 +90,14 @@ function Visor() {
         </div>
 
         <div className="visor-acciones">
-          <Link href={otroDia(-1)} className="pv-boton">← Día anterior</Link>
-          <Link href={otroDia(1)} className="pv-boton">Día siguiente →</Link>
+          <Link href={otroDia(-1)} className="pv-boton">
+            <Icon icon={flechaIzquierda} className="icono" aria-hidden />
+            Día anterior
+          </Link>
+          <Link href={otroDia(1)} className="pv-boton">
+            Día siguiente
+            <Icon icon={flechaDerecha} className="icono" aria-hidden />
+          </Link>
           <label className="pv-boton">
             <input
               type="checkbox"
@@ -105,39 +106,11 @@ function Visor() {
             />{" "}
             Día completo
           </label>
-          {/* Las capas: qué quiero ver encima del mapa. El de clientes solo aparece
-              si hay clientes que enseñar — una casilla que no enciende nada es peor
-              que no tenerla. */}
-          <label className="pv-boton">
-            <input
-              type="checkbox"
-              checked={capas.ruta}
-              onChange={(e) => setCapas({ ...capas, ruta: e.target.checked })}
-            />{" "}
-            Recorrido
-          </label>
-          <label className="pv-boton">
-            <input
-              type="checkbox"
-              checked={capas.paradas}
-              onChange={(e) => setCapas({ ...capas, paradas: e.target.checked })}
-            />{" "}
-            Paradas
-          </label>
-          {(datos?.visits?.length ?? 0) > 0 && (
-            <label className="pv-boton">
-              <input
-                type="checkbox"
-                checked={capas.clientes}
-                onChange={(e) => setCapas({ ...capas, clientes: e.target.checked })}
-              />{" "}
-              Clientes del día
-            </label>
-          )}
           <Link
             href={`/reporte?seller=${seller}&from=${fecha}&to=${fecha}`}
             className="pv-boton pv-boton-primario"
           >
+            <Icon icon={imprimir} className="icono" aria-hidden />
             Reporte
           </Link>
         </div>
@@ -155,7 +128,6 @@ function Visor() {
               points={datos.points}
               stops={datos.stops}
               visits={datos.visits ?? []}
-              capas={capas}
               to={instante}
               focusStopId={paradaVista}
               focusClientId={clienteVisto}
@@ -241,10 +213,7 @@ function Visor() {
                         className="parada-fila"
                         data-vista={clienteVisto === v.clientId}
                         data-visitado={v.visited}
-                        onClick={() => {
-                          setClienteVisto(v.clientId);
-                          setCapas((c) => ({ ...c, clientes: true }));
-                        }}
+                        onClick={() => setClienteVisto(v.clientId)}
                       >
                         <span className="pv-codigo">
                           {v.visited ? hora(v.time) : "—"}
@@ -275,10 +244,7 @@ function Visor() {
                       <button
                         className="parada-fila"
                         data-vista={paradaVista === p.id}
-                        onClick={() => {
-                          setParadaVista(p.id);
-                          setCapas((c) => ({ ...c, paradas: true }));
-                        }}
+                        onClick={() => setParadaVista(p.id)}
                       >
                         <span className="pv-codigo">
                           {hora(p.start)}–{hora(p.end)}

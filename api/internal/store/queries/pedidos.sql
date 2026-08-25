@@ -288,3 +288,39 @@ WHERE id = $1;
 
 -- name: RecentOrderSyncs :many
 SELECT * FROM pedido_sync ORDER BY inicio DESC LIMIT $1;
+
+-- ---------------------------------------------------------------------------
+-- Qué días hay que traer
+-- ---------------------------------------------------------------------------
+--
+-- El criterio NO es una ventana de tres semanas hacia atrás: es «de este día tengo
+-- ruta, así que quiero saber por dónde debía pasar». Hay dos mil días de recorrido
+-- cargados del backfill y de ninguno se había pedido nunca su lista de clientes,
+-- así que se abría un día de agosto, salía la ruta, y no había con qué compararla.
+--
+-- PEDIDO deja preguntar por fecha, así que se puede ir hacia atrás todo lo que haga
+-- falta; lo único que hay que llevar es la cuenta de por qué días ya se preguntó.
+
+-- name: DaysMissingOrders :many
+SELECT DISTINCT d.fecha
+FROM track_day d
+WHERE NOT EXISTS (SELECT 1 FROM dia_pedidos dp WHERE dp.fecha = d.fecha)
+-- Los más recientes primero: si hay dos mil días atrasados, lo que se quiere ver
+-- lleno mañana por la mañana es esta semana, no enero.
+ORDER BY d.fecha DESC
+LIMIT $1;
+
+-- name: MarkDayFetched :exec
+INSERT INTO dia_pedidos (fecha, pedidos, completo, traido_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (fecha) DO UPDATE SET
+    pedidos = EXCLUDED.pedidos,
+    completo = dia_pedidos.completo OR EXCLUDED.completo,
+    traido_at = now();
+
+-- Cuántos días quedan por traer, para poder decirlo en la pantalla en vez de dejar
+-- a quien mira preguntándose si aquello avanza.
+-- name: DaysMissingCount :one
+SELECT count(DISTINCT d.fecha)::int
+FROM track_day d
+WHERE NOT EXISTS (SELECT 1 FROM dia_pedidos dp WHERE dp.fecha = d.fecha);

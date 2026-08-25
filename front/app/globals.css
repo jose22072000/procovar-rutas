@@ -1041,3 +1041,38 @@ img, svg, video, canvas, table { max-width: 100%; }
    veredicto, igual que en el mapa, para que la lista y el dibujo digan lo mismo. */
 .parada-fila[data-visitado="false"] .parada-donde { color: var(--pv-cuno); }
 .parada-fila[data-visitado="true"] .parada-donde { color: var(--pv-visto); }
+
+/* La línea que lleva a «Qué hay que revisar».
+   Una línea y no la lista entera: el detalle vive en su pantalla, y aquí solo tiene
+   que caber cuántas cosas hay y un sitio donde pinchar. */
+.linea-revisar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.6rem;
+    border-left: 3px solid var(--pv-ambar);
+    text-decoration: none;
+    color: inherit;
+}
+.linea-revisar:hover { border-color: var(--pv-azul); }
+.linea-revisar .sub { margin: 0; flex: 1 1 auto; }
+.linea-revisar-ir {
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--pv-azul);
+    white-space: nowrap;
+}
+
+/* Los iconos, de Lucide por Iconify y empotrados en el paquete (components/iconos.ts).
+   Heredan el color y el tamaño del texto que acompañan, que es la única forma de que
+   no bailen: un emoji lo dibuja cada sistema a su manera y una flecha escrita («→»)
+   no se alinea con la línea base de al lado. */
+.icono {
+    width: 1.05em;
+    height: 1.05em;
+    flex: none;
+    vertical-align: -0.15em;
+}
+.pv-boton .icono:first-child:not(:only-child) { margin-right: 0.35rem; }
+.pv-boton .icono:last-child:not(:only-child) { margin-left: 0.35rem; }
+.linea-revisar-ir { display: inline-flex; align-items: center; gap: 0.3rem; }

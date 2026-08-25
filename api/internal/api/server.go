@@ -105,6 +105,11 @@ func (s *Server) Routes() http.Handler {
 		// reutiliza las llaves que ya existen —emparejar es de la misma naturaleza
 		// que un alias de dispositivo, y sincronizar que un barrido—, para no tener
 		// que dar de alta llaves nuevas en Accesos.
+		// Lo que hay que revisar: ficheros atascados, quién no sube y quién es quién
+		// con PEDIDO. Con la llave del calendario porque es su detalle — quien puede
+		// ver un hueco puede ver por qué está ahí.
+		r.With(Exige(PermCalendario)).Get("/review", s.review)
+		r.With(Exige(PermCalendario)).Get("/aliases", s.listAliases)
 		r.With(Exige(PermCalendario)).Get("/pedidos/vendedores", s.vendedores)
 		r.With(Exige(PermAlias)).Post("/pedidos/emparejar", s.emparejar)
 		r.With(Exige(PermBarrido)).Post("/pedidos/sync", s.syncPedidos)
@@ -121,12 +126,12 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/scans", s.scans)
 			r.Get("/queue", s.queueStats)
 			r.Get("/ingest/status", s.adminIngestStats)
-			r.Get("/aliases", s.listAliases)
 
 			// Ver Administración y TOCARLA son dos cosas: un gerente puede querer
 			// mirar si las carpetas están al día sin poder darlas de baja.
 			r.With(Exige(PermCarpeta)).Post("/sources", s.createSource)
 			r.With(Exige(PermCarpeta)).Delete("/sources/{id}", s.deleteSource)
+			r.With(Exige(PermAlias)).Post("/aliases", s.createAlias)
 			r.With(Exige(PermAlias)).Delete("/aliases/{id}", s.deleteAlias)
 			r.With(Exige(PermBarrido)).Post("/ingest/scan", s.scan)
 		})
