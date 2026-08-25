@@ -45,13 +45,27 @@ export function Sesion({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     ask<Yo>("/api/me")
-      .then(setYo)
+      .then((quien) => {
+        setYo(quien);
+        setCargando(false);
+      })
       .catch((e) => {
+        // 401: no hay sesión. `ask` ya mandó el navegador a Accesos, así que aquí NO
+        // se deja de cargar a propósito.
+        //
+        // Si se dejara, la pantalla se pinta durante el segundo que tarda la
+        // navegación — y como sin sesión `puede()` es falso para todo, lo que se pinta
+        // es "No tienes permiso para ver el calendario". Quien lo ve entiende que le
+        // falta un permiso, cuando lo que le falta es entrar. Dos problemas muy
+        // distintos con la misma cara: uno se arregla pidiéndoselo al administrador y
+        // el otro tecleando la contraseña.
+        if (e instanceof ApiError && e.status === 401) return;
+
         // 403 con sesión buena: entró, pero esta aplicación no es suya. Se guarda la
         // llave que falta para poder decírselo, en vez de dejar la pantalla muda.
         if (e instanceof ApiError && e.status === 403) setVetado(e.message);
-      })
-      .finally(() => setCargando(false));
+        setCargando(false);
+      });
   }, []);
 
   const puede = (clave: string) => Boolean(yo?.permisos?.[clave]);

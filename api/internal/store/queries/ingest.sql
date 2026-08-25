@@ -308,3 +308,17 @@ WHERE id IN (SELECT trabajador_id FROM afectados);
 -- De esta lista, cuáles ya están dentro. Es lo que permite a la ingesta saltarse lo
 -- hecho sin tener que mover nada en Drive.
 SELECT drive_file_id FROM gpx_file WHERE drive_file_id = ANY(@ids::text[]);
+
+-- Cuántos ficheros de ese día entraron CORTADOS.
+--
+-- Un fichero cortado se procesa igual —sus puntos son buenos— pero deja su aviso
+-- escrito en `error` con el estado en PROCESADO, que es la combinación que significa
+-- «se pudo usar, pero no está entero». El día se marca a partir de esto: sin la
+-- marca, medio día de recorrido se lee como el día completo.
+-- name: TruncatedFilesOfDay :one
+SELECT count(*)::int AS files
+FROM gpx_file
+WHERE trabajador_id = @seller_id::text
+  AND fecha = @date::date
+  AND estado = 'PROCESADO'
+  AND error IS NOT NULL AND error <> '';

@@ -95,6 +95,14 @@ func Examine(f drive.File, datos []byte, ent Env) Verdict {
 		AliasHint: res.Hint,
 		Parsed:    parseado,
 	}
+
+	// Un fichero cortado SÍ se da por bueno —sus puntos son buenos— pero se queda con
+	// el aviso escrito. El estado dice que se pudo usar; el aviso, que lo que entró
+	// no es el día entero. Perder eso sería enseñar ocho kilómetros de medio día como
+	// si fueran los del día.
+	if parseado.Truncated {
+		v.Error = parseado.Warning
+	}
 	if v.AliasHint == "" {
 		v.AliasHint = f.Name
 	}

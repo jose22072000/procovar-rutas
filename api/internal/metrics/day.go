@@ -51,6 +51,9 @@ const (
 	FlagLowMovement   = "movimiento_escaso"
 	FlagNoTimes       = "sin_horas"
 	FlagNoWorkdayData = "sin_datos_en_jornada"
+	// FlagTruncated: alguno de los ficheros de ese día llegó cortado, así que los
+	// kilómetros son los del trozo que se pudo leer, no los de la jornada.
+	FlagTruncated = "fichero_cortado"
 )
 
 // InputPoint is a fix exactly as the parser produces it.

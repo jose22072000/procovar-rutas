@@ -1271,6 +1271,33 @@ func (q *Queries) SourceByID(ctx context.Context, id string) (DriveSource, error
 	return i, err
 }
 
+const truncatedFilesOfDay = `-- name: TruncatedFilesOfDay :one
+SELECT count(*)::int AS files
+FROM gpx_file
+WHERE trabajador_id = $1::text
+  AND fecha = $2::date
+  AND estado = 'PROCESADO'
+  AND error IS NOT NULL AND error <> ''
+`
+
+type TruncatedFilesOfDayParams struct {
+	SellerID string
+	Date     time.Time
+}
+
+// Cuántos ficheros de ese día entraron CORTADOS.
+//
+// Un fichero cortado se procesa igual —sus puntos son buenos— pero deja su aviso
+// escrito en `error` con el estado en PROCESADO, que es la combinación que significa
+// «se pudo usar, pero no está entero». El día se marca a partir de esto: sin la
+// marca, medio día de recorrido se lee como el día completo.
+func (q *Queries) TruncatedFilesOfDay(ctx context.Context, arg TruncatedFilesOfDayParams) (int32, error) {
+	row := q.db.QueryRow(ctx, truncatedFilesOfDay, arg.SellerID, arg.Date)
+	var files int32
+	err := row.Scan(&files)
+	return files, err
+}
+
 const updateSourceCursor = `-- name: UpdateSourceCursor :exec
 UPDATE drive_source
 SET cursor_modificado = $2, ultimo_barrido = now(), ultimo_error = NULL, updated_at = now()
