@@ -41,9 +41,9 @@ type Trabajo struct {
 	Fecha string `json:"fecha"`
 	// Completo = se pide el día entero aunque no haya cambiado nada allí. El
 	// incremental sólo pide lo que se movió.
-	Completo bool `json:"completo"`
+	Completo bool      `json:"completo"`
 	Encolado time.Time `json:"encolado"`
-	Intentos int    `json:"intentos"`
+	Intentos int       `json:"intentos"`
 }
 
 // Cola es la cola de días pendientes.

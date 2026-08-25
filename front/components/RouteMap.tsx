@@ -74,6 +74,11 @@ export default function RouteMap({
 
       if (!mapa.current) {
         mapa.current = L.map(contenedor.current, { zoomControl: true });
+        // El sello de Leaflet fuera: es publicidad de la biblioteca y no la pide
+        // nadie. El crédito de OpenStreetMap SE QUEDA — los mapas son suyos y su
+        // licencia (ODbL) exige nombrarlos; quitarlo sería usar su trabajo sin
+        // decirlo. Se deja pequeño y discreto, que es lo que se puede hacer.
+        mapa.current.attributionControl.setPrefix(false);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: "© OpenStreetMap",
           maxZoom: 19,

@@ -386,6 +386,17 @@ type OrderSync struct {
 	Detail  *string
 }
 
+type PedidoVendedor struct {
+	ID        string
+	BranchID  *string
+	Ref       string
+	Code      *string
+	Name      string
+	Active    bool
+	Orders    int32
+	UpdatedAt time.Time
+}
+
 type Seller struct {
 	ID         string
 	AuthUserID *string

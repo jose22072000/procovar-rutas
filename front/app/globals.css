@@ -1091,3 +1091,38 @@ img, svg, video, canvas, table { max-width: 100%; }
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
+
+/* El crédito del mapa, discreto.
+   No se quita —los mapas son de OpenStreetMap y su licencia exige nombrarlos— pero
+   tampoco tiene que competir con el recorrido: pequeño, translúcido y en la esquina. */
+.leaflet-control-attribution {
+    background: rgba(255, 255, 255, 0.6) !important;
+    font-size: 9px !important;
+    padding: 0 4px !important;
+    color: var(--pv-tinta-suave) !important;
+}
+.leaflet-control-attribution a { color: var(--pv-tinta-suave) !important; }
+
+/* Una fila de la lista de pendientes.
+   El bloque de texto es una COLUMNA: el nombre, el detalle y el error, uno debajo de
+   otro. Sin esto el aviso rojo se montaba encima de la línea del detalle y tapaba de
+   qué carpeta y de qué día era el fichero — justo lo que hay que leer para arreglarlo. */
+.fila-suelta > div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1 1 320px;
+    min-width: 0;
+}
+.fila-suelta .aviso {
+    display: block;
+    margin: 0;
+    width: 100%;
+}
+
+/* La tabla de vendedores: los que no tienen dueño, marcados. */
+.tabla-vendedores tr[data-sinduenno="true"] td:first-child { font-weight: 600; }
+.tabla-vendedores tr[data-sinduenno="true"] { background: var(--pv-ambar-tinte); }
+
+.elegir { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.elegir .aviso { margin: 0; }

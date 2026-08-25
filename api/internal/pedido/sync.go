@@ -269,6 +269,52 @@ func (s *Service) SyncRango(ctx context.Context, desde, hasta time.Time, tipo st
 	return res, nil
 }
 
+// SyncVendors trae el maestro de vendedores de PEDIDO y lo espeja.
+//
+// Es barato —son decenas de filas, no miles— y sin él la pantalla de emparejar solo
+// conoce a los vendedores que ya trajeron algún pedido: con el histórico todavía en
+// la cola, eso son cuatro de treinta, y quien está emparejando se queda esperando a
+// que aparezcan los demás.
+func (s *Service) SyncVendors(ctx context.Context) (int, error) {
+	if !s.Configured() {
+		return 0, fmt.Errorf("PEDIDO no está configurado: falta PEDIDO_API_URL")
+	}
+
+	vendedores, err := s.cli.Vendors(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	sucursales := map[string]string{}
+	n := 0
+	for _, v := range vendedores {
+		// La sucursal, por el mismo camino que los pedidos: por nombre normalizado.
+		// Si no se reconoce, el vendedor se guarda IGUAL pero sin sucursal — que no
+		// se sepa de qué sucursal es no es razón para esconderlo de la lista de
+		// emparejar; es una razón más para enseñarlo.
+		var sucursalID *string
+		if id, err := s.sucursalDe(ctx, Order{
+			BranchCode: v.BranchCode, BranchName: v.BranchName,
+		}, sucursales); err == nil {
+			sucursalID = &id
+		}
+
+		if err := s.q.UpsertVendor(ctx, store.UpsertVendorParams{
+			ID:       idDe("vendedor", v.ID),
+			BranchID: sucursalID,
+			Ref:      v.ID,
+			Code:     v.Code,
+			Name:     v.Name,
+			Active:   v.Active,
+			Orders:   int32(v.Orders),
+		}); err != nil {
+			return n, fmt.Errorf("guardando vendedor %s: %w", v.ID, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
 // MatchAndLink pairs vendors with sellers and ties each order to its worker.
 // Returns how many pairings there are in total.
 func (s *Service) MatchAndLink(ctx context.Context) (int, error) {
@@ -281,21 +327,32 @@ func (s *Service) MatchAndLink(ctx context.Context) (int, error) {
 		sellers = append(sellers, SellerRef{ID: t.ID, Name: t.Name, BranchID: t.BranchID})
 	}
 
-	// Los vendedores que aún no tienen dueño. Los ya emparejados no se vuelven a
-	// mirar: si alguien los arregló a mano, el automático no vuelve a opinar.
-	sinDuenno, err := s.q.UnlinkedVendors(ctx, "")
+	// Los vendedores del MAESTRO que aún no tienen dueño.
+	//
+	// Antes esto miraba los pedidos huérfanos, y eso encadenaba dos esperas: un
+	// vendedor no se podía emparejar hasta que llegara alguno de sus pedidos, y sus
+	// pedidos no se cruzaban hasta que estuviera emparejado. Con el maestro espejado
+	// se empareja en cuanto EXISTE, y sus pedidos entran ya con dueño.
+	todos, err := s.q.VendorsWithLink(ctx, "")
 	if err != nil {
 		return 0, err
 	}
-	vendors := make([]VendorRef, 0, len(sinDuenno))
-	for _, v := range sinDuenno {
-		if v.VendorCode == nil || *v.VendorCode == "" {
-			continue
+	vendors := make([]VendorRef, 0, len(todos))
+	for _, v := range todos {
+		if v.SellerID != "" {
+			continue // ya tiene dueño
+		}
+		codigo := v.Ref
+		if v.Code != nil && *v.Code != "" {
+			codigo = *v.Code
+		}
+		if v.BranchID == nil {
+			continue // sin sucursal no se puede comparar contra nadie
 		}
 		vendors = append(vendors, VendorRef{
-			Code:     *v.VendorCode,
-			Name:     v.VendorLabel,
-			BranchID: v.BranchID,
+			Code:     codigo,
+			Name:     v.Name,
+			BranchID: *v.BranchID,
 		})
 	}
 

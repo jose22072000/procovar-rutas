@@ -47,22 +47,17 @@ interface VendedorCallado {
   linked: boolean;
 }
 
-interface Enlace {
-  id: string;
-  vendorCode: string;
-  vendorName: string;
+/** Un vendedor de PEDIDO y quién es aquí, si ya se dijo. */
+interface Vendedor {
+  ref: string;
+  code: string;
+  name: string;
+  branch: string;
+  orders: number;
+  /** Vacío = todavía no se sabe quién es aquí. */
   sellerId: string;
   seller: string;
   origin: string;
-}
-
-interface Suelto {
-  branchId: string;
-  branch: string;
-  vendorCode: string;
-  vendorName: string;
-  orders: number;
-  lastOrder: string;
 }
 
 interface Alias {
@@ -84,8 +79,7 @@ interface Revision {
   files: FicheroAtascado[];
   truncated?: DiaCortado[];
   silent: VendedorCallado[];
-  links: Enlace[];
-  unlinked: Suelto[];
+  vendors?: Vendedor[];
   daysMissing?: number;
   queue?: { pendientes: number; haciendose: number; apartados: number };
 }
@@ -141,6 +135,7 @@ export default function Revisar() {
 
   const rotos = datos.files.filter((f) => f.status === "ERROR");
   const colocables = datos.files.filter((f) => f.status !== "ERROR");
+  const sinDuenno = (datos.vendors ?? []).filter((v) => v.sellerId === "");
   const callados = datos.silent
     .filter((s) => s.daysSilent === -1 || s.daysSilent > 3)
     .sort((a, b) => (b.daysSilent < 0 ? 1e9 : b.daysSilent) - (a.daysSilent < 0 ? 1e9 : a.daysSilent));
@@ -338,61 +333,59 @@ export default function Revisar() {
         </div>
       )}
 
-      {/* Quién es quién con PEDIDO: lo que falta, y lo que ya está. */}
-      {puede("rutas.alias") && (
+      {/* Quién es quién con PEDIDO. UNA lista con todos. */}
+      {puede("rutas.alias") && (datos.vendors?.length ?? 0) > 0 && (
         <div className="tarjeta">
-          <b>Vendedores de PEDIDO</b>
+          <b>
+            Vendedores de PEDIDO · {sinDuenno.length} de {datos.vendors!.length} sin
+            emparejar
+          </b>
           <p className="sub">
-            Sus nombres nacen en otro sitio —el maestro de vendedores— y aquí nacen del
-            nombre de una carpeta de Drive, así que no coinciden. Lo que no tiene duda
-            se empareja solo; lo que le vale a dos, no se empareja y se pregunta. Es
-            una vez por vendedor.
+            Sus nombres nacen en el maestro de vendedores y aquí nacen del nombre de
+            una carpeta de Drive, así que no coinciden. Lo que no tiene duda se
+            empareja solo; lo que le vale a dos, no se empareja y se pregunta. Es una
+            vez por vendedor. <b>Mientras uno siga sin emparejar, sus pedidos no se
+            cruzan con ninguna ruta.</b>
           </p>
 
-          {datos.unlinked.length === 0 ? (
-            <p className="sub">No falta ninguno por emparejar.</p>
-          ) : (
-            datos.unlinked.map((v) => (
-              <FilaVendedor
-                key={`${v.branchId}:${v.vendorCode}`}
-                vendedor={v}
-                vendedores={vendedores}
-                alEmparejar={cargar}
-              />
-            ))
-          )}
-
-          {datos.links.length > 0 && (
-            <>
-              <div className="pv-rotulo" style={{ marginTop: "1rem" }}>
-                Ya emparejados · {datos.links.length}
-              </div>
-              <table className="movements">
-                <thead>
-                  <tr>
-                    <th>En PEDIDO</th>
-                    <th>Código</th>
-                    <th>Es, aquí</th>
-                    <th>Lo dijo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {datos.links.map((l) => (
-                    <tr key={l.id}>
-                      <td>{l.vendorName}</td>
-                      <td className="pv-codigo">{l.vendorCode}</td>
-                      <td>{l.seller}</td>
-                      {/* De dónde salió el emparejamiento: si fue el automático, es
-                          revisable; si lo dijo una persona, no se toca. */}
-                      <td>{l.origin === "manual" ? "una persona" : "el nombre"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
+          <table className="movements tabla-vendedores">
+            <thead>
+              <tr>
+                <th>En PEDIDO</th>
+                <th>Código</th>
+                <th>Sucursal</th>
+                <th>Pedidos</th>
+                <th>Es, aquí</th>
+              </tr>
+            </thead>
+            <tbody>
+              {datos.vendors!.map((v) => (
+                <tr key={v.ref} data-sinduenno={v.sellerId === ""}>
+                  <td>{v.name}</td>
+                  <td className="pv-codigo">{v.code}</td>
+                  <td className="pv-codigo">{v.branch || "—"}</td>
+                  <td>{v.orders}</td>
+                  <td>
+                    {v.sellerId ? (
+                      <>
+                        {v.seller}{" "}
+                        <span className="sub">
+                          {/* De dónde salió: si lo dijo el parecido de nombres es
+                              revisable; si lo dijo una persona, no se toca. */}
+                          {v.origin === "manual" ? "(lo dijo una persona)" : "(por el nombre)"}
+                        </span>
+                      </>
+                    ) : (
+                      <ElegirVendedor vendedor={v} vendedores={vendedores} alEmparejar={cargar} />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+
     </>
   );
 }
@@ -470,12 +463,12 @@ function FilaFichero({
   );
 }
 
-function FilaVendedor({
+function ElegirVendedor({
   vendedor,
   vendedores,
   alEmparejar,
 }: {
-  vendedor: Suelto;
+  vendedor: Vendedor;
   vendedores: Seller[];
   alEmparejar: () => void;
 }) {
@@ -489,8 +482,8 @@ function FilaVendedor({
     setFallo(null);
     try {
       await enviar("/api/pedidos/emparejar", {
-        vendorCode: vendedor.vendorCode,
-        vendorName: vendedor.vendorName,
+        vendorCode: vendedor.code,
+        vendorName: vendedor.name,
         sellerId: seller,
       });
       alEmparejar();
@@ -502,33 +495,23 @@ function FilaVendedor({
   }
 
   return (
-    <div className="fila-suelta">
-      <div>
-        <b>{vendedor.vendorName}</b>
-        <span className="sub">
-          <span className="pv-codigo">{vendedor.vendorCode}</span> · {vendedor.branch} ·{" "}
-          {vendedor.orders} {vendedor.orders === 1 ? "pedido" : "pedidos"} · el último
-          el {vendedor.lastOrder}
-        </span>
-      </div>
-      <div className="controles">
-        <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
-          <option value="">¿Quién es aquí?</option>
-          {vendedores.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="pv-boton pv-boton-primario"
-          disabled={!seller || guardando}
-          onClick={emparejar}
-        >
-          {guardando ? "Guardando…" : "Es este"}
-        </button>
-      </div>
-      {fallo && <p className="aviso">{fallo}</p>}
+    <div className="elegir">
+      <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
+        <option value="">¿Quién es aquí?</option>
+        {vendedores.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+      <button
+        className="pv-boton pv-boton-primario"
+        disabled={!seller || guardando}
+        onClick={emparejar}
+      >
+        {guardando ? "…" : "Es este"}
+      </button>
+      {fallo && <span className="aviso">{fallo}</span>}
     </div>
   );
 }

@@ -992,6 +992,118 @@ func (q *Queries) UpsertSellerLink(ctx context.Context, arg UpsertSellerLinkPara
 	return err
 }
 
+const upsertVendor = `-- name: UpsertVendor :exec
+
+INSERT INTO pedido_vendedor (
+    id, sucursal_id, ref, codigo, nombre, activo, pedidos, actualizado_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+ON CONFLICT (ref) DO UPDATE SET
+    sucursal_id = EXCLUDED.sucursal_id,
+    codigo = EXCLUDED.codigo,
+    nombre = EXCLUDED.nombre,
+    activo = EXCLUDED.activo,
+    pedidos = EXCLUDED.pedidos,
+    actualizado_at = now()
+`
+
+type UpsertVendorParams struct {
+	ID       string
+	BranchID *string
+	Ref      string
+	Code     *string
+	Name     string
+	Active   bool
+	Orders   int32
+}
+
+// ---------------------------------------------------------------------------
+// El maestro de vendedores de PEDIDO
+// ---------------------------------------------------------------------------
+func (q *Queries) UpsertVendor(ctx context.Context, arg UpsertVendorParams) error {
+	_, err := q.db.Exec(ctx, upsertVendor,
+		arg.ID,
+		arg.BranchID,
+		arg.Ref,
+		arg.Code,
+		arg.Name,
+		arg.Active,
+		arg.Orders,
+	)
+	return err
+}
+
+const vendorsWithLink = `-- name: VendorsWithLink :many
+SELECT
+    v.ref,
+    v.codigo,
+    v.nombre,
+    v.activo,
+    v.pedidos,
+    coalesce(s.nombre, '')  AS branch,
+    v.sucursal_id,
+    coalesce(vp.trabajador_id, '') AS seller_id,
+    coalesce(t.nombre, '')  AS seller,
+    coalesce(vp.origen, '') AS origin
+FROM pedido_vendedor v
+LEFT JOIN sucursal s ON s.id = v.sucursal_id
+LEFT JOIN vendedor_pedido vp
+       ON vp.vendedor_codigo = coalesce(v.codigo, v.ref)
+      AND (v.sucursal_id IS NULL OR vp.sucursal_id = v.sucursal_id)
+LEFT JOIN trabajador t ON t.id = vp.trabajador_id
+WHERE v.activo
+  AND ($1::text = '' OR v.sucursal_id = $1 OR v.sucursal_id IS NULL)
+ORDER BY (vp.trabajador_id IS NOT NULL), v.pedidos DESC, v.nombre
+`
+
+type VendorsWithLinkRow struct {
+	Ref      string
+	Code     *string
+	Name     string
+	Active   bool
+	Orders   int32
+	Branch   string
+	BranchID *string
+	SellerID string
+	Seller   string
+	Origin   string
+}
+
+// Todos los vendedores de PEDIDO con a quién están emparejados aquí, si lo están.
+//
+// Sale la lista ENTERA, emparejados y no: quien abre esto está revisando quién es
+// quién, y para eso hace falta ver también lo que ya está decidido — es la única
+// forma de cazar un emparejamiento automático que se equivocó.
+func (q *Queries) VendorsWithLink(ctx context.Context, branchID string) ([]VendorsWithLinkRow, error) {
+	rows, err := q.db.Query(ctx, vendorsWithLink, branchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []VendorsWithLinkRow{}
+	for rows.Next() {
+		var i VendorsWithLinkRow
+		if err := rows.Scan(
+			&i.Ref,
+			&i.Code,
+			&i.Name,
+			&i.Active,
+			&i.Orders,
+			&i.Branch,
+			&i.BranchID,
+			&i.SellerID,
+			&i.Seller,
+			&i.Origin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const visitSummary = `-- name: VisitSummary :many
 
 SELECT

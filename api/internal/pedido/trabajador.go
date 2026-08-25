@@ -43,6 +43,17 @@ func (s *Service) Planificar(ctx context.Context, completo bool) (int, error) {
 		return 0, fmt.Errorf("PEDIDO no está configurado: falta PEDIDO_API_URL")
 	}
 
+	// El maestro de vendedores, primero y en cada pasada. Son decenas de filas, no
+	// miles, así que no es carga; y va antes que los pedidos porque es lo que permite
+	// emparejar — sin él, los pedidos que lleguen se quedan sin dueño.
+	if n, err := s.SyncVendors(ctx); err != nil {
+		s.log.Warn("no se pudo traer el maestro de vendedores", "error", err)
+	} else if n > 0 {
+		if _, err := s.MatchAndLink(ctx); err != nil {
+			s.log.Warn("emparejando tras traer el maestro", "error", err)
+		}
+	}
+
 	encolados := 0
 	encolar := func(t Trabajo) error {
 		if s.cola == nil {

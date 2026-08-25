@@ -118,6 +118,37 @@ func (c *Client) Orders(ctx context.Context, from, to time.Time, since *time.Tim
 	return r.Orders, nil
 }
 
+// vendorsResponse es el maestro de vendedores de PEDIDO.
+type vendorsResponse struct {
+	Count   int            `json:"count"`
+	Sellers []MasterSeller `json:"sellers"`
+}
+
+// MasterSeller es un vendedor del maestro de PEDIDO, exista o no un pedido suyo.
+type MasterSeller struct {
+	ID         string  `json:"id"`
+	Code       *string `json:"codigo"`
+	Name       string  `json:"nombre"`
+	Active     bool    `json:"activo"`
+	BranchCode *string `json:"sucursalCodigo"`
+	BranchName *string `json:"sucursalNombre"`
+	Orders     int     `json:"pedidos"`
+}
+
+// Vendors trae el maestro entero.
+//
+// Se pide aparte de los pedidos porque responde a otra pregunta: los pedidos dicen
+// quién ha vendido, y esto dice quién EXISTE. Para emparejar hace falta lo segundo —
+// si no, un vendedor nuevo no aparece hasta que venda, y hasta entonces no hay forma
+// de decir quién es.
+func (c *Client) Vendors(ctx context.Context) ([]MasterSeller, error) {
+	var r vendorsResponse
+	if err := c.get(ctx, "/integration/vendedores", nil, &r); err != nil {
+		return nil, err
+	}
+	return r.Sellers, nil
+}
+
 type clientsResponse struct {
 	Count      int       `json:"count"`
 	Clients    []Client_ `json:"clients"`

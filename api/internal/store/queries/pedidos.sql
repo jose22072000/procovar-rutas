@@ -324,3 +324,46 @@ ON CONFLICT (fecha) DO UPDATE SET
 SELECT count(DISTINCT d.fecha)::int
 FROM track_day d
 WHERE NOT EXISTS (SELECT 1 FROM dia_pedidos dp WHERE dp.fecha = d.fecha);
+
+-- ---------------------------------------------------------------------------
+-- El maestro de vendedores de PEDIDO
+-- ---------------------------------------------------------------------------
+
+-- name: UpsertVendor :exec
+INSERT INTO pedido_vendedor (
+    id, sucursal_id, ref, codigo, nombre, activo, pedidos, actualizado_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+ON CONFLICT (ref) DO UPDATE SET
+    sucursal_id = EXCLUDED.sucursal_id,
+    codigo = EXCLUDED.codigo,
+    nombre = EXCLUDED.nombre,
+    activo = EXCLUDED.activo,
+    pedidos = EXCLUDED.pedidos,
+    actualizado_at = now();
+
+-- Todos los vendedores de PEDIDO con a quién están emparejados aquí, si lo están.
+--
+-- Sale la lista ENTERA, emparejados y no: quien abre esto está revisando quién es
+-- quién, y para eso hace falta ver también lo que ya está decidido — es la única
+-- forma de cazar un emparejamiento automático que se equivocó.
+-- name: VendorsWithLink :many
+SELECT
+    v.ref,
+    v.codigo,
+    v.nombre,
+    v.activo,
+    v.pedidos,
+    coalesce(s.nombre, '')  AS branch,
+    v.sucursal_id,
+    coalesce(vp.trabajador_id, '') AS seller_id,
+    coalesce(t.nombre, '')  AS seller,
+    coalesce(vp.origen, '') AS origin
+FROM pedido_vendedor v
+LEFT JOIN sucursal s ON s.id = v.sucursal_id
+LEFT JOIN vendedor_pedido vp
+       ON vp.vendedor_codigo = coalesce(v.codigo, v.ref)
+      AND (v.sucursal_id IS NULL OR vp.sucursal_id = v.sucursal_id)
+LEFT JOIN trabajador t ON t.id = vp.trabajador_id
+WHERE v.activo
+  AND (@branch_id::text = '' OR v.sucursal_id = @branch_id OR v.sucursal_id IS NULL)
+ORDER BY (vp.trabajador_id IS NOT NULL), v.pedidos DESC, v.nombre;

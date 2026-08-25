@@ -86,34 +86,19 @@ func (s *Server) review(w http.ResponseWriter, r *http.Request) {
 	//    dos, porque «lo que tengo» es tan informativo como «lo que falta»: sirve
 	//    para revisar que un emparejamiento automático no se equivocó.
 	if s.pedidos != nil {
-		atados, err := s.q.SellerLinks(r.Context(), p.BranchID)
-		if err == nil {
-			links := make([]VendorLink, 0, len(atados))
-			for _, l := range atados {
-				links = append(links, VendorLink{
-					ID: l.ID, BranchID: l.BranchID,
-					VendorCode: l.VendorCode, VendorName: l.VendorName,
-					SellerID: l.SellerID, Seller: l.Seller, Origin: l.Origin,
-				})
-			}
-			salida["links"] = links
-		}
-
-		sueltos, err := s.q.UnlinkedVendors(r.Context(), p.BranchID)
-		if err == nil {
-			libres := make([]UnlinkedVendor, 0, len(sueltos))
-			for _, v := range sueltos {
-				codigo := ""
-				if v.VendorCode != nil {
-					codigo = *v.VendorCode
-				}
-				libres = append(libres, UnlinkedVendor{
-					BranchID: v.BranchID, Branch: v.Branch,
-					VendorCode: codigo, VendorName: v.VendorLabel,
-					Orders: v.Orders, LastOrder: v.LastOrder.Format(iso),
-				})
-			}
-			salida["unlinked"] = libres
+		// UNA sola lista, con todos: emparejados y no.
+		//
+		// Antes eran dos —«los atados» y «los que faltan», esta última deducida de los
+		// pedidos huérfanos— y se contradecían en pantalla: veintidós trabajadores
+		// marcados «sin emparejar» arriba y «no falta ninguno por emparejar» un palmo
+		// más abajo. No eran cuentas mal hechas, eran dos preguntas distintas puestas
+		// como si fueran la misma. Ahora se lee el maestro de PEDIDO y cada vendedor
+		// sale una vez, con su dueño al lado o con el hueco para decirlo.
+		vendedores, err := s.q.VendorsWithLink(r.Context(), p.BranchID)
+		if err != nil {
+			s.log.Warn("maestro de vendedores", "error", err)
+		} else {
+			salida["vendors"] = aVendors(vendedores)
 		}
 
 		// 4. Y cómo va el trabajador: cuántos días quedan por traer de PEDIDO y
@@ -232,6 +217,43 @@ func aTruncatedDays(fs []store.TruncatedDaysRow) []TruncatedDay {
 			File:     f.File,
 			Detail:   f.Detail,
 			Points:   f.Points,
+		})
+	}
+	return out
+}
+
+// Vendor es un vendedor de PEDIDO y quién es aquí, si ya se dijo.
+type Vendor struct {
+	Ref    string `json:"ref"`
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Branch string `json:"branch"`
+	Orders int32  `json:"orders"`
+	// SellerID vacío = todavía no se sabe quién es aquí, y sus pedidos no se cruzan
+	// con ninguna ruta mientras siga así.
+	SellerID string `json:"sellerId"`
+	Seller   string `json:"seller"`
+	// Origin dice quién lo decidió: "auto" el parecido de nombres, "manual" una
+	// persona. Sirve para revisar lo que decidió la máquina.
+	Origin string `json:"origin"`
+}
+
+func aVendors(vs []store.VendorsWithLinkRow) []Vendor {
+	out := make([]Vendor, 0, len(vs))
+	for _, v := range vs {
+		codigo := v.Ref
+		if v.Code != nil && *v.Code != "" {
+			codigo = *v.Code
+		}
+		out = append(out, Vendor{
+			Ref:      v.Ref,
+			Code:     codigo,
+			Name:     v.Name,
+			Branch:   v.Branch,
+			Orders:   v.Orders,
+			SellerID: v.SellerID,
+			Seller:   v.Seller,
+			Origin:   v.Origin,
 		})
 	}
 	return out
