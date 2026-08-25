@@ -23,10 +23,20 @@ const COOKIE = "qb.session_token";
 export function middleware(req: NextRequest) {
   if (req.cookies.get(COOKIE)) return NextResponse.next();
 
-  const destino = new URL("/api/auth/login", req.url);
-  destino.searchParams.set("returnTo", req.url);
+  // La dirección PÚBLICA, no `req.url`.
+  //
+  // Detrás del proxy, `req.url` es la interna del contenedor —https://localhost:3601—
+  // y mandarla como `returnTo` devuelve a la gente, después de entrar, a una dirección
+  // que no existe. Se ve al probarlo desde fuera, nunca en local: en local coinciden.
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  const base = `${proto}://${host}`;
+  const volverA = `${base}${req.nextUrl.pathname}${req.nextUrl.search}`;
 
-  return NextResponse.redirect(destino, 307);
+  return NextResponse.redirect(
+    `${base}/api/auth/login?returnTo=${encodeURIComponent(volverA)}`,
+    307,
+  );
 }
 
 export const config = {
