@@ -209,3 +209,40 @@ func (c *Client) llamar(ctx context.Context, metodo, ruta string, cuerpo any, de
 	}
 	return json.Unmarshal(texto, destino)
 }
+
+// Miembro es una persona de una sucursal, con su rol de Procovar.
+type Miembro struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Email            string   `json:"email"`
+	OrganizationID   string   `json:"organizationId"`
+	OrganizationName string   `json:"organizationName"`
+	Roles            []string `json:"roles"`
+}
+
+// Members trae la gente de una sucursal desde procovar-auth.
+//
+// Es lo que permite que un desplegable de «¿de quién es este GPS?» ofrezca PERSONAS
+// de verdad. Sin esto, cada aplicación se inventa sus propios usuarios con lo que
+// tenga a mano —aquí, el nombre de una carpeta de Drive— y acaban existiendo dos
+// listas de personas que no se parecen y que nadie puede casar.
+//
+// orgID vacío = todas las sucursales, que es lo que pide un super admin.
+func (c *Client) Members(ctx context.Context, orgID string, roles []string) ([]Miembro, error) {
+	cuerpo := map[string]any{}
+	if orgID != "" {
+		cuerpo["organizationId"] = orgID
+	}
+	if len(roles) > 0 {
+		cuerpo["roles"] = roles
+	}
+
+	var res struct {
+		Count   int       `json:"count"`
+		Members []Miembro `json:"members"`
+	}
+	if err := c.llamar(ctx, http.MethodPost, "/api/service/members", cuerpo, &res); err != nil {
+		return nil, err
+	}
+	return res.Members, nil
+}

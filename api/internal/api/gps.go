@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +31,68 @@ import (
 // nombre como alias (por si sus ficheros aparecen algún día por otro sitio) y coloca
 // TODOS los ficheros que se habían quedado sin dueño en ella, recalculando sus días.
 
+// Persona es alguien de Accesos: una cuenta de verdad, con su rol.
+//
+// Es lo que va en el desplegable de «¿de quién es este GPS?». Antes ahí salían los
+// `trabajador` de esta base, que se habían creado solos CON EL NOMBRE DE LA CARPETA:
+// asignar la carpeta «ALEXANDER» al trabajador «ALEXANDER» era atarla a sí misma y no
+// enganchaba con nadie.
+type Persona struct {
+	AuthUserID string   `json:"authUserId"`
+	Name       string   `json:"name"`
+	Email      string   `json:"email"`
+	Branch     string   `json:"branch"`
+	Roles      []string `json:"roles"`
+	// SellerID: si esta persona ya tiene ficha aquí, cuál. Sirve para saber quién
+	// está ya enganchado sin tener que cruzar dos listas en la pantalla.
+	SellerID string `json:"sellerId"`
+}
+
+// GET /api/personas — la gente de Accesos que puede llevar un GPS.
+//
+// Gestores y supervisores: son los que salen a la calle. Un administrador o un
+// gerente no lleva teléfono de ruta, y meterlos en el desplegable es alargar una
+// lista que se usa para elegir deprisa.
+func (s *Server) personas(w http.ResponseWriter, r *http.Request) {
+	c := FromContext(r)
+
+	// Un super admin ve las de todas las sucursales; el resto, las de la suya.
+	org := ""
+	if c.Role != "super_admin" {
+		if suc, err := s.q.BranchByID(r.Context(), c.BranchID); err == nil && suc.AuthOrgID != nil {
+			org = *suc.AuthOrgID
+		}
+	}
+
+	gente, err := s.auth.Members(r.Context(), org, []string{"GESTOR", "SUPERVISOR"})
+	if err != nil {
+		// Que Accesos no conteste no puede dejar la pantalla muda: se dice qué pasó,
+		// porque sin esta lista no se puede asignar nada y hay que saber por qué.
+		s.log.Error("no se pudo traer la gente de Accesos", "error", err)
+		respondError(w, http.StatusBadGateway,
+			"Accesos no contestó, así que no hay lista de personas: "+err.Error())
+		return
+	}
+
+	out := make([]Persona, 0, len(gente))
+	for _, m := range gente {
+		p := Persona{
+			AuthUserID: m.ID,
+			Name:       m.Name,
+			Email:      m.Email,
+			Branch:     m.OrganizationName,
+			Roles:      m.Roles,
+		}
+		// Si ya tiene ficha aquí, se dice: es la diferencia entre «esta persona ya
+		// está enganchada» y «esta persona todavía no ha aparecido».
+		if t, err := s.q.SellerByAuthID(r.Context(), &m.ID); err == nil {
+			p.SellerID = t.ID
+		}
+		out = append(out, p)
+	}
+	respond(w, http.StatusOK, out)
+}
+
 // Gps es una carpeta de Drive: un teléfono, y lo que ha traído.
 type Gps struct {
 	ID       string `json:"id"`
@@ -43,7 +106,7 @@ type Gps struct {
 	Files    int64  `json:"files"`
 	LastFile string `json:"lastFile"`
 	// DaysSilent: -1 = por esa carpeta no ha entrado nunca nada.
-	DaysSilent int32 `json:"daysSilent"`
+	DaysSilent int32  `json:"daysSilent"`
 	LastError  string `json:"lastError"`
 }
 
@@ -104,14 +167,18 @@ func (s *Server) assignGps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var p struct {
-		SellerID string `json:"sellerId"`
+		// De Accesos: es una PERSONA. Se admite todavía `sellerId` para no romper
+		// nada que lo estuviera usando, pero lo bueno es `authUserId`.
+		AuthUserID string `json:"authUserId"`
+		Name       string `json:"name"`
+		SellerID   string `json:"sellerId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		respondError(w, http.StatusBadRequest, "cuerpo ilegible")
 		return
 	}
-	if p.SellerID == "" {
-		respondError(w, http.StatusBadRequest, "falta el vendedor")
+	if p.AuthUserID == "" && p.SellerID == "" {
+		respondError(w, http.StatusBadRequest, "falta la persona")
 		return
 	}
 
@@ -120,17 +187,12 @@ func (s *Server) assignGps(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusNotFound, "esa carpeta no está")
 		return
 	}
-	trab, err := s.q.SellerByID(r.Context(), p.SellerID)
-	if err != nil {
-		respondError(w, http.StatusNotFound, "ese vendedor no existe")
-		return
-	}
-	// Nadie asigna una carpeta a alguien de otra sucursal.
-	if c.Role != "super_admin" && c.BranchID != "" && trab.BranchID != c.BranchID {
-		respondError(w, http.StatusForbidden, "sin acceso a ese vendedor")
-		return
-	}
 
+	trab, err := s.resolverPersona(r, fuente, p.AuthUserID, p.Name, p.SellerID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := s.q.SetSourceSeller(r.Context(), store.SetSourceSellerParams{
 		ID: fuente.ID, SellerID: &trab.ID, BranchID: &trab.BranchID,
 	}); err != nil {
@@ -193,4 +255,75 @@ func (s *Server) assignGps(w http.ResponseWriter, r *http.Request) {
 		"placed": colocados,
 		"days":   len(dias),
 	})
+}
+
+// resolverPersona devuelve la ficha local de esa persona, creándola o atándola.
+//
+// # El caso que importa
+//
+// La carpeta «ALEXANDER» ya tiene colgado un trabajador que se creó SOLO, con el
+// nombre de la carpeta, y de él cuelgan sus dos mil días de recorrido. Cuando alguien
+// dice por fin que esa carpeta es de una persona de Accesos, lo que hay que hacer es
+// ATAR ese trabajador a esa cuenta — no crear una persona nueva. Si se creara, la
+// historia se quedaría en el muñeco viejo y la persona de verdad empezaría en blanco.
+//
+// Por eso el orden es: ¿ya hay alguien con esa cuenta? Si no, ¿la carpeta ya tenía
+// dueño? Entonces ese, atado. Y sólo si no hay ni lo uno ni lo otro, uno nuevo.
+func (s *Server) resolverPersona(
+	r *http.Request,
+	fuente store.DriveSource,
+	authUserID, nombre, sellerID string,
+) (store.Seller, error) {
+	ctx := r.Context()
+	c := FromContext(r)
+
+	// Camino viejo: se dijo directamente qué ficha usar.
+	if authUserID == "" {
+		t, err := s.q.SellerByID(ctx, sellerID)
+		if err != nil {
+			return store.Seller{}, fmt.Errorf("ese vendedor no existe")
+		}
+		if c.Role != "super_admin" && c.BranchID != "" && t.BranchID != c.BranchID {
+			return store.Seller{}, fmt.Errorf("sin acceso a ese vendedor")
+		}
+		return t, nil
+	}
+
+	// 1. ¿Esa cuenta ya tiene ficha aquí?
+	if t, err := s.q.SellerByAuthID(ctx, &authUserID); err == nil {
+		return t, nil
+	}
+
+	// La sucursal: la de la carpeta, y si no la tiene, la de quien está asignando.
+	sucursalID := c.BranchID
+	if fuente.BranchID != nil && *fuente.BranchID != "" {
+		sucursalID = *fuente.BranchID
+	}
+	if sucursalID == "" {
+		return store.Seller{}, fmt.Errorf(
+			"esa carpeta todavía no tiene sucursal: entrará sola con su primer fichero")
+	}
+
+	// 2. ¿La carpeta ya tenía un trabajador? Ese, atado a la cuenta — con su historia.
+	if fuente.SellerID != nil && *fuente.SellerID != "" {
+		if err := s.q.LinkSellerToAuth(ctx, store.LinkSellerToAuthParams{
+			ID: *fuente.SellerID, AuthUserID: &authUserID, Name: nombre,
+		}); err != nil {
+			return store.Seller{}, fmt.Errorf("atando a la cuenta: %w", err)
+		}
+		return s.q.SellerByID(ctx, *fuente.SellerID)
+	}
+
+	// 3. Y si la carpeta no tenía dueño, uno nuevo con su cuenta puesta desde el
+	//    principio.
+	if nombre == "" {
+		nombre = fuente.Name
+	}
+	t, err := s.q.CreateSellerFromAuth(ctx, store.CreateSellerFromAuthParams{
+		ID: newID(), Name: nombre, BranchID: sucursalID, AuthUserID: &authUserID,
+	})
+	if err != nil {
+		return store.Seller{}, fmt.Errorf("creando la ficha: %w", err)
+	}
+	return t, nil
 }

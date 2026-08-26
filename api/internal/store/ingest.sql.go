@@ -489,6 +489,43 @@ func (q *Queries) CreateSellerByName(ctx context.Context, arg CreateSellerByName
 	return i, err
 }
 
+const createSellerFromAuth = `-- name: CreateSellerFromAuth :one
+INSERT INTO trabajador (id, nombre, sucursal_id, auth_user_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (auth_user_id) DO UPDATE SET nombre = EXCLUDED.nombre, updated_at = now()
+RETURNING id, auth_user_id, nombre, sucursal_id, es_vendedor, activo, desde, hasta, created_at, updated_at
+`
+
+type CreateSellerFromAuthParams struct {
+	ID         string
+	Name       string
+	BranchID   string
+	AuthUserID *string
+}
+
+func (q *Queries) CreateSellerFromAuth(ctx context.Context, arg CreateSellerFromAuthParams) (Seller, error) {
+	row := q.db.QueryRow(ctx, createSellerFromAuth,
+		arg.ID,
+		arg.Name,
+		arg.BranchID,
+		arg.AuthUserID,
+	)
+	var i Seller
+	err := row.Scan(
+		&i.ID,
+		&i.AuthUserID,
+		&i.Name,
+		&i.BranchID,
+		&i.IsSeller,
+		&i.Active,
+		&i.From,
+		&i.To,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSource = `-- name: CreateSource :one
 INSERT INTO drive_source (id, nombre, folder_id, tipo, sucursal_id, trabajador_id, credencial)
 VALUES ($1, $2, $3, $4::tipo_fuente, $5, $6,
@@ -869,6 +906,31 @@ func (q *Queries) KnownFiles(ctx context.Context, ids []string) ([]string, error
 		return nil, err
 	}
 	return items, nil
+}
+
+const linkSellerToAuth = `-- name: LinkSellerToAuth :exec
+UPDATE trabajador
+SET auth_user_id = $1,
+    nombre = coalesce(nullif($2::text, ''), nombre),
+    updated_at = now()
+WHERE id = $3
+`
+
+type LinkSellerToAuthParams struct {
+	AuthUserID *string
+	Name       string
+	ID         string
+}
+
+// Atar un trabajador ya existente a su cuenta de Accesos.
+//
+// Es LO QUE HAY QUE HACER y no crear otro. El trabajador que nació del nombre de una
+// carpeta («ALEXANDER») lleva colgados sus dos mil días de recorrido; si al decir
+// quién es se creara una persona nueva, la historia se quedaría en el muñeco viejo y
+// la persona de verdad empezaría vacía. Se ata, y de paso se le pone su nombre real.
+func (q *Queries) LinkSellerToAuth(ctx context.Context, arg LinkSellerToAuthParams) error {
+	_, err := q.db.Exec(ctx, linkSellerToAuth, arg.AuthUserID, arg.Name, arg.ID)
+	return err
 }
 
 const markAbsences = `-- name: MarkAbsences :execrows

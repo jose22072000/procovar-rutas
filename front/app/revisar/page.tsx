@@ -60,6 +60,17 @@ interface Vendedor {
   origin: string;
 }
 
+/** Alguien de Accesos: una cuenta de verdad, con su rol. */
+interface Persona {
+  authUserId: string;
+  name: string;
+  email: string;
+  branch: string;
+  roles: string[];
+  /** Si ya tiene ficha aquí. */
+  sellerId: string;
+}
+
 /** Una carpeta de Drive, que es un teléfono. */
 interface Carpeta {
   id: string;
@@ -114,6 +125,8 @@ export default function Revisar() {
   const [datos, setDatos] = useState<Revision | null>(null);
   const [vendedores, setVendedores] = useState<Seller[]>([]);
   const [carpetas, setCarpetas] = useState<Carpeta[]>([]);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [sinAccesos, setSinAccesos] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
@@ -126,6 +139,15 @@ export default function Revisar() {
     ask<Carpeta[]>("/api/gps")
       .then((g) => setCarpetas(g ?? []))
       .catch(() => setCarpetas([]));
+    // Las personas salen de Accesos, que es donde están las cuentas de verdad. Si no
+    // contesta se dice, porque sin esta lista no se puede asignar ningún GPS y hay
+    // que saber que el problema no es la pantalla.
+    ask<Persona[]>("/api/personas")
+      .then((p) => {
+        setPersonas(p ?? []);
+        setSinAccesos(null);
+      })
+      .catch((e) => setSinAccesos((e as Error).message));
   }, []);
 
   useEffect(cargar, [cargar]);
@@ -316,6 +338,13 @@ export default function Revisar() {
             los que entren a partir de ahora caen solos.
           </p>
 
+          {sinAccesos && (
+            <p className="aviso">
+              No se pudo traer la gente de Accesos, así que el desplegable está vacío y
+              no se puede asignar nada: {sinAccesos}
+            </p>
+          )}
+
           <table className="movements tabla-gps">
             <thead>
               <tr>
@@ -345,7 +374,7 @@ export default function Revisar() {
                     {g.sellerId ? (
                       g.seller
                     ) : (
-                      <ElegirDueno carpeta={g} vendedores={vendedores} alAsignar={cargar} />
+                      <ElegirDueno carpeta={g} personas={personas} alAsignar={cargar} />
                     )}
                   </td>
                 </tr>
@@ -594,26 +623,27 @@ function FilaRota({
 
 function ElegirDueno({
   carpeta,
-  vendedores,
+  personas,
   alAsignar,
 }: {
   carpeta: Carpeta;
-  vendedores: Seller[];
+  personas: Persona[];
   alAsignar: () => void;
 }) {
-  const [seller, setVendedor] = useState("");
+  const [quien, setQuien] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [hecho, setHecho] = useState<string | null>(null);
   const [fallo, setFallo] = useState<string | null>(null);
 
   async function asignar() {
-    if (!seller) return;
+    if (!quien) return;
     setGuardando(true);
     setFallo(null);
     try {
+      const persona = personas.find((p) => p.authUserId === quien);
       const r = await enviar<{ placed: number; days: number }>(
         `/api/gps/${carpeta.id}/asignar`,
-        { sellerId: seller },
+        { authUserId: quien, name: persona?.name ?? "" },
       );
       // Se dice CUÁNTO se arregló, que es la respuesta a «¿sirvió de algo?». Una
       // carpeta con doscientos días esperando se coloca entera de un clic.
@@ -634,17 +664,18 @@ function ElegirDueno({
 
   return (
     <div className="elegir">
-      <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
+      <select value={quien} onChange={(e) => setQuien(e.target.value)}>
         <option value="">¿De quién es?</option>
-        {vendedores.map((v) => (
-          <option key={v.id} value={v.id}>
-            {v.name}
+        {personas.map((p) => (
+          <option key={p.authUserId} value={p.authUserId}>
+            {p.name || p.email}
+            {p.roles.length > 0 ? ` · ${p.roles.join(", ").toLowerCase()}` : ""}
           </option>
         ))}
       </select>
       <button
         className="pv-boton pv-boton-primario"
-        disabled={!seller || guardando}
+        disabled={!quien || guardando}
         onClick={asignar}
       >
         {guardando ? "…" : "Asignar"}

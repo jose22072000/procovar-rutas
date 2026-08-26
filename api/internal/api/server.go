@@ -115,6 +115,8 @@ func (s *Server) Routes() http.Handler {
 		// calendario —es información— y tocarla con la de alias, que es la misma
 		// naturaleza: decir de quién es un dispositivo.
 		r.With(Exige(PermCalendario)).Get("/gps", s.listGps)
+		// La gente de Accesos, que es de donde salen las personas de verdad.
+		r.With(Exige(PermCalendario)).Get("/personas", s.personas)
 		r.With(Exige(PermAlias)).Post("/gps/{id}/asignar", s.assignGps)
 		r.With(Exige(PermCalendario)).Get("/pedidos/vendedores", s.vendedores)
 		r.With(Exige(PermAlias)).Post("/pedidos/emparejar", s.emparejar)

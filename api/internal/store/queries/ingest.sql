@@ -366,3 +366,22 @@ WHERE id = @id;
 SELECT id, fecha FROM gpx_file
 WHERE source_id = $1 AND estado = 'SIN_ASIGNAR'
 ORDER BY fecha;
+
+-- Atar un trabajador ya existente a su cuenta de Accesos.
+--
+-- Es LO QUE HAY QUE HACER y no crear otro. El trabajador que nació del nombre de una
+-- carpeta («ALEXANDER») lleva colgados sus dos mil días de recorrido; si al decir
+-- quién es se creara una persona nueva, la historia se quedaría en el muñeco viejo y
+-- la persona de verdad empezaría vacía. Se ata, y de paso se le pone su nombre real.
+-- name: LinkSellerToAuth :exec
+UPDATE trabajador
+SET auth_user_id = @auth_user_id,
+    nombre = coalesce(nullif(@name::text, ''), nombre),
+    updated_at = now()
+WHERE id = @id;
+
+-- name: CreateSellerFromAuth :one
+INSERT INTO trabajador (id, nombre, sucursal_id, auth_user_id)
+VALUES (@id, @name, @branch_id, @auth_user_id)
+ON CONFLICT (auth_user_id) DO UPDATE SET nombre = EXCLUDED.nombre, updated_at = now()
+RETURNING *;
