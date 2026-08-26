@@ -17,6 +17,11 @@ SELECT * FROM drive_source WHERE activa ORDER BY nombre;
 -- hace con ella es escribirla en la pantalla.
 SELECT f.*,
        coalesce(s.nombre, '') AS branch,
+       -- De quién es la carpeta, si ya se dijo. Es lo que convierte esta lista en el
+       -- sitio donde se asignan los GPS: cada carpeta compartida ES el perfil de un
+       -- teléfono, así que decirlo aquí resuelve TODOS sus ficheros —los que ya
+       -- entraron y los que entren— de una vez.
+       coalesce(t.nombre, '') AS seller,
        coalesce(g.ficheros, 0)::bigint AS ficheros,
        coalesce(to_char(g.ultima, 'YYYY-MM-DD'), '')::text AS ultima,
        -- Días desde la última ruta, que es la pregunta de verdad: no "cuándo subió"
@@ -24,6 +29,7 @@ SELECT f.*,
        coalesce(CURRENT_DATE - g.ultima, -1)::int AS dias_callado
 FROM drive_source f
 LEFT JOIN sucursal s ON s.id = f.sucursal_id
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
 LEFT JOIN (
     SELECT source_id, count(*) AS ficheros, max(fecha) AS ultima
     FROM gpx_file
@@ -337,3 +343,26 @@ DELETE FROM gpx_file WHERE id = $1;
 
 -- name: FileByID :one
 SELECT * FROM gpx_file WHERE id = $1;
+
+-- Decir de quién es una CARPETA, que es de quién es el GPS.
+--
+-- Cada carpeta compartida de Drive es el perfil de un teléfono, así que esto es la
+-- asignación de verdad: con `tipo = VENDEDOR` y un dueño, la primera regla de
+-- resolución acierta sin mirar nada más y TODOS los ficheros que entren por ahí caen
+-- solos. Teclear un alias por dispositivo era hacer a mano, uno a uno, lo que la
+-- carpeta ya decía.
+-- name: SetSourceSeller :exec
+UPDATE drive_source
+SET trabajador_id = @seller_id,
+    tipo = 'VENDEDOR',
+    sucursal_id = coalesce(@branch_id, sucursal_id),
+    updated_at = now()
+WHERE id = @id;
+
+-- Los ficheros de esa carpeta que se quedaron sin dueño. Al asignar la carpeta se
+-- resuelven de una tacada: son los días que estaban esperando a que alguien dijera
+-- quién era ese teléfono.
+-- name: UnassignedFilesOfSource :many
+SELECT id, fecha FROM gpx_file
+WHERE source_id = $1 AND estado = 'SIN_ASIGNAR'
+ORDER BY fecha;

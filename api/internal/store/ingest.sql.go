@@ -122,6 +122,11 @@ func (q *Queries) ActiveSources(ctx context.Context) ([]DriveSource, error) {
 const activeSourcesWithBranch = `-- name: ActiveSourcesWithBranch :many
 SELECT f.id, f.nombre, f.folder_id, f.tipo, f.sucursal_id, f.trabajador_id, f.credencial, f.activa, f.cursor_modificado, f.ultimo_barrido, f.ultimo_error, f.created_at, f.updated_at,
        coalesce(s.nombre, '') AS branch,
+       -- De quién es la carpeta, si ya se dijo. Es lo que convierte esta lista en el
+       -- sitio donde se asignan los GPS: cada carpeta compartida ES el perfil de un
+       -- teléfono, así que decirlo aquí resuelve TODOS sus ficheros —los que ya
+       -- entraron y los que entren— de una vez.
+       coalesce(t.nombre, '') AS seller,
        coalesce(g.ficheros, 0)::bigint AS ficheros,
        coalesce(to_char(g.ultima, 'YYYY-MM-DD'), '')::text AS ultima,
        -- Días desde la última ruta, que es la pregunta de verdad: no "cuándo subió"
@@ -129,6 +134,7 @@ SELECT f.id, f.nombre, f.folder_id, f.tipo, f.sucursal_id, f.trabajador_id, f.cr
        coalesce(CURRENT_DATE - g.ultima, -1)::int AS dias_callado
 FROM drive_source f
 LEFT JOIN sucursal s ON s.id = f.sucursal_id
+LEFT JOIN trabajador t ON t.id = f.trabajador_id
 LEFT JOIN (
     SELECT source_id, count(*) AS ficheros, max(fecha) AS ultima
     FROM gpx_file
@@ -153,6 +159,7 @@ type ActiveSourcesWithBranchRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Branch         string
+	Seller         string
 	Ficheros       int64
 	Ultima         string
 	DiasCallado    int32
@@ -193,6 +200,7 @@ func (q *Queries) ActiveSourcesWithBranch(ctx context.Context) ([]ActiveSourcesW
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Branch,
+			&i.Seller,
 			&i.Ficheros,
 			&i.Ultima,
 			&i.DiasCallado,
@@ -1296,6 +1304,33 @@ func (q *Queries) SetSourceBranch(ctx context.Context, arg SetSourceBranchParams
 	return err
 }
 
+const setSourceSeller = `-- name: SetSourceSeller :exec
+UPDATE drive_source
+SET trabajador_id = $1,
+    tipo = 'VENDEDOR',
+    sucursal_id = coalesce($2, sucursal_id),
+    updated_at = now()
+WHERE id = $3
+`
+
+type SetSourceSellerParams struct {
+	SellerID *string
+	BranchID *string
+	ID       string
+}
+
+// Decir de quién es una CARPETA, que es de quién es el GPS.
+//
+// Cada carpeta compartida de Drive es el perfil de un teléfono, así que esto es la
+// asignación de verdad: con `tipo = VENDEDOR` y un dueño, la primera regla de
+// resolución acierta sin mirar nada más y TODOS los ficheros que entren por ahí caen
+// solos. Teclear un alias por dispositivo era hacer a mano, uno a uno, lo que la
+// carpeta ya decía.
+func (q *Queries) SetSourceSeller(ctx context.Context, arg SetSourceSellerParams) error {
+	_, err := q.db.Exec(ctx, setSourceSeller, arg.SellerID, arg.BranchID, arg.ID)
+	return err
+}
+
 const sourceByID = `-- name: SourceByID :one
 SELECT id, nombre, folder_id, tipo, sucursal_id, trabajador_id, credencial, activa, cursor_modificado, ultimo_barrido, ultimo_error, created_at, updated_at FROM drive_source WHERE id = $1
 `
@@ -1346,6 +1381,40 @@ func (q *Queries) TruncatedFilesOfDay(ctx context.Context, arg TruncatedFilesOfD
 	var files int32
 	err := row.Scan(&files)
 	return files, err
+}
+
+const unassignedFilesOfSource = `-- name: UnassignedFilesOfSource :many
+SELECT id, fecha FROM gpx_file
+WHERE source_id = $1 AND estado = 'SIN_ASIGNAR'
+ORDER BY fecha
+`
+
+type UnassignedFilesOfSourceRow struct {
+	ID   string
+	Date *time.Time
+}
+
+// Los ficheros de esa carpeta que se quedaron sin dueño. Al asignar la carpeta se
+// resuelven de una tacada: son los días que estaban esperando a que alguien dijera
+// quién era ese teléfono.
+func (q *Queries) UnassignedFilesOfSource(ctx context.Context, sourceID string) ([]UnassignedFilesOfSourceRow, error) {
+	rows, err := q.db.Query(ctx, unassignedFilesOfSource, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UnassignedFilesOfSourceRow{}
+	for rows.Next() {
+		var i UnassignedFilesOfSourceRow
+		if err := rows.Scan(&i.ID, &i.Date); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateSourceCursor = `-- name: UpdateSourceCursor :exec

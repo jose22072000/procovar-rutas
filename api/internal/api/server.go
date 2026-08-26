@@ -110,6 +110,12 @@ func (s *Server) Routes() http.Handler {
 		// ver un hueco puede ver por qué está ahí.
 		r.With(Exige(PermCalendario)).Get("/review", s.review)
 		r.With(Exige(PermCalendario)).Get("/aliases", s.listAliases)
+
+		// Los GPS, que son las carpetas de Drive. Ver la lista va con la llave del
+		// calendario —es información— y tocarla con la de alias, que es la misma
+		// naturaleza: decir de quién es un dispositivo.
+		r.With(Exige(PermCalendario)).Get("/gps", s.listGps)
+		r.With(Exige(PermAlias)).Post("/gps/{id}/asignar", s.assignGps)
 		r.With(Exige(PermCalendario)).Get("/pedidos/vendedores", s.vendedores)
 		r.With(Exige(PermAlias)).Post("/pedidos/emparejar", s.emparejar)
 		r.With(Exige(PermBarrido)).Post("/pedidos/sync", s.syncPedidos)

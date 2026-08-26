@@ -1126,3 +1126,10 @@ img, svg, video, canvas, table { max-width: 100%; }
 
 .elegir { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .elegir .aviso { margin: 0; }
+
+/* La lista de GPS: las carpetas sin dueño, marcadas.
+   Son las accionables — cada una es un teléfono cuyos ficheros están esperando a que
+   alguien diga de quién son. */
+.tabla-gps tr[data-sinduenno="true"] { background: var(--pv-ambar-tinte); }
+.tabla-gps tr[data-sinduenno="true"] td:first-child { font-weight: 600; }
+.tabla-gps .aviso { display: block; margin: 2px 0 0; }

@@ -60,10 +60,19 @@ interface Vendedor {
   origin: string;
 }
 
-interface Alias {
+/** Una carpeta de Drive, que es un teléfono. */
+interface Carpeta {
   id: string;
-  originalAlias: string;
+  name: string;
+  folderId: string;
+  type: string;
+  branch: string;
+  sellerId: string;
   seller: string;
+  files: number;
+  lastFile: string;
+  daysSilent: number;
+  lastError: string;
 }
 
 interface DiaCortado {
@@ -104,7 +113,7 @@ export default function Revisar() {
   const { cargando, vetado, puede } = useSesion();
   const [datos, setDatos] = useState<Revision | null>(null);
   const [vendedores, setVendedores] = useState<Seller[]>([]);
-  const [alias, setAlias] = useState<Alias[]>([]);
+  const [carpetas, setCarpetas] = useState<Carpeta[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const cargar = useCallback(() => {
@@ -114,9 +123,9 @@ export default function Revisar() {
     ask<Seller[]>("/api/sellers")
       .then((v) => setVendedores(v ?? []))
       .catch(() => setVendedores([]));
-    ask<Alias[]>("/api/aliases")
-      .then((a) => setAlias(a ?? []))
-      .catch(() => setAlias([]));
+    ask<Carpeta[]>("/api/gps")
+      .then((g) => setCarpetas(g ?? []))
+      .catch(() => setCarpetas([]));
   }, []);
 
   useEffect(cargar, [cargar]);
@@ -136,6 +145,7 @@ export default function Revisar() {
   const rotos = datos.files.filter((f) => f.status === "ERROR");
   const colocables = datos.files.filter((f) => f.status !== "ERROR");
   const sinDuenno = (datos.vendors ?? []).filter((v) => v.sellerId === "");
+  const sinDueno = carpetas.filter((g) => g.sellerId === "");
   const callados = datos.silent
     .filter((s) => s.daysSilent === -1 || s.daysSilent > 3)
     .sort((a, b) => (b.daysSilent < 0 ? 1e9 : b.daysSilent) - (a.daysSilent < 0 ? 1e9 : a.daysSilent));
@@ -292,44 +302,58 @@ export default function Revisar() {
         )}
       </div>
 
-      {/* De quién es cada GPS. */}
-      {puede("rutas.alias") && (
+      {/* Los GPS: las carpetas de Drive, que YA están todas aquí. */}
+      {puede("rutas.alias") && carpetas.length > 0 && (
         <div className="tarjeta">
-          <b>De quién es cada GPS</b>
+          <b>
+            Los GPS · {sinDueno.length} de {carpetas.length} sin asignar
+          </b>
           <p className="sub">
-            Un .gpx no dice de quién es: lo único que trae es el nombre del perfil del
-            GPS, que es el de su carpeta en Drive («GPS Diana Acosta», «STGGari»,
-            «TABLET3»). Aquí se dice a quién pertenece cada uno, y a partir de ahí sus
-            ficheros entran solos.
-          </p>
-          <p className="sub">
-            Cuando se entregue un teléfono nuevo, apúntalo aquí ANTES de que suba nada:
-            si no, sus primeros días se quedan esperando arriba, en «no se pudo
-            colocar».
+            Cada carpeta compartida de Drive <b>es</b> un teléfono: se llama como el
+            perfil del GPS y dentro están sus <span className="pv-codigo">AAAAMMDD.gpx</span>.
+            Están todas aquí — no hay que teclear ninguna. Al decir de quién es una,
+            se colocan de golpe <b>todos los ficheros suyos que estaban esperando</b> y
+            los que entren a partir de ahora caen solos.
           </p>
 
-          <NuevoAlias vendedores={vendedores} alGuardar={cargar} />
-
-          {alias.length === 0 ? (
-            <p className="sub">Todavía no hay ninguno apuntado.</p>
-          ) : (
-            <table className="movements">
-              <thead>
-                <tr>
-                  <th>GPS / carpeta</th>
-                  <th>Es de</th>
+          <table className="movements tabla-gps">
+            <thead>
+              <tr>
+                <th>Carpeta (el GPS)</th>
+                <th>Sucursal</th>
+                <th>Rutas que trajo</th>
+                <th>Última</th>
+                <th>De quién es</th>
+              </tr>
+            </thead>
+            <tbody>
+              {carpetas.map((g) => (
+                <tr key={g.id} data-sinduenno={g.sellerId === ""}>
+                  <td>
+                    {g.name}
+                    {g.lastError && <span className="aviso">{g.lastError}</span>}
+                  </td>
+                  <td className="pv-codigo">{g.branch || "—"}</td>
+                  <td>{g.files}</td>
+                  <td className="pv-codigo">
+                    {g.lastFile || "nunca"}
+                    {g.daysSilent > 3 && (
+                      <span className="seller-alerta">{g.daysSilent} días</span>
+                    )}
+                  </td>
+                  <td>
+                    {g.sellerId ? (
+                      g.seller
+                    ) : (
+                      <ElegirDueno carpeta={g} vendedores={vendedores} alAsignar={cargar} />
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {alias.map((a) => (
-                  <tr key={a.id}>
-                    <td className="pv-codigo">{a.originalAlias}</td>
-                    <td>{a.seller}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+              ))}
+            </tbody>
+          </table>
+
+          <NuevaCarpeta alCrear={cargar} />
         </div>
       )}
 
@@ -516,64 +540,6 @@ function ElegirVendedor({
   );
 }
 
-function NuevoAlias({
-  vendedores,
-  alGuardar,
-}: {
-  vendedores: Seller[];
-  alGuardar: () => void;
-}) {
-  const [alias, setAlias] = useState("");
-  const [seller, setVendedor] = useState("");
-  const [guardando, setGuardando] = useState(false);
-  const [fallo, setFallo] = useState<string | null>(null);
-
-  async function guardar() {
-    if (!alias.trim() || !seller) return;
-    setGuardando(true);
-    setFallo(null);
-    try {
-      await enviar("/api/aliases", { alias: alias.trim(), sellerId: seller });
-      setAlias("");
-      setVendedor("");
-      alGuardar();
-    } catch (e) {
-      setFallo((e as Error).message);
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="controles">
-        <input
-          className="pv-campo"
-          placeholder="Nombre del GPS o de su carpeta"
-          value={alias}
-          onChange={(e) => setAlias(e.target.value)}
-          style={{ minWidth: 260 }}
-        />
-        <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
-          <option value="">¿De quién es?</option>
-          {vendedores.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="pv-boton pv-boton-primario"
-          disabled={!alias.trim() || !seller || guardando}
-          onClick={guardar}
-        >
-          {guardando ? "Guardando…" : "Apuntar"}
-        </button>
-      </div>
-      {fallo && <p className="aviso">{fallo}</p>}
-    </>
-  );
-}
 
 function FilaRota({
   fichero,
@@ -621,6 +587,152 @@ function FilaRota({
           </button>
         </div>
       )}
+      {fallo && <p className="aviso">{fallo}</p>}
+    </div>
+  );
+}
+
+function ElegirDueno({
+  carpeta,
+  vendedores,
+  alAsignar,
+}: {
+  carpeta: Carpeta;
+  vendedores: Seller[];
+  alAsignar: () => void;
+}) {
+  const [seller, setVendedor] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [hecho, setHecho] = useState<string | null>(null);
+  const [fallo, setFallo] = useState<string | null>(null);
+
+  async function asignar() {
+    if (!seller) return;
+    setGuardando(true);
+    setFallo(null);
+    try {
+      const r = await enviar<{ placed: number; days: number }>(
+        `/api/gps/${carpeta.id}/asignar`,
+        { sellerId: seller },
+      );
+      // Se dice CUÁNTO se arregló, que es la respuesta a «¿sirvió de algo?». Una
+      // carpeta con doscientos días esperando se coloca entera de un clic.
+      setHecho(
+        r.placed > 0
+          ? `${r.placed} ficheros colocados · ${r.days} días recalculados`
+          : "asignada",
+      );
+      alAsignar();
+    } catch (e) {
+      setFallo((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (hecho) return <span className="sub">{hecho}</span>;
+
+  return (
+    <div className="elegir">
+      <select value={seller} onChange={(e) => setVendedor(e.target.value)}>
+        <option value="">¿De quién es?</option>
+        {vendedores.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+      <button
+        className="pv-boton pv-boton-primario"
+        disabled={!seller || guardando}
+        onClick={asignar}
+      >
+        {guardando ? "…" : "Asignar"}
+      </button>
+      {fallo && <span className="aviso">{fallo}</span>}
+    </div>
+  );
+}
+
+/**
+ * Dar de alta una carpeta nueva.
+ *
+ * Casi nunca hace falta: las carpetas se dan de alta solas la primera vez que n8n
+ * empuja un fichero de ellas. Esto es para el caso en que se comparte una carpeta
+ * nueva y se quiere dejar preparada ANTES de que suba nada — con un teléfono recién
+ * entregado, así sus primeros días entran ya colocados.
+ */
+function NuevaCarpeta({ alCrear }: { alCrear: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [folderId, setFolderId] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [fallo, setFallo] = useState<string | null>(null);
+
+  async function crear() {
+    if (!nombre || !folderId) return;
+    setGuardando(true);
+    setFallo(null);
+    try {
+      await enviar("/api/sources", {
+        name: nombre,
+        folderId,
+        // De un solo vendedor: es lo que es una carpeta de GPS. A quién pertenece se
+        // dice después, en la lista de arriba.
+        type: "VENDEDOR",
+      });
+      setNombre("");
+      setFolderId("");
+      setAbierto(false);
+      alCrear();
+    } catch (e) {
+      setFallo((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <button className="pv-boton" style={{ marginTop: "0.75rem" }} onClick={() => setAbierto(true)}>
+        Añadir una carpeta nueva
+      </button>
+    );
+  }
+
+  return (
+    <div className="fila-suelta" style={{ marginTop: "0.75rem" }}>
+      <div>
+        <b>Carpeta nueva</b>
+        <span className="sub">
+          Solo hace falta si quieres dejarla lista ANTES de que suba nada: en cuanto
+          n8n empuje su primer fichero, la carpeta se da de alta sola. El
+          identificador es el trozo final de su dirección en Drive.
+        </span>
+      </div>
+      <div className="controles">
+        <input
+          className="pv-campo"
+          placeholder="Nombre del perfil del GPS"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+        />
+        <input
+          className="pv-campo"
+          placeholder="Identificador de la carpeta en Drive"
+          value={folderId}
+          onChange={(e) => setFolderId(e.target.value)}
+          style={{ minWidth: 280 }}
+        />
+        <button
+          className="pv-boton pv-boton-primario"
+          disabled={!nombre || !folderId || guardando}
+          onClick={crear}
+        >
+          {guardando ? "Guardando…" : "Añadir"}
+        </button>
+        <button className="pv-boton" onClick={() => setAbierto(false)}>Cancelar</button>
+      </div>
       {fallo && <p className="aviso">{fallo}</p>}
     </div>
   );
