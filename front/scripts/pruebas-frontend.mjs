@@ -104,4 +104,82 @@ test('agrupada, la sucursal NO se repite en cada fila', async () => {
   await ctx.close()
 })
 
+// -------------------------------------------------------------- revisar
+
+test('las sucursales del calendario se pliegan y se recuerdan', async () => {
+  const { ctx, page } = await abrir('/')
+
+  await page.waitForSelector('table tbody tr')
+
+  const antes = await page.locator('table tbody tr:not(.fila-sucursal)').count()
+
+  // Se cierra la primera sucursal: sus vendedores desaparecen, la franja se queda.
+  await page.locator('.fila-sucursal button').first().click()
+  await page.waitForTimeout(300)
+
+  const despues = await page.locator('table tbody tr:not(.fila-sucursal)').count()
+
+  assert.ok(despues < antes, `cerrar una sucursal no escondió sus filas: ${antes} -> ${despues}`)
+  // La franja sigue, con su cuenta: cerrar no puede esconder que ahí hay gente sin subir.
+  assert.equal(await page.locator('.fila-sucursal').count(), 3)
+
+  // Y se recuerda: al recargar sigue cerrada.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('table tbody tr')
+  await page.waitForTimeout(300)
+  assert.equal(await page.locator('table tbody tr:not(.fila-sucursal)').count(), despues)
+  await ctx.close()
+})
+
+test('se puede dar de alta una carpeta AUNQUE no haya ninguna', async () => {
+  /**
+   * El fallo: el botón de crear vivía dentro del bloque de la tabla, que sólo se pintaba
+   * si ya había carpetas. Sin ninguna —o si `/api/gps` fallaba— se perdían la tabla y el
+   * botón a la vez, y no quedaba forma de crear la primera.
+   *
+   * Se comprueba con la lista LLENA y con la lista VACÍA: el botón tiene que estar en las
+   * dos. La vacía la sirve el API de mentira con SIN_CARPETAS=1.
+   */
+  const { ctx, page } = await abrir('/revisar')
+
+  await page.waitForSelector('text=/Los GPS/', { timeout: 20000 })
+  assert.ok(
+    await page.locator('button', { hasText: /a.adir una carpeta nueva/i }).count() > 0,
+    'no hay forma de dar de alta una carpeta',
+  )
+  await ctx.close()
+})
+
+test('cada carpeta se puede asignar a un vendedor o supervisor', async () => {
+  const { ctx, page } = await abrir('/revisar')
+
+  await page.waitForSelector('.tabla-gps tbody tr')
+
+  // Las que no tienen dueño ofrecen el desplegable para decir de quién son.
+  const selects = page.locator('.tabla-gps select')
+
+  assert.ok(await selects.count() > 0, 'ninguna carpeta ofrece a quién asignarla')
+
+  const opciones = await selects.first().locator('option').allInnerTexts()
+
+  // Y sólo gestores y supervisores: son los que salen a la calle.
+  assert.ok(opciones.some((o) => /GESTOR|SUPERVISOR/i.test(o)), `sin roles en la lista: ${opciones}`)
+  await ctx.close()
+})
+
+test('un fichero que Drive ya no tiene no ofrece reintentarlo', async () => {
+  const { ctx, page } = await abrir('/revisar')
+
+  await page.waitForSelector('text=/llegaron rotos|llegó roto/i', { timeout: 20000 })
+
+  const texto = await page.locator('body').innerText()
+
+  // El del 404: reintentarlo no puede funcionar, y el botón lo dice.
+  assert.match(texto, /Quitarlo de la lista/i)
+  assert.match(texto, /Drive ya no tiene este fichero/i)
+  // El otro sí se puede volver a leer con el lector de hoy.
+  assert.match(texto, /Volver a intentarlo/i)
+  await ctx.close()
+})
+
 test.after(() => navegador.close())

@@ -127,6 +127,9 @@ export default function Revisar() {
   const [vendedores, setVendedores] = useState<Seller[]>([]);
   const [carpetas, setCarpetas] = useState<Carpeta[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
+  // Por qué no hay carpetas: «no hay ninguna» y «no se pudieron traer» se veían igual
+  // —la pantalla vacía— y son dos problemas distintos.
+  const [sinCarpetas, setSinCarpetas] = useState<string | null>(null);
   const [sinAccesos, setSinAccesos] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,8 +141,8 @@ export default function Revisar() {
       .then((v) => setVendedores(v ?? []))
       .catch(() => setVendedores([]));
     ask<Carpeta[]>("/api/gps")
-      .then((g) => setCarpetas(g ?? []))
-      .catch(() => setCarpetas([]));
+      .then((g) => { setCarpetas(g ?? []); setSinCarpetas(null); })
+      .catch((e) => { setCarpetas([]); setSinCarpetas((e as Error).message); });
     // Las personas salen de Accesos, que es donde están las cuentas de verdad. Si no
     // contesta se dice, porque sin esta lista no se puede asignar ningún GPS y hay
     // que saber que el problema no es la pantalla.
@@ -337,11 +340,21 @@ export default function Revisar() {
         )}
       </div>
 
-      {/* Los GPS: las carpetas de Drive, que YA están todas aquí. */}
-      {puede("rutas.alias") && carpetas.length > 0 && (
+      {/*
+        Los GPS: las carpetas de Drive.
+
+        Esto estaba detrás de `carpetas.length > 0`, y dentro va TAMBIÉN el botón de dar
+        de alta una carpeta. O sea: sólo se podían añadir carpetas cuando ya había
+        carpetas. Con la lista vacía —o si `/api/gps` fallaba, que se tragaba el error sin
+        decir nada— se perdían la tabla y el botón a la vez, y no quedaba forma de crear
+        la primera.
+      */}
+      {puede("rutas.alias") && (
         <div className="tarjeta">
           <b>
-            Los GPS · {sinDueno.length} de {carpetas.length} sin asignar
+            {carpetas.length > 0
+              ? `Los GPS · ${sinDueno.length} de ${carpetas.length} sin asignar`
+              : "Los GPS"}
           </b>
           <p className="sub">
             Cada carpeta compartida de Drive <b>es</b> un teléfono: se llama como el
@@ -358,6 +371,23 @@ export default function Revisar() {
             </p>
           )}
 
+          {sinCarpetas && (
+            <p className="aviso">
+              No se pudieron traer las carpetas: {sinCarpetas}. Lo de abajo está vacío por
+              eso, no porque no haya ninguna.
+            </p>
+          )}
+
+          {!sinCarpetas && carpetas.length === 0 && (
+            <p className="sub">
+              Todavía no hay ninguna carpeta. Se dan de alta solas la primera vez que n8n
+              empuja un fichero de ellas; con el botón de abajo se puede dejar una
+              preparada antes —con un teléfono recién entregado, así sus primeros días
+              entran ya colocados—.
+            </p>
+          )}
+
+          {carpetas.length > 0 && (
           <table className="movements tabla-gps">
             <thead>
               <tr>
@@ -410,6 +440,7 @@ export default function Revisar() {
               })}
             </tbody>
           </table>
+          )}
 
           <NuevaCarpeta alCrear={cargar} />
         </div>
@@ -626,6 +657,18 @@ function FilaRota({
   const [fallo, setFallo] = useState<string | null>(null);
   const [listo, setListo] = useState(false);
 
+  /**
+   * Un fichero que ya NO está en Drive no se puede reintentar.
+   *
+   * Reintentar es olvidar nuestra nota de «este ya lo vi» para que el siguiente empuje de
+   * n8n lo traiga otra vez. Si Drive contesta 404, no hay nada que traer: el botón
+   * prometía algo que no puede pasar y quien lo pulsaba se quedaba esperando.
+   *
+   * Ahí lo único que se puede hacer es quitarlo de la lista, que es la misma operación
+   * pero dicha por lo que hace de verdad.
+   */
+  const noEstaEnDrive = /\b404\b|not found|no encontrado/i.test(fichero.error ?? "");
+
   async function reintentar() {
     setYendo(true);
     setFallo(null);
@@ -654,10 +697,29 @@ function FilaRota({
       </div>
       {puede && (
         <div className="controles">
-          <button className="pv-boton" disabled={yendo || listo} onClick={reintentar}>
-            {listo ? "Esperando a n8n…" : yendo ? "Olvidando…" : "Volver a intentarlo"}
+          <button
+            className="pv-boton"
+            disabled={yendo || listo}
+            onClick={reintentar}
+            title={
+              noEstaEnDrive
+                ? "Drive ya no tiene este fichero, así que no hay nada que volver a leer: esto sólo lo quita de la lista."
+                : "Olvida nuestra nota de «este ya lo vi» para que n8n lo traiga otra vez y se lea con el lector de hoy."
+            }
+          >
+            {listo
+              ? (noEstaEnDrive ? "Quitado" : "Esperando a n8n…")
+              : yendo
+                ? (noEstaEnDrive ? "Quitando…" : "Olvidando…")
+                : (noEstaEnDrive ? "Quitarlo de la lista" : "Volver a intentarlo")}
           </button>
         </div>
+      )}
+      {noEstaEnDrive && (
+        <p className="sub">
+          Drive ya no tiene este fichero (404), así que reintentarlo no puede funcionar:
+          lo que hay que hacer es volver a subirlo desde el teléfono.
+        </p>
       )}
       {fallo && <p className="aviso">{fallo}</p>}
     </div>

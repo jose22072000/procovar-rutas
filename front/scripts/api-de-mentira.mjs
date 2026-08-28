@@ -74,6 +74,26 @@ SUCURSALES.forEach((s, si) => {
   }
 });
 
+/**
+ * Lo que necesita la pantalla de Revisar.
+ *
+ * Con carpetas y SIN carpetas: el caso de la lista vacía es el que tenía el fallo —el
+ * botón de crear vivía dentro del bloque de la tabla, así que no se podía crear la
+ * primera—. Con `SIN_CARPETAS=1` se devuelve vacío para poder comprobarlo.
+ */
+const sinCarpetas = process.env.SIN_CARPETAS === '1';
+
+const CARPETAS = sinCarpetas ? [] : [
+  { id: 'g1', name: 'GPS luis', folderId: 'f1', branch: 'Bayamo', files: 12, lastFile: '2026-08-27', daysSilent: 1, sellerId: 's1', seller: 'Luis', linked: true, stuckFiles: 0, lastError: null },
+  { id: 'g2', name: 'GPS ALFREDO', folderId: 'f2', branch: 'Camagüey', files: 4, lastFile: '2026-08-20', daysSilent: 8, sellerId: '', seller: '', linked: false, stuckFiles: 2, lastError: null },
+  { id: 'g3', name: 'GPS Georli', folderId: 'f3', branch: 'Camagüey', files: 9, lastFile: '2026-08-26', daysSilent: 2, sellerId: '', seller: '', linked: false, stuckFiles: 0, lastError: null },
+];
+
+const PERSONAS = [
+  { authUserId: 'p1', name: 'Luis Verdecia', email: 'luis@procovar.test', branch: 'Bayamo', roles: ['GESTOR'], sellerId: 's1' },
+  { authUserId: 'p2', name: 'Alfredo Hernández', email: '', branch: 'Camagüey', roles: ['SUPERVISOR'], sellerId: '' },
+];
+
 const RESPUESTAS = {
   '/api/me': {
     user: 'Admin Global',
@@ -82,11 +102,17 @@ const RESPUESTAS = {
     branchId: '',
     isAdmin: true,
     permisos: {
+      // Todas las de rutas: esta cuenta de mentira es la del desarrollador, y lo que se
+      // está mirando es la pantalla, no quién puede verla.
+      'rutas.entrar': true,
       'rutas.calendario': true,
       'rutas.alias': true,
-      'rutas.dia': true,
+      'rutas.visor': true,
       'rutas.reporte': true,
-      'rutas.revisar': true,
+      'rutas.bandeja': true,
+      'rutas.administracion': true,
+      'rutas.carpeta': true,
+      'rutas.barrido': true,
     },
   },
   '/api/calendar': {
@@ -97,6 +123,21 @@ const RESPUESTAS = {
     stuck: [],
     withOrders: true,
     workdays: dias,
+  },
+  '/api/gps': CARPETAS,
+  '/api/personas': PERSONAS,
+  '/api/review': {
+    files: [
+      // Uno roto que Drive YA NO TIENE: reintentarlo no puede funcionar nunca.
+      { id: 'f-404', name: '20260818.gpx', source: 'MAYLEN', folderPath: 'MAYLEN', status: 'ERROR', error: 'XML ilegible: XML syntax error on line 9 · error 404', seller: 'MAYLEN', date: null, points: 0 },
+      // Y uno que sí se puede volver a leer con el lector de hoy.
+      { id: 'f-xml', name: '20260504.gpx', source: 'GEORLI', folderPath: 'GEORLI', status: 'ERROR', error: 'XML ilegible: EOF', seller: 'GEORLI', date: null, points: 0 },
+    ],
+    silent: [],
+    vendors: [
+      { ref: 'v1', name: 'ANDY ALMANZA', code: 'andy.almanza', branch: 'Camagüey', orders: 42, sellerId: '', seller: '', origin: '' },
+      { ref: 'v2', name: 'LUIS VERDECIA', code: 'luis.verdecia', branch: 'Bayamo', orders: 18, sellerId: 's1', seller: 'Luis', origin: 'manual' },
+    ],
   },
   '/api/inbox': [],
   '/api/sellers': [],
