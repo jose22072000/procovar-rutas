@@ -61,3 +61,39 @@ export function agruparPorSucursal<T>(
  * hay más de una.
  */
 export const haceFaltaAgrupar = (grupos: Grupo<unknown>[]) => grupos.length > 1;
+
+/**
+ * Qué sucursales están plegadas, y cómo se pliegan.
+ *
+ * Con ocho sucursales y ochenta y dos vendedores, la tabla entera no cabe en la pantalla
+ * ni de lejos: separarlas ayuda a saber dónde estás, pero no evita el desplazamiento. Al
+ * poder cerrar las que no te interesan, mirar «cómo va Camagüey» es abrir una y ya.
+ *
+ * Se recuerda en el navegador, por pantalla. Quien se ocupa de dos sucursales cierra las
+ * otras seis una vez, y siguen cerradas mañana; si se olvidara, tendría que volver a
+ * cerrarlas en cada visita y acabaría no usándolo.
+ *
+ * Se guarda lo PLEGADO y no lo abierto a propósito: así una sucursal nueva aparece
+ * abierta, que es lo que hay que ver. Guardando lo abierto, nacería escondida.
+ */
+const CLAVE = (pantalla: string) => `rutas.plegadas.${pantalla}`;
+
+export function leerPlegadas(pantalla: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const crudo = window.localStorage.getItem(CLAVE(pantalla));
+    return new Set(crudo ? (JSON.parse(crudo) as string[]) : []);
+  } catch {
+    // Un localStorage con basura no puede dejar la pantalla sin pintar: todas abiertas.
+    return new Set();
+  }
+}
+
+export function guardarPlegadas(pantalla: string, plegadas: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CLAVE(pantalla), JSON.stringify([...plegadas]));
+  } catch {
+    /* modo privado, cuota llena: se pierde la preferencia, no la pantalla */
+  }
+}

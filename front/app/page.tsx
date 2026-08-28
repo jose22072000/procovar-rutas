@@ -34,7 +34,7 @@ import RangoFechas from "@/components/RangoFechas";
 import SinPermiso from "@/components/SinPermiso";
 import { useSesion } from "@/components/Sesion";
 import { useEvents } from "@/lib/events";
-import { agruparPorSucursal, haceFaltaAgrupar } from "@/lib/porSucursal";
+import { agruparPorSucursal, haceFaltaAgrupar, leerPlegadas, guardarPlegadas } from "@/lib/porSucursal";
 import {
   STATUS_LABEL,
   FLAG_LABEL,
@@ -184,6 +184,28 @@ export default function Calendar() {
   );
 
   const agrupar = haceFaltaAgrupar(porSucursal);
+
+  /**
+   * Qué sucursales están cerradas.
+   *
+   * Se lee del navegador en un efecto y no al montar el estado: en el servidor no hay
+   * localStorage, así que leerlo ahí daría un HTML distinto del que pinta el navegador y
+   * React se queja de que no coinciden.
+   */
+  const [plegadas, setPlegadas] = useState<Set<string>>(new Set());
+
+  useEffect(() => setPlegadas(leerPlegadas("calendario")), []);
+
+  const plegar = (nombre: string) => {
+    setPlegadas((antes) => {
+      const ahora = new Set(antes);
+
+      if (ahora.has(nombre)) ahora.delete(nombre);
+      else ahora.add(nombre);
+      guardarPlegadas("calendario", ahora);
+      return ahora;
+    });
+  };
 
   // Los ficheros atascados, indexados por celda: es la que explica el hueco.
   const atascos = useMemo(() => {
@@ -373,17 +395,32 @@ export default function Calendar() {
                   return r && (r.daysSilent === -1 || r.daysSilent > DIAS_MALO);
                 }).length;
 
+                const cerrada = plegadas.has(grupo.nombre);
                 const cabecera = agrupar ? [(
                   <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
                     <th colSpan={week.length + (conPedidos ? 4 : 3)}>
-                      {grupo.nombre}
-                      <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
-                      {callados > 0 && (
-                        <span className="fila-sucursal-alerta">{callados} sin subir</span>
-                      )}
+                      {/* Toda la franja es el botón, no una flechita de doce píxeles: se
+                          pulsa ochenta veces al día y hay que poder acertar sin mirar. */}
+                      <button
+                        type="button"
+                        className="plegador"
+                        aria-expanded={!cerrada}
+                        onClick={() => plegar(grupo.nombre)}
+                      >
+                        <span className="plegador-flecha" data-cerrada={cerrada}>▾</span>
+                        {grupo.nombre}
+                        <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
+                        {callados > 0 && (
+                          <span className="fila-sucursal-alerta">{callados} sin subir</span>
+                        )}
+                      </button>
                     </th>
                   </tr>
                 )] : [];
+
+                // Cerrada: se pinta la franja y nada más. La cuenta y el aviso siguen
+                // ahí, así que cerrar una sucursal no esconde que tiene gente sin subir.
+                if (cerrada) return cabecera;
 
                 return cabecera.concat(grupo.filas.map(([id, v]) => {
                 const summary = resumenDe(id);
@@ -464,12 +501,27 @@ export default function Calendar() {
           </table>
 
           <div className="fichas-dias solo-estrecho">
-            {porSucursal.flatMap((grupo) => (agrupar ? [(
-              <div className="ficha-sucursal" key={`s:${grupo.nombre}`}>
-                {grupo.nombre}
+            {porSucursal.flatMap((grupo) => {
+              const cerrada = plegadas.has(grupo.nombre);
+              const cabecera = agrupar ? [(
+              <button
+                type="button"
+                className="ficha-sucursal plegador"
+                key={`s:${grupo.nombre}`}
+                aria-expanded={!cerrada}
+                onClick={() => plegar(grupo.nombre)}
+              >
+                <span>
+                  <span className="plegador-flecha" data-cerrada={cerrada}>▾</span>
+                  {grupo.nombre}
+                </span>
                 <span>{grupo.filas.length}</span>
-              </div>
-            )] : []).concat(grupo.filas.map(([id, v]) => {
+              </button>
+            )] : [];
+
+              if (cerrada) return cabecera;
+
+              return cabecera.concat(grupo.filas.map(([id, v]) => {
               const summary = resumenDe(id);
               const conFichero = week.filter((f) => {
                 const d = v.days.get(f);
@@ -521,7 +573,8 @@ export default function Calendar() {
                   </div>
                 </div>
               );
-            })))}
+            }));
+            })}
           </div>
 
           <div className="leyenda">
