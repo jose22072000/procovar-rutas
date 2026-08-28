@@ -118,6 +118,14 @@ func (s *Server) Routes() http.Handler {
 		// La gente de Accesos, que es de donde salen las personas de verdad.
 		r.With(Exige(PermCalendario)).Get("/personas", s.personas)
 		r.With(Exige(PermAlias)).Post("/gps/{id}/asignar", s.assignGps)
+
+		// Dar de alta y de baja una carpeta va con SU llave, fuera del grupo de
+		// Administración. Estaban dentro, así que hacía falta también la de
+		// Administración para tocarlas: quien lleva los GPS de su sucursal tiene
+		// rutas.carpeta y no tiene por qué ver el estado de la ingesta entera, y el
+		// botón de «añadir una carpeta» está en Revisar, que no es Administración.
+		r.With(Exige(PermCarpeta)).Post("/sources", s.createSource)
+		r.With(Exige(PermCarpeta)).Delete("/sources/{id}", s.deleteSource)
 		r.With(Exige(PermCalendario)).Get("/pedidos/vendedores", s.vendedores)
 		r.With(Exige(PermAlias)).Post("/pedidos/emparejar", s.emparejar)
 		r.With(Exige(PermBarrido)).Post("/pedidos/sync", s.syncPedidos)
@@ -138,10 +146,6 @@ func (s *Server) Routes() http.Handler {
 			r.Get("/queue", s.queueStats)
 			r.Get("/ingest/status", s.adminIngestStats)
 
-			// Ver Administración y TOCARLA son dos cosas: un gerente puede querer
-			// mirar si las carpetas están al día sin poder darlas de baja.
-			r.With(Exige(PermCarpeta)).Post("/sources", s.createSource)
-			r.With(Exige(PermCarpeta)).Delete("/sources/{id}", s.deleteSource)
 			r.With(Exige(PermAlias)).Post("/aliases", s.createAlias)
 			r.With(Exige(PermAlias)).Delete("/aliases/{id}", s.deleteAlias)
 			r.With(Exige(PermBarrido)).Post("/ingest/scan", s.scan)

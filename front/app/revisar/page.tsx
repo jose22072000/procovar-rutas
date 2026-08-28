@@ -429,11 +429,17 @@ export default function Revisar() {
                     )}
                   </td>
                   <td>
-                    {g.sellerId ? (
-                      g.seller
-                    ) : (
-                      <ElegirDueno carpeta={g} personas={personas} alAsignar={cargar} />
-                    )}
+                    {/*
+                      También cuando YA tiene dueño: un teléfono cambia de manos, y sin
+                      poder cambiarlo la carpeta se queda para siempre a nombre de quien
+                      la llevaba antes — y con ella todo lo que suba a partir de hoy.
+                    */}
+                    <ElegirDueno
+                      carpeta={g}
+                      personas={personas}
+                      alAsignar={cargar}
+                      puedeAsignar={puede("rutas.alias")}
+                    />
                   </td>
                 </tr>
                 )));
@@ -442,7 +448,9 @@ export default function Revisar() {
           </table>
           )}
 
-          <NuevaCarpeta alCrear={cargar} />
+          {/* Sin la llave no se ofrece: el botón llamaba a un endpoint que iba a
+              contestar 403, y un botón que siempre falla es peor que no tenerlo. */}
+          {puede("rutas.carpeta") && <NuevaCarpeta alCrear={cargar} />}
         </div>
       )}
 
@@ -730,15 +738,20 @@ function ElegirDueno({
   carpeta,
   personas,
   alAsignar,
+  puedeAsignar,
 }: {
   carpeta: Carpeta;
   personas: Persona[];
   alAsignar: () => void;
+  puedeAsignar: boolean;
 }) {
   const [quien, setQuien] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [hecho, setHecho] = useState<string | null>(null);
   const [fallo, setFallo] = useState<string | null>(null);
+  // Con dueño ya puesto, el desplegable no se enseña hasta que se pide cambiarlo: la
+  // columna se lee de un vistazo y lo normal es no tocar nada.
+  const [cambiando, setCambiando] = useState(false);
 
   async function asignar() {
     if (!quien) return;
@@ -767,6 +780,28 @@ function ElegirDueno({
 
   if (hecho) return <span className="sub">{hecho}</span>;
 
+  // Ya tiene dueño y nadie ha pedido cambiarlo: se enseña quién es y ya.
+  if (carpeta.sellerId && !cambiando) {
+    return (
+      <span className="elegir-puesto">
+        {carpeta.seller}
+        {puedeAsignar && (
+          <button className="pv-boton pv-boton-menudo" onClick={() => setCambiando(true)}>
+            Cambiar
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  // Sin la llave no se ofrece el desplegable: asignar contestaría 403.
+  if (!puedeAsignar) return <span className="sub">sin asignar</span>;
+
+  // Y sin gente que elegir, se dice por qué en vez de enseñar una lista vacía.
+  if (personas.length === 0) {
+    return <span className="sub">no se pudo traer la gente de Accesos</span>;
+  }
+
   return (
     <div className="elegir">
       <select value={quien} onChange={(e) => setQuien(e.target.value)}>
@@ -785,6 +820,11 @@ function ElegirDueno({
       >
         {guardando ? "…" : "Asignar"}
       </button>
+      {cambiando && (
+        <button className="pv-boton pv-boton-menudo" onClick={() => setCambiando(false)}>
+          Dejarlo como está
+        </button>
+      )}
       {fallo && <span className="aviso">{fallo}</span>}
     </div>
   );

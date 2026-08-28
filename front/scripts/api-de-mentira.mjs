@@ -94,6 +94,9 @@ const PERSONAS = [
   { authUserId: 'p2', name: 'Alfredo Hernández', email: '', branch: 'Camagüey', roles: ['SUPERVISOR'], sellerId: '' },
 ];
 
+/** Con `SIN_PERSONAS=1` la lista de gente falla: sirve para probar que se DICE. */
+const sinPersonas = process.env.SIN_PERSONAS === '1';
+
 const RESPUESTAS = {
   '/api/me': {
     user: 'Admin Global',
@@ -125,7 +128,7 @@ const RESPUESTAS = {
     workdays: dias,
   },
   '/api/gps': CARPETAS,
-  '/api/personas': PERSONAS,
+  '/api/personas': sinPersonas ? undefined : PERSONAS,
   '/api/review': {
     files: [
       // Uno roto que Drive YA NO TIENE: reintentarlo no puede funcionar nunca.
@@ -150,6 +153,53 @@ createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type');
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
+  /**
+   * Lo que se ESCRIBE: dar de alta una carpeta y decir de quién es.
+   *
+   * Se guarda en la lista de arriba para que al recargar salga puesto, que es lo que hay
+   * que comprobar: un «Asignar» que contesta bien pero no cambia nada se ve igual.
+   */
+  if (req.method === 'POST') {
+    let texto = '';
+
+    req.on('data', (c) => { texto += c; });
+    req.on('end', () => {
+      const datos = JSON.parse(texto || '{}');
+
+      if (ruta === '/api/sources') {
+        CARPETAS.push({
+          id: `g${CARPETAS.length + 1}`, name: datos.name, folderId: datos.folderId,
+          branch: 'Camagüey', files: 0, lastFile: '', daysSilent: 0,
+          sellerId: '', seller: '', linked: false, stuckFiles: 0, lastError: null,
+        });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      const asignar = ruta.match(/^\/api\/gps\/([^/]+)\/asignar$/);
+
+      if (asignar) {
+        const c = CARPETAS.find((x) => x.id === asignar[1]);
+
+        if (c) { c.sellerId = datos.authUserId; c.seller = datos.name; c.linked = true; }
+        res.end(JSON.stringify({ placed: 3, days: 2 }));
+        return;
+      }
+
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: `sin ruta ${ruta}` }));
+    });
+    return;
+  }
 
   const cuerpo = RESPUESTAS[ruta];
 

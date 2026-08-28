@@ -1189,6 +1189,14 @@ img, svg, video, canvas, table { max-width: 100%; }
 .elegir { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .elegir .aviso { margin: 0; }
 
+/* El dueño ya puesto, con su botón de cambiarlo al lado. */
+.elegir-puesto { display: inline-flex; align-items: center; gap: 0.45rem; }
+.pv-boton-menudo {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 /* La lista de GPS: las carpetas sin dueño, marcadas.
    Son las accionables — cada una es un teléfono cuyos ficheros están esperando a que
    alguien diga de quién son. */

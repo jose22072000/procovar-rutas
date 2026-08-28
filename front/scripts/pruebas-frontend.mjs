@@ -37,7 +37,9 @@ async function abrir(ruta) {
   const errores = []
 
   page.on('pageerror', (e) => errores.push(String(e)))
-  await page.goto(`${BASE}${ruta}`, { waitUntil: 'domcontentloaded' })
+  // 'about:blank' = la pestaña con la sesión puesta, pero sin navegar: hace falta para
+  // poder interceptar una llamada ANTES de que la pantalla la haga.
+  if (ruta !== 'about:blank') await page.goto(`${BASE}${ruta}`, { waitUntil: 'domcontentloaded' })
   return { ctx, page, errores }
 }
 
@@ -164,6 +166,55 @@ test('cada carpeta se puede asignar a un vendedor o supervisor', async () => {
 
   // Y sólo gestores y supervisores: son los que salen a la calle.
   assert.ok(opciones.some((o) => /GESTOR|SUPERVISOR/i.test(o)), `sin roles en la lista: ${opciones}`)
+  await ctx.close()
+})
+
+test('la carpeta que se da de alta aparece en la lista', async () => {
+  const { ctx, page } = await abrir('/revisar')
+
+  await page.waitForSelector('text=/Los GPS/', { timeout: 20000 })
+  await page.click('button:has-text("Añadir una carpeta nueva")')
+  await page.fill('input[placeholder="Nombre del perfil del GPS"]', 'GPS Yoandy')
+  await page.fill('input[placeholder="Identificador de la carpeta en Drive"]', 'carpeta-nueva-1')
+  await page.click('button:has-text("Añadir")')
+
+  // Que conteste 200 no basta: lo que hay que ver es la carpeta en la tabla.
+  await page.waitForSelector('text=GPS Yoandy', { timeout: 20000 })
+  await ctx.close()
+})
+
+test('una carpeta que YA tiene dueño se le puede cambiar', async () => {
+  /**
+   * Un teléfono cambia de manos. Antes el desplegable sólo salía cuando la carpeta no
+   * tenía dueño, así que una vez asignada se quedaba para siempre a nombre de quien la
+   * llevaba antes — y con ella todo lo que subiera a partir de ese día.
+   */
+  const { ctx, page } = await abrir('/revisar')
+
+  await page.waitForSelector('.tabla-gps tbody tr')
+
+  const fila = page.locator('.tabla-gps tbody tr', { hasText: 'GPS luis' })
+
+  await fila.locator('button:has-text("Cambiar")').click()
+  await fila.locator('select').selectOption({ index: 1 })
+  await fila.locator('button:has-text("Asignar")').click()
+
+  await page.waitForSelector('text=/ficheros colocados/', { timeout: 20000 })
+  await ctx.close()
+})
+
+test('sin la gente de Accesos se dice, en vez de enseñar una lista vacía', async () => {
+  const { ctx, page } = await abrir('about:blank')
+
+  // Se rompe SÓLO /api/personas: es el fallo que se vio en producción —la API contestaba
+  // 404 ahí— y la pantalla ofrecía un desplegable sin nadie dentro, que no dice nada.
+  await page.route('**/api/personas', (r) => r.fulfill({ status: 404, body: '{"error":"no"}' }))
+  await page.goto(`${BASE}/revisar`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.tabla-gps tbody tr', { timeout: 20000 })
+
+  const texto = await page.locator('.tabla-gps').innerText()
+
+  assert.match(texto, /no se pudo traer la gente de Accesos/i)
   await ctx.close()
 })
 
