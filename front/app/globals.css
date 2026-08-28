@@ -643,6 +643,68 @@ h1 {
 }
 
 /* La sucursal, bajo el nombre del vendedor en el calendario. */
+/**
+ * El encabezado de cada sucursal en el calendario.
+ *
+ * Los vendedores salían todos en una tabla con la sucursal escrita en letra pequeña bajo
+ * cada nombre. Con ocho sucursales, saber cuáles son las tuyas era leer ochenta y dos
+ * filas comparando esa línea. Se separan con una franja por sucursal, que además lleva
+ * lo único que hace falta decidir: cuántos de ahí llevan días sin subir.
+ *
+ * Pegajosa al desplazar: en una tabla larga, el encabezado que dice de quién es la fila
+ * que estás mirando tiene que seguir a la vista, o hay que subir a comprobarlo.
+ */
+.fila-sucursal > th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    text-align: left;
+    padding: 10px 12px 6px;
+    background: var(--pv-papel);
+    border-bottom: 1px solid var(--pv-trazo-tenue);
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--pv-tinta);
+}
+
+.fila-sucursal-cuenta {
+    margin-left: 10px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--pv-tinta-suave);
+}
+
+.fila-sucursal-alerta {
+    margin-left: 8px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--pv-cuno);
+}
+
+/* Lo mismo en las fichas del móvil, donde no hay tabla que encabezar. */
+.ficha-sucursal {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 14px 2px 2px;
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--pv-tinta);
+}
+
+.ficha-sucursal > span {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--pv-tinta-suave);
+}
+
 .seller-sucursal {
     display: block;
     font-family: var(--font-plex-mono), ui-monospace, monospace;

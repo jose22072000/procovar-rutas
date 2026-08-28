@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState } from "react";
 import SinPermiso from "@/components/SinPermiso";
 import { useSesion } from "@/components/Sesion";
+import { agruparPorSucursal, haceFaltaAgrupar } from "@/lib/porSucursal";
 import { useEvents } from "@/lib/events";
 import { ask, enviar, type Seller } from "@/lib/api";
 
@@ -168,6 +169,18 @@ export default function Revisar() {
   const colocables = datos.files.filter((f) => f.status !== "ERROR");
   const sinDuenno = (datos.vendors ?? []).filter((v) => v.sellerId === "");
   const sinDueno = carpetas.filter((g) => g.sellerId === "");
+
+  /**
+   * Las dos tablas de emparejar, SEPARADAS POR SUCURSAL.
+   *
+   * Salían planas con la sucursal en una columna. Emparejar es un trabajo que se hace por
+   * sucursal —«voy a colocar los GPS de Camagüey»— y en una lista de ochenta y dos filas
+   * ordenadas por otra cosa hay que ir saltando de una a otra leyendo esa columna.
+   */
+  const carpetasPorSucursal = agruparPorSucursal(carpetas, (g) => g.branch, (g) => g.name);
+  const vendedoresPorSucursal = agruparPorSucursal(datos.vendors ?? [], (v) => v.branch, (v) => v.name);
+  const agruparCarpetas = haceFaltaAgrupar(carpetasPorSucursal);
+  const agruparVendedores = haceFaltaAgrupar(vendedoresPorSucursal);
   const callados = datos.silent
     .filter((s) => s.daysSilent === -1 || s.daysSilent > 3)
     .sort((a, b) => (b.daysSilent < 0 ? 1e9 : b.daysSilent) - (a.daysSilent < 0 ? 1e9 : a.daysSilent));
@@ -349,20 +362,35 @@ export default function Revisar() {
             <thead>
               <tr>
                 <th>Carpeta (el GPS)</th>
-                <th>Sucursal</th>
+                {/* La columna sólo hace falta cuando NO se agrupa: si hay franja de
+                    sucursal, la columna repite en cada fila lo que ya dice la franja. */}
+                {!agruparCarpetas && <th>Sucursal</th>}
                 <th>Rutas que trajo</th>
                 <th>Última</th>
                 <th>De quién es</th>
               </tr>
             </thead>
             <tbody>
-              {carpetas.map((g) => (
+              {carpetasPorSucursal.flatMap((grupo) => {
+                const sinColocar = grupo.filas.filter((g) => g.sellerId === "").length;
+
+                return (agruparCarpetas ? [(
+                  <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
+                    <th colSpan={4}>
+                      {grupo.nombre}
+                      <span className="fila-sucursal-cuenta">{grupo.filas.length} GPS</span>
+                      {sinColocar > 0 && (
+                        <span className="fila-sucursal-alerta">{sinColocar} sin asignar</span>
+                      )}
+                    </th>
+                  </tr>
+                )] : []).concat(grupo.filas.map((g) => (
                 <tr key={g.id} data-sinduenno={g.sellerId === ""}>
                   <td>
                     {g.name}
                     {g.lastError && <span className="aviso">{g.lastError}</span>}
                   </td>
-                  <td className="pv-codigo">{g.branch || "—"}</td>
+                  {!agruparCarpetas && <td className="pv-codigo">{g.branch || "—"}</td>}
                   <td>{g.files}</td>
                   <td className="pv-codigo">
                     {g.lastFile || "nunca"}
@@ -378,7 +406,8 @@ export default function Revisar() {
                     )}
                   </td>
                 </tr>
-              ))}
+                )));
+              })}
             </tbody>
           </table>
 
@@ -406,17 +435,30 @@ export default function Revisar() {
               <tr>
                 <th>En PEDIDO</th>
                 <th>Código</th>
-                <th>Sucursal</th>
+                {!agruparVendedores && <th>Sucursal</th>}
                 <th>Pedidos</th>
                 <th>Es, aquí</th>
               </tr>
             </thead>
             <tbody>
-              {datos.vendors!.map((v) => (
+              {vendedoresPorSucursal.flatMap((grupo) => {
+                const sinEmparejar = grupo.filas.filter((v) => v.sellerId === "").length;
+
+                return (agruparVendedores ? [(
+                  <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
+                    <th colSpan={4}>
+                      {grupo.nombre}
+                      <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
+                      {sinEmparejar > 0 && (
+                        <span className="fila-sucursal-alerta">{sinEmparejar} sin emparejar</span>
+                      )}
+                    </th>
+                  </tr>
+                )] : []).concat(grupo.filas.map((v) => (
                 <tr key={v.ref} data-sinduenno={v.sellerId === ""}>
                   <td>{v.name}</td>
                   <td className="pv-codigo">{v.code}</td>
-                  <td className="pv-codigo">{v.branch || "—"}</td>
+                  {!agruparVendedores && <td className="pv-codigo">{v.branch || "—"}</td>}
                   <td>{v.orders}</td>
                   <td>
                     {v.sellerId ? (
@@ -433,7 +475,8 @@ export default function Revisar() {
                     )}
                   </td>
                 </tr>
-              ))}
+                )));
+              })}
             </tbody>
           </table>
         </div>

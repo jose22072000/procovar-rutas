@@ -6,7 +6,10 @@
     "dev": "next dev -p 3601",
     "build": "next build",
     "start": "next start -p 3601",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --test --import ./tests/registrar.mjs 'tests/*.test.ts'",
+    "test:front": "node --test scripts/pruebas-frontend.mjs",
+    "api:mentira": "node scripts/api-de-mentira.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.126",

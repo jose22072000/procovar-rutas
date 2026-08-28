@@ -1,0 +1,3 @@
+
+# Caché de TypeScript: se regenera en cada build.
+*.tsbuildinfo

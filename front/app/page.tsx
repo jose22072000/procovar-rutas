@@ -34,6 +34,7 @@ import RangoFechas from "@/components/RangoFechas";
 import SinPermiso from "@/components/SinPermiso";
 import { useSesion } from "@/components/Sesion";
 import { useEvents } from "@/lib/events";
+import { agruparPorSucursal, haceFaltaAgrupar } from "@/lib/porSucursal";
 import {
   STATUS_LABEL,
   FLAG_LABEL,
@@ -165,6 +166,24 @@ export default function Calendar() {
     }
     return map;
   }, [data]);
+
+  /**
+   * Los vendedores AGRUPADOS POR SUCURSAL.
+   *
+   * Salían todos en una sola tabla con la sucursal escrita bajo cada nombre. Con ocho
+   * sucursales eso es leer ochenta y dos filas comparando una línea pequeña para saber
+   * cuáles son las tuyas — y quien mira esto lo que quiere es «cómo va Camagüey», no
+   * «cómo va el vendedor número 47».
+   *
+   * Se agrupa sólo si hay más de una sucursal a la vista: si todos son de la misma, un
+   * encabezado que lo repita no dice nada que no se sepa ya.
+   */
+  const porSucursal = useMemo(
+    () => agruparPorSucursal([...bySeller.entries()], ([, v]) => v.branch, ([, v]) => v.name),
+    [bySeller],
+  );
+
+  const agrupar = haceFaltaAgrupar(porSucursal);
 
   // Los ficheros atascados, indexados por celda: es la que explica el hueco.
   const atascos = useMemo(() => {
@@ -341,7 +360,32 @@ export default function Calendar() {
               </tr>
             </thead>
             <tbody>
-              {[...bySeller.entries()].map(([id, v]) => {
+              {porSucursal.flatMap((grupo) => {
+                /**
+                 * Cuántos de esa sucursal llevan días callados.
+                 *
+                 * Es el número por el que se mira esta pantalla: no «cuántos vendedores
+                 * tiene Camagüey» —eso no cambia— sino cuántos de ellos hay que perseguir
+                 * hoy. Puesto en el encabezado se ve sin recorrer el grupo entero.
+                 */
+                const callados = grupo.filas.filter(([id]) => {
+                  const r = resumenDe(id);
+                  return r && (r.daysSilent === -1 || r.daysSilent > DIAS_MALO);
+                }).length;
+
+                const cabecera = agrupar ? [(
+                  <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
+                    <th colSpan={week.length + (conPedidos ? 4 : 3)}>
+                      {grupo.nombre}
+                      <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
+                      {callados > 0 && (
+                        <span className="fila-sucursal-alerta">{callados} sin subir</span>
+                      )}
+                    </th>
+                  </tr>
+                )] : [];
+
+                return cabecera.concat(grupo.filas.map(([id, v]) => {
                 const summary = resumenDe(id);
                 const conFichero = week.filter((f) => {
                   const d = v.days.get(f);
@@ -353,9 +397,12 @@ export default function Calendar() {
                     <td className="seller">
                       {v.name}
                       {/* La sucursal, debajo del nombre: es lo que dice si la
-                          ingesta colocó a cada quien donde tocaba, y lo que el
-                          gerente necesita reconocer de un vistazo. */}
-                      <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                          ingesta colocó a cada quien donde tocaba. Cuando la tabla va
+                          agrupada, el encabezado ya lo dice y repetirlo en cada fila es
+                          decir dos veces lo mismo. */}
+                      {!agrupar && (
+                        <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                      )}
                       {/* Y si lleva días callado, se dice aquí y no en otra
                           pantalla: es la explicación de la fila entera. */}
                       {summary && (summary.daysSilent === -1 || summary.daysSilent > DIAS_MALO) && (
@@ -411,12 +458,18 @@ export default function Calendar() {
                     <td className="tenue">{(summary?.totalKm ?? 0).toFixed(0)} km</td>
                   </tr>
                 );
+                }));
               })}
             </tbody>
           </table>
 
           <div className="fichas-dias solo-estrecho">
-            {[...bySeller.entries()].map(([id, v]) => {
+            {porSucursal.flatMap((grupo) => (agrupar ? [(
+              <div className="ficha-sucursal" key={`s:${grupo.nombre}`}>
+                {grupo.nombre}
+                <span>{grupo.filas.length}</span>
+              </div>
+            )] : []).concat(grupo.filas.map(([id, v]) => {
               const summary = resumenDe(id);
               const conFichero = week.filter((f) => {
                 const d = v.days.get(f);
@@ -428,7 +481,9 @@ export default function Calendar() {
                   <div className="ficha-dia-cabecera">
                     <div>
                       <b>{v.name}</b>
-                      <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                      {!agrupar && (
+                        <span className="seller-sucursal">{v.branch || "sin sucursal"}</span>
+                      )}
                       {summary && (summary.daysSilent === -1 || summary.daysSilent > DIAS_MALO) && (
                         <span className="seller-alerta">
                           {summary.daysSilent === -1
@@ -466,7 +521,7 @@ export default function Calendar() {
                   </div>
                 </div>
               );
-            })}
+            })))}
           </div>
 
           <div className="leyenda">
