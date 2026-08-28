@@ -230,28 +230,30 @@ export default function Revisar() {
             así que no sirven para juzgar a nadie. Si hace falta el día completo, hay
             que volver a subir ese .gpx.
           </p>
-          <table className="movements">
-            <thead>
-              <tr>
-                <th>Día</th>
-                <th>Vendedor</th>
-                <th>Fichero</th>
-                <th>Puntos que entraron</th>
-                <th>Qué pasó</th>
-              </tr>
-            </thead>
-            <tbody>
-              {datos.truncated!.map((d) => (
-                <tr key={`${d.sellerId}:${d.date}`}>
-                  <td className="pv-codigo">{d.date}</td>
-                  <td>{d.seller}</td>
-                  <td className="pv-codigo">{d.file}</td>
-                  <td>{d.points}</td>
-                  <td className="sub">{d.detail}</td>
+          <div className="tabla-ancha">
+            <table className="movements">
+              <thead>
+                <tr>
+                  <th>Día</th>
+                  <th>Vendedor</th>
+                  <th>Fichero</th>
+                  <th>Puntos que entraron</th>
+                  <th>Qué pasó</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {datos.truncated!.map((d) => (
+                  <tr key={`${d.sellerId}:${d.date}`}>
+                    <td className="pv-codigo">{d.date}</td>
+                    <td>{d.seller}</td>
+                    <td className="pv-codigo">{d.file}</td>
+                    <td>{d.points}</td>
+                    <td className="sub">{d.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -309,34 +311,36 @@ export default function Revisar() {
           teléfono que hay que ir a mirar.
         </p>
         {callados.length > 0 && (
-          <table className="movements">
-            <thead>
-              <tr>
-                <th>Vendedor</th>
-                <th>Última ruta suya</th>
-                <th>Lleva</th>
-                <th>Ficheros atascados</th>
-                <th>Vendedor de PEDIDO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {callados.map((c) => (
-                <tr key={c.sellerId}>
-                  <td>{c.seller}</td>
-                  <td className="pv-codigo">{c.lastUpload ?? "nunca ha subido"}</td>
-                  <td>{c.daysSilent < 0 ? "—" : `${c.daysSilent} días`}</td>
-                  <td>{c.stuckFiles > 0 ? c.stuckFiles : "—"}</td>
-                  <td>
-                    {c.linked ? (
-                      "emparejado"
-                    ) : (
-                      <span style={{ color: "var(--pv-cuno)" }}>sin emparejar</span>
-                    )}
-                  </td>
+          <div className="tabla-ancha">
+            <table className="movements">
+              <thead>
+                <tr>
+                  <th>Vendedor</th>
+                  <th>Última ruta suya</th>
+                  <th>Lleva</th>
+                  <th>Ficheros atascados</th>
+                  <th>Vendedor de PEDIDO</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {callados.map((c) => (
+                  <tr key={c.sellerId}>
+                    <td>{c.seller}</td>
+                    <td className="pv-codigo">{c.lastUpload ?? "nunca ha subido"}</td>
+                    <td>{c.daysSilent < 0 ? "—" : `${c.daysSilent} días`}</td>
+                    <td>{c.stuckFiles > 0 ? c.stuckFiles : "—"}</td>
+                    <td>
+                      {c.linked ? (
+                        "emparejado"
+                      ) : (
+                        <span style={{ color: "var(--pv-cuno)" }}>sin emparejar</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -388,64 +392,66 @@ export default function Revisar() {
           )}
 
           {carpetas.length > 0 && (
-          <table className="movements tabla-gps">
-            <thead>
-              <tr>
-                <th>Carpeta (el GPS)</th>
-                {/* La columna sólo hace falta cuando NO se agrupa: si hay franja de
-                    sucursal, la columna repite en cada fila lo que ya dice la franja. */}
-                {!agruparCarpetas && <th>Sucursal</th>}
-                <th>Rutas que trajo</th>
-                <th>Última</th>
-                <th>De quién es</th>
-              </tr>
-            </thead>
-            <tbody>
-              {carpetasPorSucursal.flatMap((grupo) => {
-                const sinColocar = grupo.filas.filter((g) => g.sellerId === "").length;
-
-                return (agruparCarpetas ? [(
-                  <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
-                    <th colSpan={4}>
-                      {grupo.nombre}
-                      <span className="fila-sucursal-cuenta">{grupo.filas.length} GPS</span>
-                      {sinColocar > 0 && (
-                        <span className="fila-sucursal-alerta">{sinColocar} sin asignar</span>
-                      )}
-                    </th>
-                  </tr>
-                )] : []).concat(grupo.filas.map((g) => (
-                <tr key={g.id} data-sinduenno={g.sellerId === ""}>
-                  <td>
-                    {g.name}
-                    {g.lastError && <span className="aviso">{g.lastError}</span>}
-                  </td>
-                  {!agruparCarpetas && <td className="pv-codigo">{g.branch || "—"}</td>}
-                  <td>{g.files}</td>
-                  <td className="pv-codigo">
-                    {g.lastFile || "nunca"}
-                    {g.daysSilent > 3 && (
-                      <span className="seller-alerta">{g.daysSilent} días</span>
-                    )}
-                  </td>
-                  <td>
-                    {/*
-                      También cuando YA tiene dueño: un teléfono cambia de manos, y sin
-                      poder cambiarlo la carpeta se queda para siempre a nombre de quien
-                      la llevaba antes — y con ella todo lo que suba a partir de hoy.
-                    */}
-                    <ElegirDueno
-                      carpeta={g}
-                      personas={personas}
-                      alAsignar={cargar}
-                      puedeAsignar={puede("rutas.alias")}
-                    />
-                  </td>
+          <div className="tabla-ancha">
+            <table className="movements tabla-gps">
+              <thead>
+                <tr>
+                  <th>Carpeta (el GPS)</th>
+                  {/* La columna sólo hace falta cuando NO se agrupa: si hay franja de
+                      sucursal, la columna repite en cada fila lo que ya dice la franja. */}
+                  {!agruparCarpetas && <th>Sucursal</th>}
+                  <th>Rutas que trajo</th>
+                  <th>Última</th>
+                  <th>De quién es</th>
                 </tr>
-                )));
-              })}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {carpetasPorSucursal.flatMap((grupo) => {
+                  const sinColocar = grupo.filas.filter((g) => g.sellerId === "").length;
+
+                  return (agruparCarpetas ? [(
+                    <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
+                      <th colSpan={4}>
+                        {grupo.nombre}
+                        <span className="fila-sucursal-cuenta">{grupo.filas.length} GPS</span>
+                        {sinColocar > 0 && (
+                          <span className="fila-sucursal-alerta">{sinColocar} sin asignar</span>
+                        )}
+                      </th>
+                    </tr>
+                  )] : []).concat(grupo.filas.map((g) => (
+                  <tr key={g.id} data-sinduenno={g.sellerId === ""}>
+                    <td>
+                      {g.name}
+                      {g.lastError && <span className="aviso">{g.lastError}</span>}
+                    </td>
+                    {!agruparCarpetas && <td className="pv-codigo">{g.branch || "—"}</td>}
+                    <td>{g.files}</td>
+                    <td className="pv-codigo">
+                      {g.lastFile || "nunca"}
+                      {g.daysSilent > 3 && (
+                        <span className="seller-alerta">{g.daysSilent} días</span>
+                      )}
+                    </td>
+                    <td>
+                      {/*
+                        También cuando YA tiene dueño: un teléfono cambia de manos, y sin
+                        poder cambiarlo la carpeta se queda para siempre a nombre de quien
+                        la llevaba antes — y con ella todo lo que suba a partir de hoy.
+                      */}
+                      <ElegirDueno
+                        carpeta={g}
+                        personas={personas}
+                        alAsignar={cargar}
+                        puedeAsignar={puede("rutas.alias")}
+                      />
+                    </td>
+                  </tr>
+                  )));
+                })}
+              </tbody>
+            </table>
+          </div>
           )}
 
           {/* Sin la llave no se ofrece: el botón llamaba a un endpoint que iba a
@@ -469,55 +475,57 @@ export default function Revisar() {
             cruzan con ninguna ruta.</b>
           </p>
 
-          <table className="movements tabla-vendedores">
-            <thead>
-              <tr>
-                <th>En PEDIDO</th>
-                <th>Código</th>
-                {!agruparVendedores && <th>Sucursal</th>}
-                <th>Pedidos</th>
-                <th>Es, aquí</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendedoresPorSucursal.flatMap((grupo) => {
-                const sinEmparejar = grupo.filas.filter((v) => v.sellerId === "").length;
-
-                return (agruparVendedores ? [(
-                  <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
-                    <th colSpan={4}>
-                      {grupo.nombre}
-                      <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
-                      {sinEmparejar > 0 && (
-                        <span className="fila-sucursal-alerta">{sinEmparejar} sin emparejar</span>
-                      )}
-                    </th>
-                  </tr>
-                )] : []).concat(grupo.filas.map((v) => (
-                <tr key={v.ref} data-sinduenno={v.sellerId === ""}>
-                  <td>{v.name}</td>
-                  <td className="pv-codigo">{v.code}</td>
-                  {!agruparVendedores && <td className="pv-codigo">{v.branch || "—"}</td>}
-                  <td>{v.orders}</td>
-                  <td>
-                    {v.sellerId ? (
-                      <>
-                        {v.seller}{" "}
-                        <span className="sub">
-                          {/* De dónde salió: si lo dijo el parecido de nombres es
-                              revisable; si lo dijo una persona, no se toca. */}
-                          {v.origin === "manual" ? "(lo dijo una persona)" : "(por el nombre)"}
-                        </span>
-                      </>
-                    ) : (
-                      <ElegirVendedor vendedor={v} vendedores={vendedores} alEmparejar={cargar} />
-                    )}
-                  </td>
+          <div className="tabla-ancha">
+            <table className="movements tabla-vendedores">
+              <thead>
+                <tr>
+                  <th>En PEDIDO</th>
+                  <th>Código</th>
+                  {!agruparVendedores && <th>Sucursal</th>}
+                  <th>Pedidos</th>
+                  <th>Es, aquí</th>
                 </tr>
-                )));
-              })}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {vendedoresPorSucursal.flatMap((grupo) => {
+                  const sinEmparejar = grupo.filas.filter((v) => v.sellerId === "").length;
+
+                  return (agruparVendedores ? [(
+                    <tr className="fila-sucursal" key={`s:${grupo.nombre}`}>
+                      <th colSpan={4}>
+                        {grupo.nombre}
+                        <span className="fila-sucursal-cuenta">{grupo.filas.length} vendedores</span>
+                        {sinEmparejar > 0 && (
+                          <span className="fila-sucursal-alerta">{sinEmparejar} sin emparejar</span>
+                        )}
+                      </th>
+                    </tr>
+                  )] : []).concat(grupo.filas.map((v) => (
+                  <tr key={v.ref} data-sinduenno={v.sellerId === ""}>
+                    <td>{v.name}</td>
+                    <td className="pv-codigo">{v.code}</td>
+                    {!agruparVendedores && <td className="pv-codigo">{v.branch || "—"}</td>}
+                    <td>{v.orders}</td>
+                    <td>
+                      {v.sellerId ? (
+                        <>
+                          {v.seller}{" "}
+                          <span className="sub">
+                            {/* De dónde salió: si lo dijo el parecido de nombres es
+                                revisable; si lo dijo una persona, no se toca. */}
+                            {v.origin === "manual" ? "(lo dijo una persona)" : "(por el nombre)"}
+                          </span>
+                        </>
+                      ) : (
+                        <ElegirVendedor vendedor={v} vendedores={vendedores} alEmparejar={cargar} />
+                      )}
+                    </td>
+                  </tr>
+                  )));
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

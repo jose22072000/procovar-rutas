@@ -930,8 +930,16 @@ h1 {
 
     .sin-permiso { margin: 2rem auto; padding: 1.25rem; }
 
-    /* Las tablas anchas (movimientos del reporte, barridos) se arrastran. */
+    /*
+      Las tablas anchas se arrastran DENTRO de su envoltorio, no empujando la página.
+
+      Tenían `min-width: 560px` y nada alrededor que se desplazara, así que en un
+      teléfono de 390px lo que se arrastraba era el documento entero: la barra de arriba
+      se iba con él y se perdía dónde se estaba. Ahora cada una va dentro de un
+      `.tabla-ancha` que se desplaza sola.
+    */
     .movements { min-width: 560px; }
+    .tabla-ancha { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
 @media (max-width: 480px) {

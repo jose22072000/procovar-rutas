@@ -218,6 +218,35 @@ test('sin la gente de Accesos se dice, en vez de enseñar una lista vacía', asy
   await ctx.close()
 })
 
+test('en un teléfono la página no se arrastra a lo ancho: la tabla sí', async () => {
+  const { ctx, page } = await abrir('about:blank')
+
+  await page.setViewportSize({ width: 390, height: 820 })
+  await page.goto(`${BASE}/revisar`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.tabla-gps tbody tr', { timeout: 20000 })
+
+  /**
+   * Las tablas de aquí son anchas a propósito —estrecharlas deja columnas donde no se
+   * lee el dato que se viene a mirar—, pero lo que se arrastra tiene que ser LA TABLA.
+   * Estaban sueltas en la página, así que se arrastraba el documento entero y la barra
+   * de arriba se iba con él.
+   */
+  const desborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+
+  assert.equal(desborda, false, 'la página entera se desplaza a lo ancho')
+
+  const scrollable = await page.evaluate(() => {
+    const t = document.querySelector('.tabla-gps')?.closest('.tabla-ancha')
+
+    return t != null && t.scrollWidth > t.clientWidth
+  })
+
+  assert.equal(scrollable, true, 'la tabla no se puede arrastrar dentro de su caja')
+  await ctx.close()
+})
+
 test('un fichero que Drive ya no tiene no ofrece reintentarlo', async () => {
   const { ctx, page } = await abrir('/revisar')
 

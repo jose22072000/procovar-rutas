@@ -185,36 +185,38 @@ function Reporte() {
                 {d.coverage.toFixed(0)} % de cobertura · {d.minMovement} min
                 en movimiento, {d.minStopped} min parado
               </p>
-              <table className="movements">
-                <thead>
-                  <tr>
-                    <th>Inicio</th>
-                    <th>Fin</th>
-                    <th>Duración</th>
-                    <th>Tipo</th>
-                    <th>Distancia</th>
-                    <th>Vel. media</th>
-                    <th>Vel. máx</th>
-                    <th>Lugar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.movements.map((m, i) => (
-                    <tr key={i} className={m.type === "parada" ? "parada" : ""}>
-                      <td>{m.startTime}</td>
-                      <td>{m.endTime}</td>
-                      <td>{m.durationMin} min</td>
-                      <td>
-                        {m.type === "parada" ? <b>Parada</b> : "Desplazamiento"}
-                      </td>
-                      <td>{m.type === "parada" ? "—" : `${m.distanceKm} km`}</td>
-                      <td>{m.type === "parada" ? "—" : `${m.avgSpeed} km/h`}</td>
-                      <td>{m.type === "parada" ? "—" : `${m.maxSpeed} km/h`}</td>
-                      <td>{m.place ?? "—"}</td>
+              <div className="tabla-ancha">
+                <table className="movements">
+                  <thead>
+                    <tr>
+                      <th>Inicio</th>
+                      <th>Fin</th>
+                      <th>Duración</th>
+                      <th>Tipo</th>
+                      <th>Distancia</th>
+                      <th>Vel. media</th>
+                      <th>Vel. máx</th>
+                      <th>Lugar</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {d.movements.map((m, i) => (
+                      <tr key={i} className={m.type === "parada" ? "parada" : ""}>
+                        <td>{m.startTime}</td>
+                        <td>{m.endTime}</td>
+                        <td>{m.durationMin} min</td>
+                        <td>
+                          {m.type === "parada" ? <b>Parada</b> : "Desplazamiento"}
+                        </td>
+                        <td>{m.type === "parada" ? "—" : `${m.distanceKm} km`}</td>
+                        <td>{m.type === "parada" ? "—" : `${m.avgSpeed} km/h`}</td>
+                        <td>{m.type === "parada" ? "—" : `${m.maxSpeed} km/h`}</td>
+                        <td>{m.place ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           ) : (
             d.place && <p className="sub">Estuvo en {d.place}.</p>
