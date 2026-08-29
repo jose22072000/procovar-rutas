@@ -292,6 +292,31 @@ func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, e
 	if suc, err := s.q.BranchByKey(ctx, clave); err == nil {
 		return suc.ID, nil
 	}
+
+	/**
+	 * Antes de inventarse una sucursal, se mira si es una que ya está con otro nombre.
+	 *
+	 * Cada cuenta de Drive se llama distinto —"Habana Procovar", "habanaprocovar@…"— y
+	 * cuando no cuadraba exactamente se creaba una sucursal nueva con el nombre de la
+	 * cuenta. Así aparecieron "principal" (la cuenta sin nombre) y "rigobertoms7201" (la
+	 * cuenta personal de un GPS): dos sucursales que no existen, sin nadie dentro, en
+	 * todos los desplegables.
+	 */
+	if id := s.sucursalParecida(ctx, nombre); id != "" {
+		return id, nil
+	}
+
+	/**
+	 * Y la que de verdad es nueva nace INACTIVA.
+	 *
+	 * La ingesta no puede pararse por no saber de qué sucursal es una carpeta —los
+	 * ficheros entran igual—, pero tampoco puede llenar los desplegables de cuentas de
+	 * Drive. Inactiva no se ofrece a nadie; si resulta ser una sucursal de verdad, se
+	 * activa y ya está.
+	 */
+	s.log.Warn("cuenta de Drive sin sucursal conocida: se crea inactiva",
+		"cuenta", cuenta, "nombre", nombre)
+
 	suc, err := s.q.CreateBranchByKey(ctx, store.CreateBranchByKeyParams{
 		ID: newID(), Name: nombre, Key: clave,
 	})
@@ -302,6 +327,35 @@ func (s *Service) branchOfAccount(ctx context.Context, cuenta string) (string, e
 		return "", err
 	}
 	return suc.ID, nil
+}
+
+// sucursalParecida busca una sucursal ya existente cuyo nombre sea el mismo escrito de
+// otra forma ("Habana" vs "La Habana", "Santiago" vs "Santiago de Cuba").
+//
+// Sin esto, cada forma distinta de escribirlo creaba una sucursal más. Se exige UNA sola
+// candidata: colgarle las carpetas de un GPS a la sucursal equivocada es peor que dejarlas
+// en una nueva, porque nadie lo nota.
+func (s *Service) sucursalParecida(ctx context.Context, nombre string) string {
+	sucursales, err := s.q.ActiveBranches(ctx)
+	if err != nil {
+		return ""
+	}
+
+	claveBuscada := claveDeSucursal(nombre)
+	candidatas := make([]string, 0, 2)
+
+	for _, b := range sucursales {
+		if len(b.Clave) < 5 || len(claveBuscada) < 5 {
+			continue
+		}
+		if strings.Contains(claveBuscada, b.Clave) || strings.Contains(b.Clave, claveBuscada) {
+			candidatas = append(candidatas, b.ID)
+		}
+	}
+	if len(candidatas) == 1 {
+		return candidatas[0]
+	}
+	return ""
 }
 
 // nombreDeCuenta deja el nombre de la sucursal a partir de la cuenta de Google:

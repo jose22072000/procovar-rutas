@@ -96,6 +96,42 @@ func (s *Server) WithSession(siguiente http.Handler) http.Handler {
 	})
 }
 
+// buscarSucursalParecida cruza el nombre de Accesos con las sucursales de aquí.
+//
+// La clave exacta cuadraba en cinco de diez: «La Habana» no es «Habana», «Santiago de
+// Cuba» no es «Santiago» y «Sancti Spíritus» se escribió aquí «santispiritus». Las cinco
+// que no cuadraban dejaban a su gente sin sucursal, y sin sucursal un administrador NO VE
+// NADA sin que nada le diga por qué. Ver `emparejar_sucursal.go`.
+func (s *Server) buscarSucursalParecida(ctx context.Context, nombreAuth string) (*store.Branch, error) {
+	sucursales, err := s.q.ActiveBranches(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	candidatas := make([]SucursalCandidata, 0, len(sucursales))
+	for _, b := range sucursales {
+		codigo := ""
+		if b.Code != nil {
+			codigo = *b.Code
+		}
+		candidatas = append(candidatas, SucursalCandidata{ID: b.ID, Clave: b.Clave, Codigo: codigo})
+	}
+
+	id := EmparejarSucursal(nombreAuth, "", candidatas)
+	if id == "" {
+		s.log.Warn("la sucursal de Accesos no cuadra con ninguna de aquí",
+			"org", nombreAuth, "sucursales", len(candidatas))
+		return nil, nil
+	}
+
+	for i := range sucursales {
+		if sucursales[i].ID == id {
+			return &sucursales[i], nil
+		}
+	}
+	return nil, nil
+}
+
 // resolveCaller crosses the procovar-auth identity with the local database.
 func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, error) {
 	c := &Caller{Identity: id}
@@ -125,7 +161,7 @@ func (s *Server) resolveCaller(ctx context.Context, id auth.Identity) (*Caller, 
 			//
 			// Se cruzan por la clave, y al encontrarla se atan: la próxima vez la
 			// búsqueda es directa y esto no vuelve a correr.
-			if suc, err := s.q.BranchByKey(ctx, claveDeSucursal(id.AuthOrgNombre)); err == nil {
+			if suc, err := s.buscarSucursalParecida(ctx, id.AuthOrgNombre); err == nil && suc != nil {
 				c.BranchID = suc.ID
 				org := id.AuthOrgID
 				if err := s.q.LinkBranchToAuthOrg(ctx, store.LinkBranchToAuthOrgParams{
