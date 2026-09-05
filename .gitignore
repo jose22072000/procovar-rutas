@@ -23,3 +23,4 @@ out/
 # Frontend
 front/node_modules/
 front/.next/
+graphify-out/
