@@ -20,10 +20,31 @@
  * Las capas se crean UNA vez y se rellenan al cambiar los datos; encender o apagar
  * una no vuelve a dibujar el mapa entero.
  *
+ * CÓMO SE DIBUJA EL RECORRIDO, Y POR QUÉ ASÍ (29/09/2026)
+ *
+ * Antes, el degradado se hacía con UNA POLILÍNEA POR CADA PAR DE PUNTOS. Un día de
+ * jornada de ANDY son 24.924 puntos, o sea 24.923 objetos de Leaflet y 24.923
+ * elementos <path> en la página; el día completo, 80.934. El navegador los recorre
+ * enteros en cada zoom y en cada arrastre del ratón, y encima el efecto que los creaba
+ * dependía del deslizador de la línea de tiempo: cada píxel arrastrado borraba las
+ * capas y volvía a crear los veinticinco mil. Eso es la mitad de los «diez minutos»
+ * que veía Jose; la otra mitad estaba en la consulta.
+ *
+ * Ahora:
+ *   - El degradado se hace con DIEZ polilíneas, una por tramo del día. Se ve igual:
+ *     el degradado es para leer el ORDEN del recorrido, no para medir el reloj.
+ *   - `preferCanvas`, así que Leaflet pinta sobre un lienzo y no crea un elemento del
+ *     documento por cada trazo.
+ *   - Los vértices se adelgazan antes de pintar. La API ya los manda adelgazados;
+ *     esto es la segunda red por si llega una respuesta vieja de la caché.
+ *   - El deslizador NO vuelve a dibujar nada: mueve el corte con `setLatLngs` sobre
+ *     esas mismas diez polilíneas, que ya están creadas.
+ *
  * Leaflet touches `window`, so this component is loaded without SSR from the page.
  */
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { indicesSimplificados } from "@/lib/simplificar";
 // La hoja de Leaflet, sin la cual los tiles se colocan sueltos por la caja: se
 // perdió al reescribir este componente y el mapa salía a cuadros con huecos negros.
 import "leaflet/dist/leaflet.css";
@@ -47,6 +68,14 @@ const FIN = "hsl(20, 75%, 40%)";
 const VISITADO = "#2f855a";
 const SIN_VISITAR = "#c53030";
 
+// En cuántos tramos se parte el degradado. Con diez, cada salto de color es de 19° de
+// tono: el ojo lee la progresión del día igual que con veinticinco mil, y son diez
+// objetos en el mapa en vez de veinticinco mil.
+const TRAMOS = 10;
+
+// Tope de vértices que se pintan. La API manda 2.000; esto solo actúa si llega más.
+const MAX_VERTICES = 2500;
+
 export default function RouteMap({
   points,
   stops,
@@ -65,6 +94,62 @@ export default function RouteMap({
   // lado.
   const marcas = useRef<Map<string, any>>(new Map());
 
+  // Las diez polilíneas del degradado, con el trozo de recorrido que le toca a cada
+  // una. Se crean al cambiar los datos y NO se vuelven a crear al mover el deslizador.
+  const tramos = useRef<{ poly: any; desde: number; hasta: number }[]>([]);
+  // Los vértices que de verdad se pintan, con el índice que tenían en `points`: el
+  // deslizador cuenta sobre la lista original y el corte tiene que caer donde toca.
+  const vertices = useRef<{ lat: number; lon: number; i: number }[]>([]);
+  // El globo de «terminó el día», que se mueve con el corte.
+  const marcaFin = useRef<any>(null);
+  // El último corte pedido. Hace falta en una referencia porque las capas se crean en
+  // un efecto asíncrono (Leaflet se carga a la carta) y puede terminar después de que
+  // el deslizador se haya movido.
+  const corte = useRef(to);
+  const puntosRef = useRef(points);
+  puntosRef.current = points;
+
+  // Mover el corte del deslizador. NO borra ni crea capas: cambia los vértices de las
+  // polilíneas que ya existen. Esto es lo que convierte arrastrar el deslizador en
+  // algo instantáneo.
+  const aplicarCorte = useCallback((hasta: number) => {
+    const vs = vertices.current;
+    if (vs.length === 0) return;
+
+    // Último vértice pintado: el más alto cuyo índice original no pasa del corte.
+    let limite = vs.length - 1;
+    if (hasta >= 0) {
+      let lo = 0;
+      let hi = vs.length - 1;
+      while (lo < hi) {
+        const med = Math.ceil((lo + hi) / 2);
+        if (vs[med].i <= hasta) lo = med;
+        else hi = med - 1;
+      }
+      limite = lo;
+    }
+
+    for (const t of tramos.current) {
+      if (limite <= t.desde) {
+        t.poly.setLatLngs([]);
+        continue;
+      }
+      const fin = Math.min(t.hasta, limite);
+      t.poly.setLatLngs(
+        vs.slice(t.desde, fin + 1).map((v) => [v.lat, v.lon] as [number, number]),
+      );
+    }
+
+    // El globo del final se pone en el punto REAL del corte, no en el vértice que
+    // sobrevivió al adelgazado: es el que lleva la hora que se lee en el globo.
+    const ps = puntosRef.current;
+    const p = ps[hasta >= 0 ? Math.min(hasta, ps.length - 1) : ps.length - 1];
+    if (p && marcaFin.current) {
+      marcaFin.current.setLatLng([p.lat, p.lon]);
+      marcaFin.current.setPopupContent(`Terminó el día — ${hora(p.ts)}`);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelado = false;
 
@@ -73,7 +158,13 @@ export default function RouteMap({
       if (cancelado || !contenedor.current) return;
 
       if (!mapa.current) {
-        mapa.current = L.map(contenedor.current, { zoomControl: true });
+        // preferCanvas: Leaflet dibuja los trazos sobre UN lienzo en vez de crear un
+        // elemento <path> del documento por cada uno. Con miles de vértices y decenas
+        // de círculos, esa diferencia es la que se nota al arrastrar y al hacer zoom.
+        mapa.current = L.map(contenedor.current, {
+          zoomControl: true,
+          preferCanvas: true,
+        });
         // El sello de Leaflet fuera: es publicidad de la biblioteca y no la pide
         // nadie. El crédito de OpenStreetMap SE QUEDA — los mapas son suyos y su
         // licencia (ODbL) exige nombrarlos; quitarlo sería usar su trabajo sin
@@ -110,28 +201,38 @@ export default function RouteMap({
       capaClientes.current.clearLayers();
       marcas.current.clear();
 
-      const visibles = to >= 0 ? points.slice(0, to + 1) : points;
+      // LOS VÉRTICES. Se adelgazan con Douglas-Peucker, que conserva las esquinas —
+      // que son las que dicen por dónde giró— y tira los puntos que caen sobre la
+      // recta que forman sus vecinos. Se guarda el índice original de cada uno para
+      // que el deslizador siga contando sobre `points`.
+      tramos.current = [];
+      vertices.current = indicesSimplificados(
+        points.map((p) => ({ lat: p.lat, lon: p.lon })),
+        MAX_VERTICES,
+      ).map((i) => ({ lat: points[i].lat, lon: points[i].lon, i }));
 
-      // Gradient by legs: each segment is painted according to its place in the day.
-      for (let i = 1; i < visibles.length; i++) {
-        const t = i / Math.max(1, visibles.length - 1);
-        L.polyline(
-          [
-            [visibles[i - 1].lat, visibles[i - 1].lon],
-            [visibles[i].lat, visibles[i].lon],
-          ],
-          {
+      const vs = vertices.current;
+
+      // El degradado, por tramos. Cada tramo comparte un vértice con el siguiente,
+      // porque si no la línea saldría cortada en las diez costuras.
+      if (vs.length >= 2) {
+        const cuantos = Math.min(TRAMOS, vs.length - 1);
+        for (let k = 0; k < cuantos; k++) {
+          const desde = Math.round((k * (vs.length - 1)) / cuantos);
+          const hasta = Math.round(((k + 1) * (vs.length - 1)) / cuantos);
+          const t = cuantos === 1 ? 0 : k / (cuantos - 1);
+          const poly = L.polyline([], {
             color: `hsl(${210 - t * 190}, 75%, ${58 - t * 18}%)`,
             weight: 4,
             opacity: 0.9,
-          },
-        ).addTo(capaRuta.current);
+          }).addTo(capaRuta.current);
+          tramos.current.push({ poly, desde, hasta });
+        }
       }
 
       // Start and end of the workday.
-      if (visibles.length > 0) {
-        const primero = visibles[0];
-        const ultimo = visibles[visibles.length - 1];
+      if (points.length > 0) {
+        const primero = points[0];
         L.circleMarker([primero.lat, primero.lon], {
           radius: 8,
           color: "#1f6feb",
@@ -140,7 +241,8 @@ export default function RouteMap({
         })
           .bindPopup(`Empezó el día — ${hora(primero.ts)}`)
           .addTo(capaRuta.current);
-        L.circleMarker([ultimo.lat, ultimo.lon], {
+        const ultimo = points[points.length - 1];
+        marcaFin.current = L.circleMarker([ultimo.lat, ultimo.lon], {
           radius: 8,
           color: "#8a1f1f",
           fillColor: "#d64545",
@@ -148,7 +250,12 @@ export default function RouteMap({
         })
           .bindPopup(`Terminó el día — ${hora(ultimo.ts)}`)
           .addTo(capaRuta.current);
+      } else {
+        marcaFin.current = null;
       }
+
+      // Y se pone el corte que hubiera pedido el deslizador mientras Leaflet cargaba.
+      aplicarCorte(corte.current);
 
       // The stops, sized in proportion to how long they lasted: a half-hour visit
       // has to stand out against a traffic light.
@@ -212,8 +319,12 @@ export default function RouteMap({
       // recorrido: un día sin fichero no tiene ni un punto, y encuadrar solo por
       // ellos dejaba a los clientes fuera de la pantalla y el mapa en Camagüey
       // aunque el vendedor fuera de Santiago.
+      //
+      // Se encuadra con el recorrido ENTERO, no con el trozo que deje ver el
+      // deslizador: antes el encuadre dependía del corte, así que arrastrar el
+      // deslizador movía y ampliaba el mapa solo, y no había forma de seguir nada.
       const todo: [number, number][] = [
-        ...visibles.map((p) => [p.lat, p.lon] as [number, number]),
+        ...vs.map((v) => [v.lat, v.lon] as [number, number]),
         ...visits.map((v) => [v.lat, v.lon] as [number, number]),
       ];
       if (todo.length === 0) {
@@ -226,7 +337,16 @@ export default function RouteMap({
     return () => {
       cancelado = true;
     };
-  }, [points, stops, visits, to]);
+    // `to` NO está aquí a propósito. Es el deslizador de la línea de tiempo, y si
+    // entrara, cada píxel arrastrado borraría las capas y volvería a crearlas enteras.
+    // El corte se aplica en su propio efecto, sobre las capas que ya existen.
+  }, [points, stops, visits, aplicarCorte]);
+
+  // El deslizador: solo mueve el corte.
+  useEffect(() => {
+    corte.current = to;
+    aplicarCorte(to);
+  }, [to, aplicarCorte]);
 
   // Y cada vez que la caja cambie de tamaño: al abrir el panel lateral, al girar
   // el móvil o al cambiar de zoom del navegador.

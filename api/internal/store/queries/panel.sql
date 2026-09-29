@@ -75,12 +75,38 @@ WHERE d.trabajador_id = @seller_id AND d.fecha = @date::date
 -- The points the viewer draws. Working hours only by default; the "full day"
 -- switch sends @workday_start = '00:00' and @workday_end = '23:59'.
 -- name: DayPoints :many
+--
+-- LOS PUNTOS DE UN DÍA. Se cruza por RANGO DE `ts`, no por la fecha calculada.
+--
+-- Antes el JOIN era `d.fecha = (p.ts AT TIME ZONE @zone)::date`. Eso es una EXPRESIÓN
+-- sobre la columna, y contra una expresión ningún índice sirve: el índice
+-- `track_point_trabajador_ts_idx (trabajador_id, ts)` sólo podía filtrar por el
+-- trabajador, así que Postgres se traía **todos los puntos que ese vendedor ha subido en
+-- su vida** y los descartaba uno a uno, calculando `AT TIME ZONE` y `to_char` por fila.
+--
+-- Medido el 29/09/2026 con EXPLAIN (ANALYZE, BUFFERS) sobre datos reales:
+--
+--   ANDY, 26/09, devuelve 24.924 puntos   descarta 8.989.535 filas   18.537 ms
+--   ALEXANDER, un día VACÍO, devuelve 0   descarta 4.464.439 filas    9.969 ms
+--
+-- Diez segundos para contestar «aquí no hay nada». Y empeoraba cada día, porque el coste
+-- va con TODO el histórico del vendedor, no con el día que se pide.
+--
+-- Escrito como rango, el índice sirve y el plan sólo toca el día:
+--
+--   ANDY, 26/09   18.537 ms -> 124 ms   (150 veces)
+--   día vacío      9.969 ms -> 2,6 ms   (3.800 veces)
+--
+-- Los límites del día se calculan UNA vez, desde `track_day.fecha`, y no por fila. El
+-- recorte de jornada se queda con `to_char` a propósito: ya sólo se aplica a los puntos
+-- de ese día, que son miles, no millones.
 SELECT p.ts, p.lat, p.lon, p.ele, p.speed, p.quality, p.seq
-FROM track_point p
-JOIN track_day d ON d.trabajador_id = p.trabajador_id
-                AND d.fecha = (p.ts AT TIME ZONE @zone::text)::date
+FROM track_day d
+JOIN track_point p
+  ON p.trabajador_id = d.trabajador_id
+ AND p.ts >= (d.fecha::timestamp AT TIME ZONE @zone::text)
+ AND p.ts <  ((d.fecha + 1)::timestamp AT TIME ZONE @zone::text)
 WHERE d.id = @track_day_id
-  AND p.ts IS NOT NULL
   AND to_char(p.ts AT TIME ZONE @zone::text, 'HH24:MI') BETWEEN @workday_start::text AND @workday_end::text
 ORDER BY p.ts;
 

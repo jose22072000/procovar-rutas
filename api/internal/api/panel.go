@@ -222,6 +222,13 @@ func (s *Server) day(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// El visor dibuja una línea, no lee una lista de coordenadas: se le manda la
+	// misma línea con menos vértices. Medido el 29/09/2026 con el día de ANDY:
+	// 24.924 puntos (3,4 MB) -> 2.000 en la jornada, y 80.935 (11 MB) -> 2.000 el día
+	// completo. Los puntos siguen enteros en la base y el reporte los sigue usando
+	// todos; esto solo adelgaza lo que viaja hasta el navegador.
+	puntos = simplificarPuntos(puntos, maxPuntosVisor)
+
 	paradas, err := s.q.DayStops(r.Context(), day.ID)
 	if err != nil {
 		s.fail(w, "paradas", err)
