@@ -64,7 +64,19 @@ func (s *Server) Routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	// QUINCE SEGUNDOS, NO SESENTA.
+	//
+	// Con sesenta, una consulta lenta no daba un error: daba una pantalla parada. El
+	// navegador se quedaba esperando, Jose recargaba, y cada recarga abria OTRA peticion
+	// de sesenta segundos contra la misma base ya cargada. Cuatro recargas son los «diez
+	// minutos» que vio: no es que una consulta tardara diez minutos, es que nunca llego a
+	// fallar a tiempo para decirlo.
+	//
+	// Ahora la consulta mas cara del visor -el dia completo de ANDY, 80.935 puntos- son
+	// 212 ms medidos el 29/09/2026. Quince segundos son setenta veces eso: sobra para
+	// cualquier dia real y corta en seco lo que se haya quedado colgado. Y por debajo de
+	// los cien segundos de Cloudflare, para que el error lo de la API y no el proxy.
+	r.Use(middleware.Timeout(15 * time.Second))
 
 	// The paths are in English even where the code inside is not: this is the
 	// surface n8n, the front end and Traefik see, and languages do not mix there.

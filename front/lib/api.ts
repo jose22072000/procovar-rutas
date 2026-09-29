@@ -183,11 +183,44 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Cuánto se espera a la API antes de darse por vencido.
+ *
+ * La API corta por su cuenta a los 15 s y contesta un 504 con su explicación, así que
+ * esto NO es el plazo normal: es la red. Con la conexión de Cuba una petición puede
+ * quedarse a medias sin que llegue nunca ni un error, y entonces la pantalla se queda
+ * en «Cargando…» para siempre. Eso es lo que Jose leía como «se demoró diez minutos»:
+ * no una espera larga, una espera SIN FINAL. A los 45 s se corta y se dice.
+ */
+const ESPERA_MAXIMA_MS = 45000;
+
 export async function ask<T>(path: string): Promise<T> {
-  // credentials: "include" is essential: the session travels in the cookie
-  // procovar-auth sets, and without this the browser will not send it to another
-  // origin.
-  const res = await fetch(`${API}${path}`, { credentials: "include" });
+  const corte = new AbortController();
+  const alarma = setTimeout(() => corte.abort(), ESPERA_MAXIMA_MS);
+
+  let res: Response;
+  try {
+    // credentials: "include" is essential: the session travels in the cookie
+    // procovar-auth sets, and without this the browser will not send it to another
+    // origin.
+    res = await fetch(`${API}${path}`, {
+      credentials: "include",
+      signal: corte.signal,
+    });
+  } catch (e) {
+    // Aquí caen las dos formas de no llegar: el corte de arriba y la red que se cayó.
+    // Las dos tienen que decir algo que se pueda leer, porque el mensaje que trae el
+    // navegador es «Failed to fetch» y eso no le dice nada a nadie.
+    if (corte.signal.aborted) {
+      throw new ApiError(
+        0,
+        "la consulta está tardando demasiado y se ha cortado. Vuelve a probar; si sigue igual, avisa.",
+      );
+    }
+    throw new ApiError(0, "no se pudo conectar con el servidor. Mira la conexión y vuelve a probar.");
+  } finally {
+    clearTimeout(alarma);
+  }
 
   if (res.status === 401) {
     // Expired session: off to the login, and back to where they were.

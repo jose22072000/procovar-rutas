@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -77,6 +79,15 @@ func (s *Server) branchWorkday(r *http.Request, sucursalID string) (string, stri
 // leak table and column names.
 func (s *Server) fail(w http.ResponseWriter, contexto string, err error) {
 	s.log.Error("fail en el panel", "donde", contexto, "error", err)
+
+	// Que se acabe el tiempo NO es un error interno, y decirlo como tal deja al que
+	// mira sin saber si tiene que avisar o volver a probar. Se distingue, y se dice en
+	// castellano: es lo unico que va a leer.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		respondError(w, http.StatusGatewayTimeout,
+			"la consulta tardo demasiado y se corto. Prueba otra vez; si vuelve a pasar, avisa.")
+		return
+	}
 	respondError(w, http.StatusInternalServerError, "error interno")
 }
 

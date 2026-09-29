@@ -44,6 +44,9 @@ function Visor() {
   // centra.
   const [paradaVista, setParadaVista] = useState<string | null>(null);
   const [clienteVisto, setClienteVisto] = useState<string | null>(null);
+  // Sube de uno cada vez que se pide reintentar. Es lo único que hace falta para
+  // volver a lanzar la carga sin recargar la página entera.
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     if (!seller || !fecha) return;
@@ -57,7 +60,7 @@ function Visor() {
     )
       .then(setDatos)
       .catch((e) => setError(e.message));
-  }, [seller, fecha, completa]);
+  }, [seller, fecha, completa, intento]);
 
   function otroDia(days: number): string {
     const d = new Date(`${fecha}T12:00:00Z`);
@@ -116,7 +119,17 @@ function Visor() {
         </div>
       </div>
 
-      {error && <p className="aviso">{error}</p>}
+      {/* Si falla, se dice Y se ofrece volver a probar. Un aviso sin salida deja a
+          quien lo lee recargando la página, y cada recarga es otra petición contra la
+          misma base: así se convertía una consulta lenta en diez minutos de espera. */}
+      {error && (
+        <p className="aviso">
+          No se pudo cargar el recorrido: {error}{" "}
+          <button className="pv-boton" onClick={() => setIntento((n) => n + 1)}>
+            Volver a probar
+          </button>
+        </p>
+      )}
       {!datos && !error && <p className="cargando">Cargando el recorrido…</p>}
 
       {datos && (
