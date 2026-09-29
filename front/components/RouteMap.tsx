@@ -45,6 +45,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { indicesSimplificados } from "@/lib/simplificar";
+import { tramosDelRecorrido, ultimoVertice } from "@/lib/recorrido";
 // La hoja de Leaflet, sin la cual los tiles se colocan sueltos por la caja: se
 // perdió al reescribir este componente y el mapa salía a cuadros con huecos negros.
 import "leaflet/dist/leaflet.css";
@@ -117,17 +118,10 @@ export default function RouteMap({
     if (vs.length === 0) return;
 
     // Último vértice pintado: el más alto cuyo índice original no pasa del corte.
-    let limite = vs.length - 1;
-    if (hasta >= 0) {
-      let lo = 0;
-      let hi = vs.length - 1;
-      while (lo < hi) {
-        const med = Math.ceil((lo + hi) / 2);
-        if (vs[med].i <= hasta) lo = med;
-        else hi = med - 1;
-      }
-      limite = lo;
-    }
+    const limite = ultimoVertice(
+      vs.map((v) => v.i),
+      hasta,
+    );
 
     for (const t of tramos.current) {
       if (limite <= t.desde) {
@@ -215,20 +209,16 @@ export default function RouteMap({
 
       // El degradado, por tramos. Cada tramo comparte un vértice con el siguiente,
       // porque si no la línea saldría cortada en las diez costuras.
-      if (vs.length >= 2) {
-        const cuantos = Math.min(TRAMOS, vs.length - 1);
-        for (let k = 0; k < cuantos; k++) {
-          const desde = Math.round((k * (vs.length - 1)) / cuantos);
-          const hasta = Math.round(((k + 1) * (vs.length - 1)) / cuantos);
-          const t = cuantos === 1 ? 0 : k / (cuantos - 1);
-          const poly = L.polyline([], {
-            color: `hsl(${210 - t * 190}, 75%, ${58 - t * 18}%)`,
-            weight: 4,
-            opacity: 0.9,
-          }).addTo(capaRuta.current);
-          tramos.current.push({ poly, desde, hasta });
-        }
-      }
+      const reparto = tramosDelRecorrido(vs.length, TRAMOS);
+      reparto.forEach(({ desde, hasta }, k) => {
+        const t = reparto.length === 1 ? 0 : k / (reparto.length - 1);
+        const poly = L.polyline([], {
+          color: `hsl(${210 - t * 190}, 75%, ${58 - t * 18}%)`,
+          weight: 4,
+          opacity: 0.9,
+        }).addTo(capaRuta.current);
+        tramos.current.push({ poly, desde, hasta });
+      });
 
       // Start and end of the workday.
       if (points.length > 0) {
