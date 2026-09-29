@@ -1,0 +1,20 @@
+-- FUERA EL ÍNDICE track_point_sucursal_ts_idx.
+--
+-- 1.604 MB de disco para 18 usos en toda su vida. Leído de `pg_stat_user_indexes` el
+-- 29/09/2026, con las estadísticas sin reiniciar nunca (`stats_reset` vacío en
+-- `pg_stat_database`), o sea 18 usos DESDE SIEMPRE. Sus vecinos, en la misma tabla y
+-- el mismo periodo: 3.463 el de fichero y 3.881 el de trabajador.
+--
+-- No hay ninguna consulta del proyecto que filtre `track_point` por sucursal y fecha:
+-- todo entra por el trabajador (el panel, el visor, el reporte) o por el fichero (la
+-- ingesta). El índice se escribió «por si acaso» y ese acaso no llegó.
+--
+-- Lo que costaba no era solo el disco: cada punto que entra hay que escribirlo también
+-- en él, y son 13,4 millones de filas con ficheros nuevos todos los días.
+--
+-- Borrado en el servidor el 29/09/2026 con DROP INDEX CONCURRENTLY, sin bloquear la
+-- tabla. Esta migración es para que no vuelva a aparecer en una base nueva; por eso el
+-- IF EXISTS, que en producción ya no está.
+--
+-- Jose lo autorizó expresamente.
+DROP INDEX IF EXISTS track_point_sucursal_ts_idx;

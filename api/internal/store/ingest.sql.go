@@ -1301,8 +1301,8 @@ const sellerPointsOnDate = `-- name: SellerPointsOnDate :many
 SELECT p.ts, p.lat, p.lon, p.accuracy, p.seq
 FROM track_point p
 WHERE p.trabajador_id = $1
-  AND p.ts IS NOT NULL
-  AND (p.ts AT TIME ZONE $2::text)::date = $3::date
+  AND p.ts >= ($3::date::timestamp AT TIME ZONE $2::text)
+  AND p.ts <  (($3::date + 1)::timestamp AT TIME ZONE $2::text)
 ORDER BY p.ts
 `
 
@@ -1324,6 +1324,28 @@ type SellerPointsOnDateRow struct {
 // recomputed from the database and not from the file that just arrived, because
 // there can be several files for the same day (a morning session and an afternoon
 // one) and adding them separately would give two verdicts.
+//
+// Se cruza por RANGO de `ts`, no por la fecha calculada. Es el mismo arreglo que el de
+// `DayPoints` en panel.sql, y por el mismo motivo: `(p.ts AT TIME ZONE @zone)::date` es
+// una EXPRESIÓN sobre la columna, y contra una expresión ningún índice sirve. Postgres
+// no podía usar ni `track_point_trabajador_ts_idx`: se iba a un recorrido paralelo de
+// la tabla ENTERA —13,4 millones de filas— por cada fichero que entra.
+//
+// Y esto corre en la INGESTA, cada vez que llega un .gpx y se recalcula el día. Medido
+// el 29/09/2026 contra la base de verdad, con el día de ANDY del 26/09:
+//
+//	2.079 ms -> 43 ms   (48 veces)
+//	las mismas 80.935 filas, y el mismo md5 del conjunto entero
+//	páginas leídas: 315.904 -> 3.080
+//
+// Los límites del día se calculan una vez, desde el parámetro, y no por fila. El
+// resultado es idéntico incluso en un cambio de hora: `fecha::timestamp AT TIME ZONE
+// zona` da el instante de la medianoche local, que es justo donde empieza y acaba el
+// día. El `IS NOT NULL` se cae solo: un `ts` nulo no entra en ningún rango.
+//
+// Va con `sqlc.arg(date)` y no con `@date` porque sqlc se atraganta con `@nombre`
+// dentro de un paréntesis con más operadores y genera SQL roto — falla al generar, no
+// en el servidor, pero conviene saber por qué está escrito así.
 func (q *Queries) SellerPointsOnDate(ctx context.Context, arg SellerPointsOnDateParams) ([]SellerPointsOnDateRow, error) {
 	rows, err := q.db.Query(ctx, sellerPointsOnDate, arg.SellerID, arg.Zone, arg.Date)
 	if err != nil {
