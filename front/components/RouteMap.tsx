@@ -33,8 +33,9 @@
  * Ahora:
  *   - El degradado se hace con DIEZ polilíneas, una por tramo del día. Se ve igual:
  *     el degradado es para leer el ORDEN del recorrido, no para medir el reloj.
- *   - `preferCanvas`, así que Leaflet pinta sobre un lienzo y no crea un elemento del
- *     documento por cada trazo.
+ *   - Renderizador SVG (el de por defecto). Se probó `preferCanvas`, pero con él el
+ *     mapa cargaba las tiles y el trazo NO se pintaba en ningún dispositivo; con diez
+ *     polilíneas no hace falta el lienzo.
  *   - Los vértices se adelgazan antes de pintar. La API ya los manda adelgazados;
  *     esto es la segunda red por si llega una respuesta vieja de la caché.
  *   - El deslizador NO vuelve a dibujar nada: mueve el corte con `setLatLngs` sobre
@@ -152,12 +153,14 @@ export default function RouteMap({
       if (cancelado || !contenedor.current) return;
 
       if (!mapa.current) {
-        // preferCanvas: Leaflet dibuja los trazos sobre UN lienzo en vez de crear un
-        // elemento <path> del documento por cada uno. Con miles de vértices y decenas
-        // de círculos, esa diferencia es la que se nota al arrastrar y al hacer zoom.
+        // Renderizador SVG (el de por defecto), NO canvas. Con `preferCanvas: true`
+        // —que se probó para ahorrar objetos— el mapa cargaba las tiles pero el trazo
+        // y los círculos NO se pintaban en ningún dispositivo: el lienzo se queda sin
+        // dimensión hasta que el contenedor las tiene, y las capas vectoriales caen en
+        // ese hueco mientras las tiles (que son <img>) sí salen. Ya no hace falta:
+        // la API adelgaza a 2.000 puntos y el trazo son diez polilíneas, no miles.
         mapa.current = L.map(contenedor.current, {
           zoomControl: true,
-          preferCanvas: true,
         });
         // El sello de Leaflet fuera: es publicidad de la biblioteca y no la pide
         // nadie. El crédito de OpenStreetMap SE QUEDA — los mapas son suyos y su
